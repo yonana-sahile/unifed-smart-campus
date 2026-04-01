@@ -1,0 +1,29 @@
+# --- Linux & IDEs ---
+.idea/
+.vscode/
+*~
+*.swp
+.DS_Store
+
+# --- Python / Django (unifedbackend) ---
+unifed/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+db.sqlite3
+.env
+
+# --- Node / React TS (unifed_frontend) ---
+unifed_frontend/node_modules/
+unifed_frontend/dist/
+unifed_frontend/dist-ssr/
+unifed_frontend/.local
+npm-debug.log*
+yarn-debug.log*
+node_modules/
+
+# --- Build & Logs ---
+logs/
+*.log
