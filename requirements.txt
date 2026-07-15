@@ -4,3 +4,4 @@ Django==6.0.3
 django-cors-headers==4.9.0
 djangorestframework==3.17.1
 sqlparse==0.5.5
+
