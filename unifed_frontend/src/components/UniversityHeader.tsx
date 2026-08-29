@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User } from "../types";
+import  type { User } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon } from "lucide-react";
 import { motion } from "motion/react";
