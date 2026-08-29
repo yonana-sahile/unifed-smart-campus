@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
-import { User, PaymentTransaction, Scholarship } from "../types";
+import type { User, PaymentTransaction, Scholarship } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
 import {

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Course, Grade, Transcript, AuditLog, SystemSettings } from "../types";
+import type { User, Course, Grade, Transcript, AuditLog, SystemSettings } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
 import { ShieldAlert, Calendar, FileText, CheckCircle2, AlertCircle, Shield, List, Settings, Search, Edit3, Check, X, RefreshCw, BarChart2, Plus, Users, HeartPulse, Activity, Award, TrendingUp, Sparkles, Coins, CheckSquare, Database } from "lucide-react";

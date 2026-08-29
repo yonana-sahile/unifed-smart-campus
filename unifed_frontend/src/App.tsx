@@ -1,5 +1,5 @@
 import { useState, useEffect, FormEvent } from "react";
-import { User, UserRole } from "./types";
+import type { User, UserRole } from "./types";
 import { CampusDatabase } from "./services/api"; // ✅ CHANGED: now using the new API service
 import StudentDashboard from "./components/StudentDashboard";
 import InstructorDashboard from "./components/InstructorDashboard";
