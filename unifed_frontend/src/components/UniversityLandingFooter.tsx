@@ -1,4 +1,4 @@
-import { UniversitySeal } from "./UniversityHeader";
+import { UniversitySeal, EthiopianFlag } from "./UniversityHeader";
 import {
   ShieldCheck,
   Building,
@@ -58,6 +58,7 @@ export function UniversityLandingFooter({
         <div className="lg:col-span-4 space-y-2.5">
           <div className="flex items-center space-x-3">
             <UniversitySeal className="w-10 h-10 shrink-0 drop-shadow-sm" />
+            <EthiopianFlag className="w-6 h-4 rounded-xs shrink-0 shadow-xs" />
             <div>
               <h3 className="font-display font-black text-slate-100 text-sm sm:text-base tracking-wide uppercase leading-tight">
                 Mekdela Amba University
@@ -73,9 +74,9 @@ export function UniversityLandingFooter({
           </p>
 
           <div className="flex items-center space-x-3 text-[11px] text-slate-400">
-            <span className="flex items-center space-x-1 text-slate-300">
-              <Award className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span>HEIRA Certified</span>
+            <span className="flex items-center space-x-1.5 text-slate-300 font-medium">
+              <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
+              <span>FDRE MoE Certified</span>
             </span>
             <span>•</span>
             <span className="flex items-center space-x-1 text-slate-300">
@@ -201,7 +202,10 @@ export function UniversityLandingFooter({
             <span>•</span>
             <span className="hover:text-slate-300 transition">ISO 9001:2015</span>
             <span>•</span>
-            <span className="text-amber-500 font-bold">Tulu Awliya, Ethiopia</span>
+            <span className="flex items-center space-x-1.5 text-amber-500 font-bold">
+              <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
+              <span>Tulu Awliya, Ethiopia</span>
+            </span>
           </div>
         </div>
       </div>
