@@ -164,17 +164,12 @@ export const StarryFlag: React.FC<StarryFlagProps> = ({
           x, drawY, sliceWidth + 0.6, drawH
         );
 
-        // Dynamic 3D Cloth Lighting & Highlights:
-        // Highlights when crest faces lighting, shadows in troughs and deep folds
+        // Dynamic 3D Cloth Depth Shading:
+        // Subtle soft shadow in troughs to give 3D depth without washing out the vibrant flag colors
         const totalSlope = slope + (zDisplacement > 0 ? 0.12 : -0.1);
-        if (totalSlope > 0.18) {
-          // Crest facing light source: Soft Satin Highlight
-          const highlightAlpha = Math.min(0.36, (totalSlope - 0.18) * 0.26);
-          ctx.fillStyle = `rgba(255, 255, 255, ${highlightAlpha})`;
-          ctx.fillRect(x, drawY, sliceWidth + 0.6, drawH);
-        } else if (totalSlope < -0.18) {
-          // Trough facing away: Natural Cloth Shadow
-          const shadowAlpha = Math.min(0.4, (-totalSlope - 0.18) * 0.3);
+        if (totalSlope < -0.22) {
+          // Soft natural depth fold shadow
+          const shadowAlpha = Math.min(0.25, (-totalSlope - 0.22) * 0.2);
           ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
           ctx.fillRect(x, drawY, sliceWidth + 0.6, drawH);
         }
