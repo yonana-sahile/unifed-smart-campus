@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
-import { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, Transcript } from "../types";
+import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, Transcript } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
 import { BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload, ArrowRight, Download, CreditCard, Star, Check, HelpCircle, Shield, Award, Sparkles, QrCode } from "lucide-react";
