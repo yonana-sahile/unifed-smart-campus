@@ -1,20 +1,23 @@
 import { useState, useEffect, FormEvent } from "react";
 import type { User, UserRole } from "./types";
-import { CampusDatabase } from "./services/api"; // ✅ CHANGED: now using the new API service
+import { CampusDatabase } from "./services/api"
 import StudentDashboard from "./components/StudentDashboard";
 import InstructorDashboard from "./components/InstructorDashboard";
 import { RegistrarDashboard, DepartmentHeadDashboard, DeanDashboard, AdminDashboard, AuditorDashboard } from "./components/OtherDashboards";
 import { LibraryStaffDashboard } from "./components/LibraryStaffDashboard";
 import { FinanceOfficerDashboard } from "./components/FinanceOfficerDashboard";
 import { UniversitySeal, ThemeToggle, DigitalClock } from "./components/UniversityHeader";
-import { LogIn, HelpCircle, Shield, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, DollarSign } from "lucide-react";
-import { motion } from "motion/react";
+import { UniversityLandingFooter } from "./components/UniversityLandingFooter";
+import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [showSecurityModal, setShowSecurityModal] = useState(false);
+  const [showHelpModal, setShowHelpModal] = useState(false);
 
   useEffect(() => {
     // Check if session exists in localStorage
@@ -161,8 +164,41 @@ export default function App() {
         </div>
       </header>
 
+      {/* Official University Broadcast Ribbon / Live Notice */}
+      <div className="w-full bg-gradient-to-r from-amber-500/10 via-primary/10 to-blue-500/10 border-b border-amber-400/20 px-4 sm:px-8 py-2 relative z-20">
+        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center space-x-2">
+            <span className="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px] uppercase font-mono tracking-wider flex items-center space-x-1">
+              <Radio className="w-3 h-3 animate-pulse" />
+              <span>OFFICIAL NOTICE</span>
+            </span>
+            <span className="text-slate-800 dark:text-slate-200 font-medium text-[11px] sm:text-xs">
+              Semester II Registration is Active • National Exit Exam Simulation Portal is accessible for 4th Year Candidates.
+            </span>
+          </div>
+
+          <div className="flex items-center space-x-3 text-[11px]">
+            <button
+              onClick={() => setShowSecurityModal(true)}
+              className="text-amber-700 dark:text-amber-400 hover:underline font-semibold flex items-center space-x-1 cursor-pointer"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Verify Institution Credentials</span>
+            </button>
+            <span className="text-slate-400">•</span>
+            <button
+              onClick={() => setShowHelpModal(true)}
+              className="text-blue-700 dark:text-blue-400 hover:underline font-semibold flex items-center space-x-1 cursor-pointer"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Portal Help</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Main Single Sign-On Gateway Container (Positioned below top navbar, no overlap on desktop/PC) */}
-      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-10 relative z-10">
+      <main className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-12 relative z-10 my-4 sm:my-8">
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
 
           {/* Left Side: University Heritage & System Overview */}
@@ -209,6 +245,26 @@ export default function App() {
                 <span className="block text-slate-500 dark:text-slate-400 text-[10px] font-mono uppercase font-bold">CAMPUSES</span>
                 <strong className="block text-xs font-semibold text-slate-800 dark:text-slate-200">Tulu Awlia & Main</strong>
               </div>
+            </div>
+
+            {/* Quick Trust Action Bar */}
+            <div className="pt-2 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowSecurityModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 text-xs font-semibold flex items-center space-x-2 transition cursor-pointer shadow-xs"
+              >
+                <ShieldCheck className="w-4 h-4 text-amber-500" />
+                <span>HEIRA Accreditation & Audit</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowHelpModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 text-xs font-semibold flex items-center space-x-2 transition cursor-pointer shadow-xs"
+              >
+                <HelpCircle className="w-4 h-4 text-blue-500" />
+                <span>Single-Sign-On Guide</span>
+              </button>
             </div>
           </div>
 
@@ -428,6 +484,176 @@ export default function App() {
 
         </div>
       </main>
+
+      {/* Official Institutional Landing Footer */}
+      <UniversityLandingFooter
+        onOpenSecurityModal={() => setShowSecurityModal(true)}
+        onOpenHelpModal={() => setShowHelpModal(true)}
+      />
+
+      {/* SECURITY & ACCREDITATION MODAL */}
+      <AnimatePresence>
+        {showSecurityModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden font-sans"
+            >
+              <div className="university-gradient p-6 text-white flex items-center justify-between border-b border-amber-500/20">
+                <div className="flex items-center space-x-3">
+                  <UniversitySeal className="w-10 h-10 shrink-0" />
+                  <div>
+                    <h3 className="font-display font-bold text-base sm:text-lg">
+                      Institutional Accreditation & Security Audit
+                    </h3>
+                    <p className="text-xs text-amber-300 font-serif">
+                      FDRE Ministry of Education • Certified Higher Education Portal
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowSecurityModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 sm:p-8 space-y-6 text-slate-700 dark:text-slate-300 text-xs sm:text-sm max-h-[75vh] overflow-y-auto">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/60 space-y-1.5">
+                    <div className="flex items-center space-x-2 text-emerald-700 dark:text-emerald-300 font-bold text-xs font-mono uppercase">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>HEIRA Accreditation</span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                      Fully accredited under FDRE Higher Education Proclamation. Continuous educational quality governance.
+                    </p>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 space-y-1.5">
+                    <div className="flex items-center space-x-2 text-blue-700 dark:text-blue-300 font-bold text-xs font-mono uppercase">
+                      <Lock className="w-4 h-4" />
+                      <span>INSA Defense & Encryption</span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                      Standard 256-bit cryptographic data hashing for academic transcripts, student clearances, and grade submissions.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center space-x-2">
+                    <FileCheck className="w-4 h-4 text-amber-500" />
+                    <span>Academic Grading Policy (Standard 50/20/30)</span>
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Mekdela Amba University enforces a strict continuous assessment distribution: <strong>50% Continuous Quizzes/Labs/Assignments</strong>, <strong>20% Mid-Semester Assessment</strong>, and <strong>30% Proctored Final Exam</strong>. Grades are automatically computed and finalized with digital registrar validation.
+                  </p>
+                </div>
+
+                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-4">
+                  <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center space-x-2">
+                    <Globe className="w-4 h-4 text-blue-500" />
+                    <span>Campuses & Facilities</span>
+                  </h4>
+                  <ul className="list-disc list-inside text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                    <li><strong>Main Campus:</strong> Tulu Awliya, South Wollo, Amhara Region, Ethiopia.</li>
+                    <li><strong>Agricultural & Tech Campus:</strong> Masha Campus.</li>
+                    <li><strong>Federal Liaison Desk:</strong> Ministry of Education Compound, Addis Ababa.</li>
+                  </ul>
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-6 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowSecurityModal(false)}
+                  className="px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                >
+                  Close Audit Dossier
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* LOGIN GUIDE & PORTAL HELP MODAL */}
+      <AnimatePresence>
+        {showHelpModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full shadow-2xl overflow-hidden font-sans"
+            >
+              <div className="university-gradient p-6 text-white flex items-center justify-between border-b border-amber-500/20">
+                <div className="flex items-center space-x-3">
+                  <HelpCircle className="w-8 h-8 text-amber-400 shrink-0" />
+                  <div>
+                    <h3 className="font-display font-bold text-base sm:text-lg">
+                      Academic Single-Sign-On Guide
+                    </h3>
+                    <p className="text-xs text-amber-300 font-mono">
+                      Institutional Credentials Information
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowHelpModal(false)}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 transition cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-6 sm:p-7 space-y-4 text-xs sm:text-sm text-slate-700 dark:text-slate-300 max-h-[70vh] overflow-y-auto">
+                <div className="space-y-2">
+                  <strong className="block text-slate-900 dark:text-slate-100 font-bold text-xs font-mono uppercase">
+                    1. Student Identification
+                  </strong>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Students can sign in using their unique institutional student ID (e.g. <code className="text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded font-mono">U_ST01</code>) or official university email (<code className="text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-1.5 py-0.5 rounded font-mono">tadesse@mau.edu.et</code>).
+                  </p>
+                </div>
+
+                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                  <strong className="block text-slate-900 dark:text-slate-100 font-bold text-xs font-mono uppercase">
+                    2. Faculty, Officers & Federal Auditors
+                  </strong>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    Instructors, Department Heads, Deans, Registrars, and Finance Officers use their assigned institutional email addresses. You can also click any of the <strong>1-Click Quick Access Profile Cards</strong> on the login screen to explore the system instantly.
+                  </p>
+                </div>
+
+                <div className="space-y-2 border-t border-slate-200 dark:border-slate-800 pt-3">
+                  <strong className="block text-slate-900 dark:text-slate-100 font-bold text-xs font-mono uppercase">
+                    3. Password Reset & Support
+                  </strong>
+                  <p className="text-xs text-slate-600 dark:text-slate-400">
+                    If you have forgotten your password or your account is deactivated, please reach out directly to the Office of the Registrar at <code className="font-mono text-slate-800 dark:text-slate-200">registrar@mau.edu.et</code> or visit the ICT Helpdesk in Building B, Room 204.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 sm:p-6 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowHelpModal(false)}
+                  className="px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+                >
+                  Got It, Thanks
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
