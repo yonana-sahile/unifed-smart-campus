@@ -6,8 +6,9 @@ import InstructorDashboard from "./components/InstructorDashboard";
 import { RegistrarDashboard, DepartmentHeadDashboard, DeanDashboard, AdminDashboard, AuditorDashboard } from "./components/OtherDashboards";
 import { LibraryStaffDashboard } from "./components/LibraryStaffDashboard";
 import { FinanceOfficerDashboard } from "./components/FinanceOfficerDashboard";
-import { UniversitySeal, ThemeToggle, DigitalClock } from "./components/UniversityHeader";
+import { UniversitySeal, EthiopianFlag, ThemeToggle, DigitalClock } from "./components/UniversityHeader";
 import { UniversityLandingFooter } from "./components/UniversityLandingFooter";
+import StarryFlag from "./components/StarryFlag";
 import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -148,10 +149,13 @@ export default function App() {
       {/* Top Academic Sub-Header - Clean Top Bar */}
       <header className="w-full bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-300/80 dark:border-slate-800/80 sticky top-0 z-30 px-4 sm:px-8 py-3 shadow-xs">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <span className="text-amber-600 dark:text-amber-400 font-bold text-xs sm:text-sm">🇪🇹 FDRE Ministry of Education</span>
-            <span className="text-slate-400 hidden sm:inline">•</span>
-            <span className="text-slate-700 dark:text-slate-300 font-medium text-xs hidden sm:inline">Accredited Public Higher Education Institution</span>
+          <div className="flex items-center space-x-2.5">
+            <EthiopianFlag className="w-5 h-3.5 rounded-xs shadow-xs" />
+            <div className="flex items-center space-x-2">
+              <span className="text-amber-700 dark:text-amber-400 font-bold text-xs sm:text-sm">FDRE Ministry of Education</span>
+              <span className="text-slate-400 hidden sm:inline">•</span>
+              <span className="text-slate-700 dark:text-slate-300 font-medium text-xs hidden sm:inline">Accredited Public Higher Education Institution</span>
+            </div>
           </div>
           <div className="flex items-center space-x-2.5 sm:space-x-4">
             <DigitalClock />
@@ -203,13 +207,22 @@ export default function App() {
 
           {/* Left Side: University Heritage & System Overview */}
           <div className="lg:col-span-6 space-y-6 text-slate-800 dark:text-white text-center lg:text-left">
-            {/* University Crest & Badge */}
-            <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-3 sm:space-y-0 sm:space-x-4">
-              <UniversitySeal className="w-16 h-16 sm:w-20 sm:h-20 shadow-xl shrink-0" />
-              <div className="space-y-1">
-                <div className="inline-flex items-center space-x-2 bg-amber-500/10 dark:bg-amber-400/10 border border-amber-500/30 dark:border-amber-400/20 px-3 py-1 rounded-full text-[11px] font-mono text-amber-800 dark:text-amber-300 font-bold">
-                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-ping" />
-                  <span>OFFICIAL ACADEMIC PORTAL</span>
+            {/* University Crest & Waving National Flag Display */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-end justify-center lg:justify-start gap-4 sm:gap-5">
+              <div className="flex items-end space-x-3.5 shrink-0">
+                {/* Free-standing Waving Ethiopian Flag on Flagpole on the left */}
+                <div className="shrink-0 flex items-end justify-center">
+                  <StarryFlag scale={0.68} poleHeightCustom={190} showText={false} />
+                </div>
+                {/* University Crest Seal on the right */}
+                <UniversitySeal className="w-16 h-16 sm:w-20 sm:h-20 shadow-xl shrink-0" />
+              </div>
+
+              <div className="space-y-1 text-center sm:text-left pb-1">
+                <div className="inline-flex items-center space-x-2 bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-red-500/10 border border-amber-500/30 dark:border-amber-400/20 px-3.5 py-1 rounded-full text-[11px] font-mono text-slate-800 dark:text-amber-300 font-bold shadow-xs">
+                  <EthiopianFlag className="w-4 h-2.5 rounded-xs shadow-xs" />
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
+                  <span>OFFICIAL ETHIOPIAN HIGHER EDUCATION PORTAL</span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-slate-400 font-serif italic">Veritas • Scientia • Virtus (እውነት፣ ሳይንስ እና ዕውቀት)</p>
               </div>
@@ -277,8 +290,9 @@ export default function App() {
             >
               {/* Header with University Royal Navy */}
               <div className="university-gradient text-white p-6 text-center relative border-b border-amber-500/20">
-                <div className="flex items-center justify-center space-x-2 mb-2">
-                  <UniversitySeal className="w-8 h-8" />
+                <div className="flex items-center justify-center space-x-2.5 mb-2">
+                  <UniversitySeal className="w-8 h-8 drop-shadow-sm" />
+                  <EthiopianFlag className="w-5 h-3.5 rounded-xs shadow-xs" />
                   <span className="font-display font-black text-sm tracking-wider uppercase text-amber-300">
                     Mekdela Amba University
                   </span>
@@ -468,7 +482,7 @@ export default function App() {
                   className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-emerald-950 to-slate-900 hover:from-emerald-900 hover:to-slate-800 border border-emerald-500/30 text-white rounded-xl text-left transition shadow-sm text-xs group cursor-pointer"
                 >
                   <div className="flex items-center space-x-2.5">
-                    <span className="text-base">🇪🇹</span>
+                    <EthiopianFlag className="w-5 h-3.5 rounded-xs shrink-0 shadow-xs" />
                     <div>
                       <span className="block font-bold text-slate-100 text-[11px]">Dr. Tolossa Seme</span>
                       <span className="block text-[9px] text-emerald-400 font-mono">FDRE Ministry of Education Auditor</span>
@@ -504,6 +518,7 @@ export default function App() {
               <div className="university-gradient p-6 text-white flex items-center justify-between border-b border-amber-500/20">
                 <div className="flex items-center space-x-3">
                   <UniversitySeal className="w-10 h-10 shrink-0" />
+                  <EthiopianFlag className="w-7 h-4.5 rounded-xs shrink-0 shadow-xs" />
                   <div>
                     <h3 className="font-display font-bold text-base sm:text-lg">
                       Institutional Accreditation & Security Audit
@@ -656,4 +671,3 @@ export default function App() {
     </div>
   );
 }
-
