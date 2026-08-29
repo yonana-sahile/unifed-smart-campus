@@ -1,5 +1,3 @@
-
-import axios from 'axios';
 import axios from 'axios';
 import type {
   User,
@@ -26,15 +24,12 @@ import type {
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-// ... rest of code
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 const api = axios.create({
   baseURL: API_BASE,
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Add JWT token interceptor
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
