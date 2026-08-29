@@ -1,9 +1,98 @@
 import { useState, useEffect } from "react";
-import  type { User } from "../types";
+import type { User } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon } from "lucide-react";
 import { motion } from "motion/react";
 import mauLogoImg from "../assets/mau_university_log.jpg";
+
+/**
+ * Official Federal Democratic Republic of Ethiopia Flag Component
+ * Rendered with exact SVG geometry, authentic tricolor ratios (#078930 Green, #FCDD09 Yellow, #DA121A Red),
+ * and the central Blue Star Emblem with radiant golden rays.
+ */
+export function EthiopianFlag({
+  className = "w-6 h-4",
+  rounded = "rounded-xs",
+  withBorder = true,
+  withShadow = true,
+  title = "Flag of the Federal Democratic Republic of Ethiopia (የኢትዮጵያ ሰንደቅ ዓላማ)"
+}: {
+  className?: string;
+  rounded?: string;
+  withBorder?: boolean;
+  withShadow?: boolean;
+  title?: string;
+}) {
+  return (
+    <div
+      title={title}
+      className={`relative inline-flex items-center justify-center select-none overflow-hidden shrink-0 ${rounded} ${
+        withBorder ? "border border-slate-700/60 dark:border-slate-600/70" : ""
+      } ${withShadow ? "shadow-xs" : ""} ${className}`}
+    >
+      <svg
+        viewBox="0 0 120 60"
+        className="w-full h-full object-cover block"
+        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <clipPath id="etFlagClip">
+            <rect width="120" height="60" rx="2" />
+          </clipPath>
+        </defs>
+
+        <g clipPath="url(#etFlagClip)">
+          {/* 1. Top Stripe - Green (#078930) */}
+          <rect x="0" y="0" width="120" height="20" fill="#078930" />
+
+          {/* 2. Middle Stripe - Yellow (#FCDD09) */}
+          <rect x="0" y="20" width="120" height="20" fill="#FCDD09" />
+
+          {/* 3. Bottom Stripe - Red (#DA121A) */}
+          <rect x="0" y="40" width="120" height="20" fill="#DA121A" />
+
+          {/* 4. Center Emblem Disk - Official Blue (#0F47AF) */}
+          <circle cx="60" cy="30" r="15" fill="#0F47AF" />
+
+          {/* 5. Radiant Golden Rays between Star points */}
+          <g stroke="#FCDD09" strokeWidth="1.2" strokeLinecap="round">
+            {/* Ray 1: 36 deg */}
+            <line x1="60" y1="30" x2="67.64" y2="19.48" />
+            {/* Ray 2: 108 deg */}
+            <line x1="60" y1="30" x2="72.36" y2="34.02" />
+            {/* Ray 3: 180 deg */}
+            <line x1="60" y1="30" x2="60" y2="43" />
+            {/* Ray 4: 252 deg */}
+            <line x1="60" y1="30" x2="47.64" y2="34.02" />
+            {/* Ray 5: 324 deg */}
+            <line x1="60" y1="30" x2="52.36" y2="19.48" />
+          </g>
+
+          {/* 6. Central Pentagram Star (#FCDD09) */}
+          <polygon
+            points="
+              60,19
+              62.64,26.36
+              70.46,26.6
+              64.28,31.39
+              66.47,38.9
+              60,34.5
+              53.53,38.9
+              55.72,31.39
+              49.54,26.6
+              57.36,26.36
+            "
+            fill="#FCDD09"
+            stroke="#FCDD09"
+            strokeWidth="0.5"
+            strokeLinejoin="round"
+          />
+        </g>
+      </svg>
+    </div>
+  );
+}
 
 export function DigitalClock({ className = "" }: { className?: string }) {
   const [time, setTime] = useState<Date>(new Date());
@@ -472,7 +561,7 @@ export function UniversityTopBar({
   return (
     <header className="university-gradient text-white border-b border-slate-700/80 sticky top-0 z-40 px-4 sm:px-8 py-3.5 sm:py-4 shadow-lg">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
-        {/* Left Side: University Seal + Bilingual Title */}
+        {/* Left Side: University Seal + Bilingual Title + National Flag Badge */}
         <div className="flex items-center space-x-3.5 sm:space-x-4">
           <UniversitySeal className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 drop-shadow-md" />
           <div className="border-l border-slate-700/80 pl-3.5 sm:pl-4 space-y-0.5">
@@ -483,6 +572,10 @@ export function UniversityTopBar({
               <span className="hidden sm:inline-block text-[10px] sm:text-[11px] font-mono text-amber-400 font-bold bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
                 መቅደላ አምባ
               </span>
+              <div className="hidden md:inline-flex items-center space-x-1.5 bg-slate-900/70 border border-slate-700/80 px-2 py-0.5 rounded-md shadow-xs">
+                <EthiopianFlag className="w-4 h-2.5 rounded-xs" />
+                <span className="text-[10px] font-mono text-slate-300 font-bold">FDRE MoE</span>
+              </div>
             </div>
             <p className="text-xs sm:text-sm text-slate-300 font-medium flex items-center space-x-2">
               <span className="text-amber-400 font-semibold">{portalTitle}</span>
@@ -492,15 +585,15 @@ export function UniversityTopBar({
           </div>
         </div>
 
-        {/* Right Side: Digital Clock + Theme Toggle + Academic Year + User Profile + Logout */}
+        {/* Right Side: Digital Clock + Ethiopian Academic Calendar + Theme Toggle + User Profile + Logout */}
         <div className="flex items-center justify-between md:justify-end space-x-2.5 sm:space-x-4">
           {/* Live Digital Clock */}
           <DigitalClock />
 
-          {/* Official Academic Calendar Pill */}
+          {/* Official Academic Calendar Pill with National Flag */}
           <div className="hidden lg:flex flex-col items-end text-right border-r border-slate-700/80 pr-3.5 sm:pr-4 leading-snug">
             <div className="flex items-center space-x-1.5 text-xs font-mono text-slate-200 font-semibold">
-              <Calendar className="w-3.5 h-3.5 text-amber-400" />
+              <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
               <span>AY 2025/2026 • Sem II</span>
             </div>
             <span className="text-[10px] text-slate-400 font-mono">የካቲት 2018 ዓ.ም. (EC)</span>
@@ -556,21 +649,35 @@ export function UniversityTopBar({
 
 export function AcademicFooter() {
   return (
-    <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 py-6 px-6 text-xs mt-auto font-sans">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+    <footer id="mau_dashboard_institutional_footer" className="bg-slate-950 text-slate-400 border-t border-slate-800/80 py-4 px-4 sm:px-6 text-xs mt-auto font-sans relative z-10">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
         <div className="flex items-center space-x-3">
-          <UniversitySeal className="w-6 h-6 opacity-75" />
-          <div>
-            <p className="text-slate-300 font-semibold">Mekdela Amba University (መቅደላ አምባ ዩኒቨርሲቲ)</p>
-            <p className="text-[10px] text-slate-500">Ministry of Education (MoE) • South Wollo, Amhara Region, Ethiopia</p>
+          <UniversitySeal className="w-6 h-6 shrink-0 opacity-90" />
+          <EthiopianFlag className="w-5 h-3.5 rounded-xs shrink-0 shadow-xs" />
+          <div className="text-left">
+            <p className="text-slate-200 font-bold text-xs">
+              Mekdela Amba University <span className="text-slate-500 font-normal hidden sm:inline">• መቅደላ አምባ ዩኒቨርሲቲ</span>
+            </p>
+            <p className="text-[10px] text-slate-400 font-mono">
+              Registrar: +251 33 222 0120 • ICT Helpdesk: +251 33 222 0100 • ict.support@mau.edu.et
+            </p>
           </div>
         </div>
-        <div className="flex items-center space-x-4 text-[11px] text-slate-500 font-mono">
-          <span>FDRE HEIRA Certified</span>
+
+        <div className="flex flex-wrap items-center justify-center gap-3 text-[11px] font-mono text-slate-400">
+          <span className="flex items-center space-x-1.5 text-slate-300 font-medium">
+            <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
+            <span>Ethiopia</span>
+          </span>
           <span>•</span>
-          <span>ISO 9001:2015</span>
+          <span className="flex items-center space-x-1 text-emerald-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>TLS 1.3 256-Bit</span>
+          </span>
           <span>•</span>
-          <span className="text-amber-500 font-bold">USCMS Portal v4.8</span>
+          <span className="text-slate-500">HEIRA Accredited</span>
+          <span>•</span>
+          <span className="text-amber-400 font-bold">USCMS v4.9.2</span>
         </div>
       </div>
     </footer>
