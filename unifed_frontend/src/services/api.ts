@@ -1,4 +1,4 @@
-// src/services/api.ts
+
 import axios from 'axios';
 import {
   User,
@@ -22,7 +22,6 @@ import {
   AuditLog,
   SystemSettings,
   AIRiskPrediction,
-  UserRole,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -32,7 +31,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Add JWT token interceptor if you have authentication
+// Add JWT token interceptor
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('access_token');
   if (token) {
@@ -162,10 +161,10 @@ export const addAuditLog = (
     entityType,
     entityId,
     description,
-    ipAddress: 'unknown', // server will override
+    ipAddress: 'unknown',
   }).then(r => r.data);
 
-// ---------- EXPORT AS CAMPUS DATABASE OBJECT FOR BACKWARDS COMPATIBILITY ----------
+// ---------- EXPORT AS CAMPUS DATABASE OBJECT ----------
 export const CampusDatabase = {
   getUsers,
   saveUsers,

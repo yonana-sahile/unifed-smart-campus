@@ -3,7 +3,7 @@ import { User } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon } from "lucide-react";
 import { motion } from "motion/react";
-import mauLogoImg from "../assets/images/mau_university_logo_1787955234858.jpg";
+import mauLogoImg from "../assets/mau_university_log.jpg";
 
 export function DigitalClock({ className = "" }: { className?: string }) {
   const [time, setTime] = useState<Date>(new Date());
