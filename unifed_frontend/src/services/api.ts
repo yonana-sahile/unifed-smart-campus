@@ -1,6 +1,7 @@
 
 import axios from 'axios';
-import {
+import axios from 'axios';
+import type {
   User,
   Course,
   CourseMaterial,
@@ -24,6 +25,8 @@ import {
   AIRiskPrediction,
 } from '../types';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+// ... rest of code
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 const api = axios.create({
