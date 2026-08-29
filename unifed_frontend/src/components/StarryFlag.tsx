@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 interface StarryFlagProps {
   scale?: number;
@@ -8,28 +8,206 @@ interface StarryFlagProps {
 }
 
 export const StarryFlag: React.FC<StarryFlagProps> = ({
-  scale = 0.5,
+  scale = 0.68,
   className = "",
-  showText = true,
+  showText = false,
   poleHeightCustom
 }) => {
-  // Base dimensions scaled down appropriately
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Dimensions - exact 2:1 proportion matching standard Ethiopian flag ratio
   const poleHeight = poleHeightCustom ?? Math.round(230 * scale);
-  const flagWidth = Math.round(220 * scale);
+  const flagW = Math.round(240 * scale);
+  const flagH = Math.round(120 * scale);
   const finialSize = Math.max(9, Math.round(15 * scale));
   const poleWidth = Math.max(3.5, Math.round(6.5 * scale));
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // High-resolution internal canvas for crisp rendering (2:1 ratio matching 1200x600)
+    const internalW = 480;
+    const internalH = 240;
+    canvas.width = internalW;
+    canvas.height = internalH;
+
+    // Create an offscreen buffer canvas containing the exact Ethiopian flag
+    const offscreen = document.createElement('canvas');
+    offscreen.width = internalW;
+    offscreen.height = internalH;
+    const offCtx = offscreen.getContext('2d');
+    if (!offCtx) return;
+
+    // Draw the Ethiopian Flag texture
+    const stripeH = internalH / 3;
+
+    // Green stripe
+    offCtx.fillStyle = '#078930';
+    offCtx.fillRect(0, 0, internalW, stripeH);
+
+    // Yellow stripe
+    offCtx.fillStyle = '#FCDD09';
+    offCtx.fillRect(0, stripeH, internalW, stripeH);
+
+    // Red stripe
+    offCtx.fillStyle = '#DA121A';
+    offCtx.fillRect(0, stripeH * 2, internalW, stripeH);
+
+    // Blue Circle Emblem (r=160 in 1200x600 -> 160/600 * internalH)
+    const centerX = internalW / 2;
+    const centerY = internalH / 2;
+    const radius = (160 / 600) * internalH;
+
+    offCtx.beginPath();
+    offCtx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    offCtx.fillStyle = '#0F47AF';
+    offCtx.fill();
+
+    // Emblem Star & Rays
+    offCtx.save();
+    offCtx.translate(centerX, centerY);
+    const starScale = (radius / 160) * 0.85;
+    offCtx.scale(starScale, starScale);
+
+    offCtx.strokeStyle = '#FCDD09';
+    offCtx.lineWidth = 13;
+    offCtx.lineJoin = 'round';
+    offCtx.lineCap = 'round';
+
+    // Pentagram
+    offCtx.beginPath();
+    offCtx.moveTo(0, -160);
+    offCtx.lineTo(94, 129.4);
+    offCtx.lineTo(-152.1, -49.4);
+    offCtx.lineTo(152.1, -49.4);
+    offCtx.lineTo(-94, 129.4);
+    offCtx.closePath();
+    offCtx.stroke();
+
+    // 5 Rays
+    const rays = [
+      [50, -69, 94, -129],
+      [81, 26, 152, 49],
+      [0, 85, 0, 160],
+      [-81, 26, -152, 49],
+      [-50, -69, -94, -129]
+    ];
+    rays.forEach(([x1, y1, x2, y2]) => {
+      offCtx.beginPath();
+      offCtx.moveTo(x1, y1);
+      offCtx.lineTo(x2, y2);
+      offCtx.stroke();
+    });
+    offCtx.restore();
+
+    // Cloth Simulation Animation Loop
+    let animId: number;
+    let time = 0;
+    let windTime = 0;
+    const slices = 160; // Ultra-fine slicing for smooth cloth fluidity
+    const sliceWidth = internalW / slices;
+
+    const render = () => {
+      // Natural organic wind turbulence: combines slow atmospheric swells with gentle micro-gusts
+      // Speed naturally fluctuates between a gentle breeze (0.018) and a moderate flutter (0.038)
+      windTime += 0.015;
+      const windGustFactor = 0.026 +
+        0.009 * Math.sin(windTime * 0.7) +
+        0.006 * Math.sin(windTime * 1.63 + 1.2) +
+        0.004 * Math.cos(windTime * 3.1);
+
+      time += windGustFactor;
+
+      ctx.clearRect(0, 0, internalW, internalH);
+
+      // Global billow towards the screen (Z-axis depth swell):
+      // Slowly oscillates so the flag sometimes billows towards the viewer/camera in 3D, and sometimes streams straight
+      const globalZBillow = Math.sin(time * 0.75) * 0.45 + Math.sin(time * 1.35 + 0.5) * 0.25;
+
+      for (let i = 0; i < slices; i++) {
+        const x = i * sliceWidth;
+        const progress = i / slices; // 0 at flagpole (anchored), 1 at free flying edge
+
+        // Wave amplitude scales smoothly with progress from flagpole
+        const baseAmp = Math.pow(progress, 1.18) * (13 + 5 * Math.sin(windTime * 0.9));
+        const flutterAmp = Math.pow(progress, 2.3) * 3.2;
+
+        // Realistic traveling harmonic waves with natural wave dispersion
+        const wave1 = Math.sin(progress * 6.8 - time * 2.4) * baseAmp;
+        const wave2 = Math.sin(progress * 11.5 - time * 3.6 + 0.6) * (baseAmp * 0.32);
+        const wave3 = Math.cos(progress * 18.0 - time * 5.2) * flutterAmp;
+        const yOffset = wave1 + wave2 + wave3;
+
+        // 3D Depth / Screen Billow (Z-displacement):
+        // As the flag comes towards the screen, progress * globalZBillow creates a realistic perspective bow
+        const zDisplacement = Math.sin(progress * 5.2 - time * 2.1) * (progress * 18 * globalZBillow) +
+                              (progress * 12 * Math.max(0, globalZBillow));
+
+        // Wave slope / normal vector calculation for lighting and 3D folding
+        const nextProg = progress + 0.02;
+        const nextWave = Math.sin(nextProg * 6.8 - time * 2.4) * baseAmp +
+                         Math.sin(nextProg * 11.5 - time * 3.6 + 0.6) * (baseAmp * 0.32);
+        const slope = (nextWave - (wave1 + wave2)) * 1.4;
+
+        // Perspective scale: forward billows towards the camera appear slightly taller & closer
+        const perspectiveScale = 1.0 + (zDisplacement / 220) - Math.abs(slope) * 0.015;
+        const drawH = internalH * Math.max(0.75, Math.min(1.22, perspectiveScale));
+        const drawY = (internalH - drawH) / 2 + yOffset;
+
+        // Draw the vertical flag slice with natural perspective scaling
+        ctx.drawImage(
+          offscreen,
+          x, 0, sliceWidth, internalH,
+          x, drawY, sliceWidth + 0.6, drawH
+        );
+
+        // Dynamic 3D Cloth Lighting & Highlights:
+        // Highlights when crest faces lighting, shadows in troughs and deep folds
+        const totalSlope = slope + (zDisplacement > 0 ? 0.12 : -0.1);
+        if (totalSlope > 0.18) {
+          // Crest facing light source: Soft Satin Highlight
+          const highlightAlpha = Math.min(0.36, (totalSlope - 0.18) * 0.26);
+          ctx.fillStyle = `rgba(255, 255, 255, ${highlightAlpha})`;
+          ctx.fillRect(x, drawY, sliceWidth + 0.6, drawH);
+        } else if (totalSlope < -0.18) {
+          // Trough facing away: Natural Cloth Shadow
+          const shadowAlpha = Math.min(0.4, (-totalSlope - 0.18) * 0.3);
+          ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+          ctx.fillRect(x, drawY, sliceWidth + 0.6, drawH);
+        }
+
+        // Ambient depth gradient along the length of the cloth
+        const ambientDrape = progress * 0.06;
+        if (ambientDrape > 0) {
+          ctx.fillStyle = `rgba(0, 0, 0, ${ambientDrape})`;
+          ctx.fillRect(x, drawY, sliceWidth + 0.6, drawH);
+        }
+      }
+
+      animId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animId);
+    };
+  }, [scale]);
 
   return (
     <div className={`flex flex-col items-start select-none ${className}`}>
       <div className="flex items-start">
-        {/* Flagpole structure */}
-        <div className="flex flex-col items-center shrink-0">
-          {/* Golden finial sphere top */}
+        {/* Flagpole Structure */}
+        <div className="flex flex-col items-center shrink-0 z-20">
+          {/* Golden Finial Sphere Top */}
           <div
             className="bg-gradient-to-br from-amber-300 via-amber-400 to-yellow-600 rounded-full shadow-md z-10"
             style={{ width: `${finialSize}px`, height: `${finialSize}px` }}
           />
-          {/* Metallic pole */}
+          {/* Metallic Stainless Steel Pole */}
           <div
             className="bg-gradient-to-r from-slate-300 via-slate-400 to-slate-500 rounded-b-sm shadow-md"
             style={{
@@ -40,105 +218,42 @@ export const StarryFlag: React.FC<StarryFlagProps> = ({
           />
         </div>
 
-        {/* 3D Waving flag SVG canvas */}
+        {/* Real Physics Waving Flag Canvas */}
         <div
-          className="waving-flag-container -ml-0.5 mt-1 origin-left"
-          style={{ width: `${flagWidth}px`, perspective: '900px' }}
+          className="-ml-0.5 mt-1 origin-left shrink-0"
+          style={{
+            width: `${flagW}px`,
+            height: `${flagH + 20}px`,
+            filter: 'drop-shadow(3px 8px 10px rgba(0,0,0,0.35))'
+          }}
         >
-          <svg
-            className="waving-flag-svg w-full h-auto block"
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 1200 600"
+          <canvas
+            ref={canvasRef}
             style={{
-              transformOrigin: 'left center',
-              animation: 'real-wave 2.8s ease-in-out infinite alternate',
-              filter: 'drop-shadow(2px 6px 8px rgba(0,0,0,0.35))'
+              width: `${flagW}px`,
+              height: `${flagH}px`,
+              display: 'block'
             }}
-          >
-            <defs>
-              <linearGradient id="flag-shading" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="rgba(0,0,0,0.25)" />
-                <stop offset="20%" stopColor="rgba(255,255,255,0.2)" />
-                <stop offset="40%" stopColor="rgba(0,0,0,0.18)" />
-                <stop offset="60%" stopColor="rgba(255,255,255,0.18)" />
-                <stop offset="80%" stopColor="rgba(0,0,0,0.22)" />
-                <stop offset="100%" stopColor="rgba(255,255,255,0.12)" />
-              </linearGradient>
-            </defs>
-            <title>Flag of the Federal Democratic Republic of Ethiopia</title>
-
-            {/* Green Stripe */}
-            <rect y="0" width="1200" height="200" fill="#078930" />
-            {/* Yellow Stripe */}
-            <rect y="200" width="1200" height="200" fill="#FCDD09" />
-            {/* Red Stripe */}
-            <rect y="400" width="1200" height="200" fill="#DA121A" />
-
-            {/* Emblem Blue Circle */}
-            <circle cx="600" cy="300" r="160" fill="#0F47AF" />
-
-            {/* Emblem Star and Rays */}
-            <g transform="translate(600, 300) scale(0.85)">
-              <path
-                d="M0,-160 L94,129.4 L-152.1,-49.4 L152.1,-49.4 L-94,129.4 Z"
-                fill="none"
-                stroke="#FCDD09"
-                strokeWidth="12"
-                strokeLinejoin="round"
-              />
-
-              <g stroke="#FCDD09" strokeWidth="12" strokeLinecap="round">
-                <line x1="50" y1="-69" x2="94" y2="-129" />
-                <line x1="81" y1="26" x2="152" y2="49" />
-                <line x1="0" y1="85" x2="0" y2="160" />
-                <line x1="-81" y1="26" x2="-152" y2="49" />
-                <line x1="-50" y1="-69" x2="-94" y2="-129" />
-              </g>
-            </g>
-
-            {/* Shading overlay for realistic waving folds */}
-            <rect
-              y="0"
-              width="1200"
-              height="600"
-              fill="url(#flag-shading)"
-              style={{ mixBlendMode: 'overlay' }}
-            />
-          </svg>
+          />
         </div>
       </div>
 
       {/* Optional Neon text below flagpole */}
       {showText && (
         <div
-          className="mt-1 text-center ethiopia-neon-text font-bold text-xs tracking-wider"
+          className="mt-1 text-center font-bold text-xs tracking-wider text-slate-700 dark:text-slate-200"
           style={{
             fontFamily: "'Segoe UI', Roboto, sans-serif",
             whiteSpace: 'nowrap',
             marginLeft: '-4px'
           }}
         >
-          Secured Ethiopia • ኢትዮጵያ
+          ኢትዮጵያ
         </div>
       )}
-
-      <style>{`
-        @keyframes real-wave {
-          0% { transform: rotateY(-4deg) skewY(-1.5deg) skewX(1deg); }
-          50% { transform: rotateY(-12deg) skewY(1deg) skewX(-1deg); }
-          100% { transform: rotateY(-20deg) skewY(2.5deg) skewX(1.5deg); }
-        }
-        .ethiopia-neon-text {
-          animation: ethiopia-glow 3s infinite alternate;
-        }
-        @keyframes ethiopia-glow {
-          0% { color: #078930; text-shadow: 0 0 4px rgba(7, 137, 48, 0.4); }
-          50% { color: #eab308; text-shadow: 0 0 4px rgba(234, 179, 8, 0.4); }
-          100% { color: #dc2626; text-shadow: 0 0 4px rgba(220, 38, 38, 0.4); }
-        }
-      `}</style>
     </div>
   );
 };
 
 export default StarryFlag;
+
