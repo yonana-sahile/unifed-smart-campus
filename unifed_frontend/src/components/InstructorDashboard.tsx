@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade } from "../types";
+import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade } from "../types";
 import { CampusDatabase } from "../services/api"; // ✅ changed from ../mockData
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
 import {
