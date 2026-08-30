@@ -1,15 +1,19 @@
 import { useState, useEffect } from "react";
 import type { User, Course, Grade, Transcript, AuditLog, SystemSettings } from "../types";
-import { CampusDatabase } from "../services/api";
-import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
-import { ShieldAlert, Calendar, FileText, CheckCircle2, AlertCircle, Shield, List, Settings, Search, Edit3, Check, X, RefreshCw, BarChart2, Plus, Users, HeartPulse, Activity, Award, TrendingUp, Sparkles, Coins, CheckSquare, Database } from "lucide-react";
+import { CampusDatabase } from "./services/api"
+import { UniversityTopBar, AcademicFooter, UniversitySeal, EthiopianFlag } from "./UniversityHeader";
+import { SmartClearancePortal } from "./SmartClearancePortal";
+import { SmartCampusFacilities } from "./SmartCampusFacilities";
+import { SmartCampusAlerts } from "./SmartCampusAlerts";
+import CampusMediaBroadcast from "./CampusMediaBroadcast";
+import { ShieldAlert, Calendar, FileText, CheckCircle2, AlertCircle, Shield, List, Settings, Search, Edit3, Check, X, RefreshCw, BarChart2, Plus, Users, HeartPulse, Activity, Award, TrendingUp, Sparkles, Coins, CheckSquare, Database, ShieldCheck, Radio, Cpu, Video, Tv } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 /* ---------------------------------------------------- */
 /* 1. REGISTRAR DASHBOARD                               */
 /* ---------------------------------------------------- */
 export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [activeTab, setActiveTab] = useState<"records" | "grades" | "calendar">("records");
+  const [activeTab, setActiveTab] = useState<"records" | "grades" | "calendar" | "clearance" | "alerts">("records");
   const [students, setStudents] = useState<User[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
@@ -151,6 +155,36 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
             >
               <Calendar className="w-4 h-4 text-amber-400" />
               <span>Academic Calendar</span>
+            </button>
+
+            <div className="pt-3 pb-1 px-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Institutional Portals
+              </span>
+            </div>
+
+            <button
+              onClick={() => setActiveTab("clearance")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "clearance"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <span>Digital Clearance Certification</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("alerts")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "alerts"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <Radio className="w-4 h-4 text-red-400" />
+              <span>Broadcast Circulars</span>
             </button>
           </nav>
 
@@ -357,6 +391,20 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
               )}
             </div>
           )}
+
+          {/* TAB: DIGITAL CLEARANCE CERTIFICATION */}
+          {activeTab === "clearance" && (
+            <div className="space-y-6">
+              <SmartClearancePortal user={user} isOfficerMode={true} />
+            </div>
+          )}
+
+          {/* TAB: CAMPUS BROADCAST CIRCULARS */}
+          {activeTab === "alerts" && (
+            <div className="space-y-6">
+              <SmartCampusAlerts user={user} />
+            </div>
+          )}
         </main>
       </div>
 
@@ -515,7 +563,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
 /* 4. SYSTEM ADMINISTRATOR DASHBOARD                    */
 /* ---------------------------------------------------- */
 export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [activeTab, setActiveTab] = useState<"users" | "audit" | "health">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "audit" | "health" | "facilities" | "alerts" | "clearance" | "media">("users");
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [newUserFullName, setNewUserFullName] = useState("");
@@ -632,6 +680,60 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
             >
               <Activity className="w-4 h-4 text-amber-400" />
               <span>Telemetry & Health</span>
+            </button>
+
+            <div className="pt-3 pb-1 px-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Smart Operations
+              </span>
+            </div>
+
+            <button
+              onClick={() => setActiveTab("clearance")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "clearance"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <span>Clearance Overseer</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("facilities")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "facilities"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <Cpu className="w-4 h-4 text-amber-400" />
+              <span>Campus Facilities</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("alerts")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "alerts"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <Radio className="w-4 h-4 text-red-400" />
+              <span>Broadcast Alerts</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("media")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "media"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <Video className="w-4 h-4 text-amber-400" />
+              <span>Video & Media Screen</span>
             </button>
           </nav>
 
@@ -780,6 +882,36 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
                     <span className="text-xs text-success font-mono font-bold">● Bound</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: DIGITAL CLEARANCE OVERSEER */}
+          {activeTab === "clearance" && (
+            <div className="space-y-6">
+              <SmartClearancePortal user={user} isOfficerMode={true} />
+            </div>
+          )}
+
+          {/* TAB: CAMPUS FACILITIES */}
+          {activeTab === "facilities" && (
+            <div className="space-y-6">
+              <SmartCampusFacilities user={user} />
+            </div>
+          )}
+
+          {/* TAB: BROADCAST ALERTS */}
+          {activeTab === "alerts" && (
+            <div className="space-y-6">
+              <SmartCampusAlerts user={user} />
+            </div>
+          )}
+
+          {/* TAB: CAMPUS VIDEO & MEDIA SCREEN BROADCAST */}
+          {activeTab === "media" && (
+            <div className="space-y-6">
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                <CampusMediaBroadcast />
               </div>
             </div>
           )}
@@ -960,8 +1092,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       {/* Main Government Header */}
       <header className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 text-white border-b border-emerald-500/20 sticky top-0 z-40 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
-          <div className="bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 p-2.5 rounded-xl flex items-center justify-center font-display font-black text-xl tracking-tight shadow-inner">
-            🇪🇹
+          <div className="bg-emerald-500/15 border border-emerald-400/30 p-1.5 rounded-xl flex items-center justify-center shadow-inner">
+            <EthiopianFlag className="w-10 h-6.5 rounded-sm shadow-md" />
           </div>
           <div>
             <div className="flex items-center space-x-2">
