@@ -324,3 +324,82 @@ export interface SystemSettings {
   };
   academicYearFrozen: boolean;
 }
+
+export interface ClearanceDepartmentStatus {
+  department: "LIBRARY" | "FINANCE" | "DORMITORY" | "DEPARTMENT_LAB" | "REGISTRAR";
+  departmentName: string;
+  status: "PENDING" | "CLEARED" | "REJECTED";
+  officerName?: string;
+  clearedAt?: string;
+  remarks?: string;
+  duesAmount?: number;
+}
+
+export interface StudentClearance {
+  id: string;
+  studentId: string;
+  studentName: string;
+  program: string;
+  academicYear: number;
+  reason: "GRADUATION" | "END_OF_YEAR" | "WITHDRAWAL" | "TRANSFER";
+  initiatedDate: string;
+  overallStatus: "IN_PROGRESS" | "APPROVED" | "BLOCKED";
+  digitalStampHash?: string;
+  stages: ClearanceDepartmentStatus[];
+}
+
+export interface FacilityBooking {
+  id: string;
+  facilityName: string;
+  facilityCode: string;
+  campus: "Tulu Awulia (Main)" | "Masha Campus";
+  roomType: "LAB" | "AUDITORIUM" | "SEMINAR_ROOM" | "LIBRARY_CUBICLE";
+  bookedBy: string;
+  bookedByRole: string;
+  department: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  purpose: string;
+  status: "CONFIRMED" | "PENDING" | "CANCELLED";
+  capacity: number;
+  resourcesEquipped: string[];
+}
+
+export interface CampusAlert {
+  id: string;
+  title: string;
+  message: string;
+  category: "ACADEMIC" | "EMERGENCY" | "WEATHER" | "FACILITY" | "FINANCE";
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  targetAudience: "ALL" | "STUDENTS" | "FACULTY" | "STAFF";
+  senderName: string;
+  timestamp: string;
+  activeUntil: string;
+  channelsSent: ("PORTAL" | "TELEGRAM" | "SMS")[];
+}
+
+export interface CampusMediaPost {
+  id: string;
+  title: string;
+  description: string;
+  category: "CAMPUS_NEWS" | "RESEARCH_INNOVATION" | "GRADUATION_CEREMONY" | "TECH_EXPO" | "PRESIDENTIAL_ADDRESS" | "STUDENT_LIFE";
+  videoUrl: string; // YouTube / MP4 / Vimeo embed URL
+  thumbnailUrl: string;
+  postedBy: string;
+  authorRole: string;
+  postedAt: string;
+  duration: string;
+  viewsCount: number;
+  likesCount: number;
+  featured?: boolean;
+  tags: string[];
+}
+
+export interface AIChatMessage {
+  id: string;
+  sender: "user" | "ai";
+  text: string;
+  timestamp: string;
+  suggestedActions?: string[];
+}
