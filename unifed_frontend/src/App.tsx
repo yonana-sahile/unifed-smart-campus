@@ -8,6 +8,7 @@ import { LibraryStaffDashboard } from "./components/LibraryStaffDashboard";
 import { FinanceOfficerDashboard } from "./components/FinanceOfficerDashboard";
 import { UniversitySeal, EthiopianFlag, ThemeToggle, DigitalClock } from "./components/UniversityHeader";
 import { UniversityLandingFooter } from "./components/UniversityLandingFooter";
+import CampusMediaBroadcast from "./components/CampusMediaBroadcast";
 import StarryFlag from "./components/StarryFlag";
 import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -182,12 +183,20 @@ export default function App() {
           </div>
 
           <div className="flex items-center space-x-3 text-[11px]">
+            <a
+              href="#campus-media-screen"
+              className="text-amber-700 dark:text-amber-300 hover:underline font-bold flex items-center space-x-1 cursor-pointer bg-amber-500/10 dark:bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30"
+            >
+              <Radio className="w-3 h-3 text-amber-500 animate-pulse" />
+              <span>Campus Video Screen / የቪዲዮ ስክሪን</span>
+            </a>
+            <span className="text-slate-400">•</span>
             <button
               onClick={() => setShowSecurityModal(true)}
               className="text-amber-700 dark:text-amber-400 hover:underline font-semibold flex items-center space-x-1 cursor-pointer"
             >
               <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Verify Institution Credentials</span>
+              <span>Verify Credentials</span>
             </button>
             <span className="text-slate-400">•</span>
             <button
@@ -195,7 +204,7 @@ export default function App() {
               className="text-blue-700 dark:text-blue-400 hover:underline font-semibold flex items-center space-x-1 cursor-pointer"
             >
               <HelpCircle className="w-3.5 h-3.5" />
-              <span>Portal Help</span>
+              <span>Help</span>
             </button>
           </div>
         </div>
@@ -499,6 +508,9 @@ export default function App() {
         </div>
       </main>
 
+      {/* Official Campus Media & Admin Video Broadcasting Screen */}
+      <CampusMediaBroadcast />
+
       {/* Official Institutional Landing Footer */}
       <UniversityLandingFooter
         onOpenSecurityModal={() => setShowSecurityModal(true)}
@@ -671,3 +683,4 @@ export default function App() {
     </div>
   );
 }
+
