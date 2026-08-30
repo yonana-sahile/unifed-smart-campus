@@ -21,6 +21,11 @@ import type {
   AuditLog,
   SystemSettings,
   AIRiskPrediction,
+  StudentClearance,
+  ClearanceDepartmentStatus,
+  FacilityBooking,
+  CampusAlert,
+  CampusMediaPost,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
@@ -162,6 +167,72 @@ export const addAuditLog = (
     ipAddress: 'unknown',
   }).then(r => r.data);
 
+// ---------- DIGITAL CLEARANCE ----------
+export const getClearances = (): Promise<StudentClearance[]> =>
+  api.get('/clearances/').then(r => r.data);
+
+export const saveClearances = (clearances: StudentClearance[]): Promise<StudentClearance[]> =>
+  api.put('/clearances/', clearances).then(r => r.data);
+
+export const updateClearanceStage = (
+  clearanceId: string,
+  dept: "LIBRARY" | "FINANCE" | "DORMITORY" | "DEPARTMENT_LAB" | "REGISTRAR",
+  status: "CLEARED" | "REJECTED" | "PENDING",
+  officerName: string,
+  remarks?: string
+): Promise<StudentClearance> =>
+  api.patch(`/clearances/${clearanceId}/stage/`, {
+    department: dept,
+    status,
+    officerName,
+    remarks,
+  }).then(r => r.data);
+
+// ---------- FACILITY BOOKINGS ----------
+export const getFacilityBookings = (): Promise<FacilityBooking[]> =>
+  api.get('/facility-bookings/').then(r => r.data);
+
+export const saveFacilityBookings = (bookings: FacilityBooking[]): Promise<FacilityBooking[]> =>
+  api.put('/facility-bookings/', bookings).then(r => r.data);
+
+export const addFacilityBooking = (
+  booking: Omit<FacilityBooking, 'id'>
+): Promise<FacilityBooking> =>
+  api.post('/facility-bookings/', booking).then(r => r.data);
+
+// ---------- CAMPUS ALERTS ----------
+export const getCampusAlerts = (): Promise<CampusAlert[]> =>
+  api.get('/campus-alerts/').then(r => r.data);
+
+export const saveCampusAlerts = (alerts: CampusAlert[]): Promise<CampusAlert[]> =>
+  api.put('/campus-alerts/', alerts).then(r => r.data);
+
+export const addCampusAlert = (
+  alert: Omit<CampusAlert, 'id' | 'timestamp'>
+): Promise<CampusAlert> =>
+  api.post('/campus-alerts/', alert).then(r => r.data);
+
+// ---------- CAMPUS MEDIA POSTS ----------
+export const getMediaPosts = (): Promise<CampusMediaPost[]> =>
+  api.get('/media-posts/').then(r => r.data);
+
+export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPost[]> =>
+  api.put('/media-posts/', posts).then(r => r.data);
+
+export const addMediaPost = (
+  post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'viewsCount' | 'likesCount'>
+): Promise<CampusMediaPost> =>
+  api.post('/media-posts/', post).then(r => r.data);
+
+export const deleteMediaPost = (id: string): Promise<{ success: boolean }> =>
+  api.delete(`/media-posts/${id}/`).then(r => r.data);
+
+export const incrementMediaViews = (id: string): Promise<void> =>
+  api.post(`/media-posts/${id}/view/`).then(r => r.data);
+
+export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
+  api.post(`/media-posts/${id}/like/`).then(r => r.data);
+
 // ---------- EXPORT AS CAMPUS DATABASE OBJECT ----------
 export const CampusDatabase = {
   getUsers,
@@ -208,4 +279,23 @@ export const CampusDatabase = {
   generateExamQuestions,
   getCourseAdvisor,
   addAuditLog,
+  // NEW: Clearance
+  getClearances,
+  saveClearances,
+  updateClearanceStage,
+  // NEW: Facilities
+  getFacilityBookings,
+  saveFacilityBookings,
+  addFacilityBooking,
+  // NEW: Alerts
+  getCampusAlerts,
+  saveCampusAlerts,
+  addCampusAlert,
+  // NEW: Media
+  getMediaPosts,
+  saveMediaPosts,
+  addMediaPost,
+  deleteMediaPost,
+  incrementMediaViews,
+  toggleMediaLike,
 };
