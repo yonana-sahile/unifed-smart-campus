@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { User, Course, Grade, Transcript, AuditLog, SystemSettings } from "../types";
-import { CampusDatabase } from "./services/api"
+import { CampusDatabase } from "../services/api"
 import { UniversityTopBar, AcademicFooter, UniversitySeal, EthiopianFlag } from "./UniversityHeader";
 import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusFacilities } from "./SmartCampusFacilities";

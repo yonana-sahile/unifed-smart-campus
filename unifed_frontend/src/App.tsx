@@ -1,6 +1,6 @@
 import { useState, useEffect, FormEvent } from "react";
 import type { User, UserRole } from "./types";
-import { CampusDatabase } from "./services/api"
+import { CampusDatabase } from "./services/api";
 import StudentDashboard from "./components/StudentDashboard";
 import InstructorDashboard from "./components/InstructorDashboard";
 import { RegistrarDashboard, DepartmentHeadDashboard, DeanDashboard, AdminDashboard, AuditorDashboard } from "./components/OtherDashboards";
@@ -9,6 +9,8 @@ import { FinanceOfficerDashboard } from "./components/FinanceOfficerDashboard";
 import { UniversitySeal, EthiopianFlag, ThemeToggle, DigitalClock } from "./components/UniversityHeader";
 import { UniversityLandingFooter } from "./components/UniversityLandingFooter";
 import CampusMediaBroadcast from "./components/CampusMediaBroadcast";
+import CampusNewsTopBar from "./components/CampusNewsTopBar";
+import FloatingAIAssistant from "./components/FloatingAIAssistant";
 import StarryFlag from "./components/StarryFlag";
 import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
@@ -108,37 +110,47 @@ export default function App() {
 
   // Render Dashboard based on role
   if (currentUser) {
-    switch (currentUser.role) {
-      case "STUDENT":
-        return <StudentDashboard user={currentUser} onLogout={handleLogout} />;
-      case "INSTRUCTOR":
-        return <InstructorDashboard user={currentUser} onLogout={handleLogout} />;
-      case "REGISTRAR":
-        return <RegistrarDashboard user={currentUser} onLogout={handleLogout} />;
-      case "DEPARTMENT_HEAD":
-        return <DepartmentHeadDashboard user={currentUser} onLogout={handleLogout} />;
-      case "DEAN":
-        return <DeanDashboard user={currentUser} onLogout={handleLogout} />;
-      case "ADMIN":
-        return <AdminDashboard user={currentUser} onLogout={handleLogout} />;
-      case "AUDITOR":
-        return <AuditorDashboard user={currentUser} onLogout={handleLogout} />;
-      case "LIBRARY_STAFF":
-        return <LibraryStaffDashboard user={currentUser} onLogout={handleLogout} />;
-      case "FINANCE_OFFICER":
-        return <FinanceOfficerDashboard user={currentUser} onLogout={handleLogout} />;
-      default:
-        return (
-          <div className="min-h-screen flex items-center justify-center bg-slate-100 font-sans p-6 text-center">
-            <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 space-y-4 max-w-sm">
-              <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
-              <h3 className="font-display font-bold text-slate-800 text-lg">Role Mapping Error</h3>
-              <p className="text-xs text-slate-500">The credentials supplied do not have an active institutional portal mapping.</p>
-              <button onClick={handleLogout} className="bg-primary text-white text-xs px-5 py-2.5 rounded-xl font-bold">Logout</button>
+    const renderRoleDashboard = () => {
+      switch (currentUser.role) {
+        case "STUDENT":
+          return <StudentDashboard user={currentUser} onLogout={handleLogout} />;
+        case "INSTRUCTOR":
+          return <InstructorDashboard user={currentUser} onLogout={handleLogout} />;
+        case "REGISTRAR":
+          return <RegistrarDashboard user={currentUser} onLogout={handleLogout} />;
+        case "DEPARTMENT_HEAD":
+          return <DepartmentHeadDashboard user={currentUser} onLogout={handleLogout} />;
+        case "DEAN":
+          return <DeanDashboard user={currentUser} onLogout={handleLogout} />;
+        case "ADMIN":
+          return <AdminDashboard user={currentUser} onLogout={handleLogout} />;
+        case "AUDITOR":
+          return <AuditorDashboard user={currentUser} onLogout={handleLogout} />;
+        case "LIBRARY_STAFF":
+          return <LibraryStaffDashboard user={currentUser} onLogout={handleLogout} />;
+        case "FINANCE_OFFICER":
+          return <FinanceOfficerDashboard user={currentUser} onLogout={handleLogout} />;
+        default:
+          return (
+            <div className="min-h-screen flex items-center justify-center bg-slate-100 font-sans p-6 text-center">
+              <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-200 space-y-4 max-w-sm">
+                <ShieldAlert className="w-12 h-12 text-amber-500 mx-auto" />
+                <h3 className="font-display font-bold text-slate-800 text-lg">Role Mapping Error</h3>
+                <p className="text-xs text-slate-500">The credentials supplied do not have an active institutional portal mapping.</p>
+                <button onClick={handleLogout} className="bg-primary text-white text-xs px-5 py-2.5 rounded-xl font-bold">Logout</button>
+              </div>
             </div>
-          </div>
-        );
-    }
+          );
+      }
+    };
+
+    return (
+      <>
+        <CampusNewsTopBar />
+        {renderRoleDashboard()}
+        <FloatingAIAssistant currentUser={currentUser} />
+      </>
+    );
   }
 
   return (
@@ -146,6 +158,9 @@ export default function App() {
       {/* Background ambient lighting */}
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-400/10 dark:bg-blue-900/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-amber-400/10 dark:bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
+
+      {/* Top Interactive Campus News Navbar & Ticker */}
+      <CampusNewsTopBar />
 
       {/* Top Academic Sub-Header - Clean Top Bar */}
       <header className="w-full bg-white/85 dark:bg-slate-900/85 backdrop-blur-md border-b border-slate-300/80 dark:border-slate-800/80 sticky top-0 z-30 px-4 sm:px-8 py-3 shadow-xs">
@@ -224,7 +239,7 @@ export default function App() {
                   <StarryFlag scale={0.68} poleHeightCustom={190} showText={false} />
                 </div>
                 {/* University Crest Seal on the right */}
-                <UniversitySeal className="w-16 h-16 sm:w-20 sm:h-20 shadow-xl shrink-0" />
+                <UniversitySeal className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 shadow-xl shrink-0" />
               </div>
 
               <div className="space-y-1 text-center sm:text-left pb-1">
@@ -680,6 +695,9 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Floating AI Academic Assistant on the Right Side */}
+      <FloatingAIAssistant currentUser={currentUser} />
     </div>
   );
 }
