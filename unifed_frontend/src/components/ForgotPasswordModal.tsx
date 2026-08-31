@@ -15,7 +15,7 @@ import {
   Sparkles,
   PhoneCall
 } from "lucide-react";
-import { CampusDatabase } from "../mockData";
+import { CampusDatabase } from "../services/api"; // ✅ FIXED import
 import { UniversitySeal, EthiopianFlag } from "./UniversityHeader";
 
 interface ForgotPasswordModalProps {
