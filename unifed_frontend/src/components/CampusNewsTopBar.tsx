@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { CampusDatabase } from "../services/api";
 import type { User, Announcement } from "../types";
+import { CampusNewsAdminModal } from "./CampusNewsAdminModal"; // ✅ FIXED: Import added
 
 // ✅ Define NewsItem type locally (or import if defined elsewhere)
 export interface CampusNewsItem {
