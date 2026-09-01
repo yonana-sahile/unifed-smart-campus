@@ -1,4 +1,4 @@
-import React, { useState, FormEvent } from "react";
+import React, { useState, FormEvent, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   ShieldCheck,
@@ -23,10 +23,30 @@ import {
   FileText,
   Eye
 } from "lucide-react";
-import type { User, UserRole } from "./types";
-import { CampusDatabase } from "./services/api";
+import { User, Announcement } from "../types";
+import { CampusDatabase } from "../services/api";
 import { UniversitySeal, EthiopianFlag } from "./UniversityHeader";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
+
+// Local type matching the top bar's CampusNewsItem
+interface CampusNewsItem {
+  id: string;
+  title: string;
+  amharicTitle: string;
+  summary: string;
+  fullContent: string;
+  category: string; // will be mapped from categoryLabel
+  categoryLabel: string;
+  categoryAmharic: string;
+  badgeColor: string;
+  date: string;
+  ethiopianDate: string;
+  author: string;
+  readTime: string;
+  highlightTag: string;
+  isBreaking?: boolean;
+  imageUrl?: string;
+}
 
 interface CampusNewsAdminModalProps {
   isOpen: boolean;
@@ -35,6 +55,75 @@ interface CampusNewsAdminModalProps {
   currentUser?: User | null;
 }
 
+// Helper to map Announcement to CampusNewsItem
+const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
+  // Determine category based on title/content or default
+  let categoryLabel = "Academic";
+  let categoryAmharic = "የአካዳሚክ";
+  let badgeColor = "from-blue-600 to-indigo-600 border-blue-400/30 text-white";
+  let category = "ACADEMIC";
+  let highlightTag = "📢 ANNOUNCEMENT";
+
+  // Simple keyword-based categorization
+  const titleLower = ann.title.toLowerCase();
+  if (titleLower.includes("exit exam") || titleLower.includes("ከፍተኛ ፈተና")) {
+    categoryLabel = "National Exit Exam";
+    categoryAmharic = "ብሔራዊ መውጫ ፈተና";
+    badgeColor = "from-rose-600 via-red-600 to-amber-600 border-rose-400 text-white";
+    category = "EXIT_EXAM";
+    highlightTag = "📝 EXIT EXAM";
+  } else if (titleLower.includes("tech") || titleLower.includes("ai") || titleLower.includes("ሳይንስ")) {
+    categoryLabel = "Smart Campus & AI";
+    categoryAmharic = "ዘመናዊ ቴክኖሎጂ እና ኤአይ";
+    badgeColor = "from-amber-500 via-yellow-500 to-amber-600 border-amber-300 text-slate-950 font-bold";
+    category = "TECH_AI";
+    highlightTag = "🤖 TECH & AI";
+  } else if (titleLower.includes("research") || titleLower.includes("ምርምር")) {
+    categoryLabel = "Agro-Research";
+    categoryAmharic = "ግብርናና የተፈጥሮ ምርምር";
+    badgeColor = "from-emerald-600 via-teal-600 to-emerald-700 border-emerald-400 text-white";
+    category = "RESEARCH";
+    highlightTag = "🌾 RESEARCH";
+  } else if (titleLower.includes("community") || titleLower.includes("ማህበረሰብ")) {
+    categoryLabel = "Campus Community";
+    categoryAmharic = "ማህበረሰብ አገልግሎት";
+    badgeColor = "from-purple-600 via-indigo-600 to-pink-600 border-purple-400 text-white";
+    category = "COMMUNITY";
+    highlightTag = "👥 COMMUNITY";
+  } else {
+    // Default: Registrar Notice
+    categoryLabel = "Registrar Notice";
+    categoryAmharic = "ሬጅስትራር ማስታወቂያ";
+    badgeColor = "from-blue-600 via-indigo-600 to-sky-600 border-blue-400 text-white";
+    category = "ACADEMIC";
+    highlightTag = "📢 OFFICIAL NOTICE";
+  }
+
+  const dateObj = new Date(ann.postedAt);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const formattedDate = `${months[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
+  const ethiopianDate = dateObj.toLocaleDateString("am-ET");
+
+  return {
+    id: ann.id,
+    title: ann.title,
+    amharicTitle: ann.title, // We don't have Amharic title, use same
+    summary: ann.content.slice(0, 150) + "...",
+    fullContent: ann.content,
+    category,
+    categoryLabel,
+    categoryAmharic,
+    badgeColor,
+    date: formattedDate,
+    ethiopianDate,
+    author: ann.postedBy,
+    readTime: `${Math.ceil(ann.content.split(" ").length / 200)} min read`,
+    highlightTag,
+    isBreaking: false, // not stored
+    imageUrl: undefined
+  };
+};
+
 export function CampusNewsAdminModal({
   isOpen,
   onClose,
@@ -42,7 +131,6 @@ export function CampusNewsAdminModal({
   currentUser
 }: CampusNewsAdminModalProps) {
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    // If the currently logged in user in the app is an ADMIN, auto authenticate
     return currentUser?.role === "ADMIN";
   });
 
@@ -55,23 +143,43 @@ export function CampusNewsAdminModal({
   // New News Item Form State
   const [title, setTitle] = useState("");
   const [amharicTitle, setAmharicTitle] = useState("");
-  const [category, setCategory] = useState<CampusNewsItem["category"]>("TECH_AI");
+  const [category, setCategory] = useState<string>("ACADEMIC");
   const [summary, setSummary] = useState("");
   const [fullContent, setFullContent] = useState("");
   const [author, setAuthor] = useState("MAU ICT Directorate & Communications");
   const [isBreaking, setIsBreaking] = useState(false);
-  const [priorityScore, setPriorityScore] = useState(90);
+  const [priorityScore] = useState(90);
   const [highlightTag, setHighlightTag] = useState("OFFICIAL ANNOUNCEMENT");
   const [readTime, setReadTime] = useState("2 min read");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   // Existing News List
-  const [newsList, setNewsList] = useState<CampusNewsItem[]>(() =>
-    CampusDatabase.getCampusNews()
-  );
+  const [newsList, setNewsList] = useState<CampusNewsItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load announcements from API
+  const loadNews = async () => {
+    try {
+      setLoading(true);
+      const announcements = await CampusDatabase.getAnnouncements();
+      const mapped = announcements.map(mapAnnouncementToNewsItem);
+      setNewsList(mapped);
+    } catch (err) {
+      console.error("Failed to load announcements:", err);
+      setFeedback({ type: "error", text: "Failed to load existing news." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && isAdminAuthenticated) {
+      loadNews();
+    }
+  }, [isOpen, isAdminAuthenticated]);
 
   const categoryConfigs: Record<
-    CampusNewsItem["category"],
+    string,
     { label: string; amharic: string; color: string }
   > = {
     EXIT_EXAM: {
@@ -101,100 +209,122 @@ export function CampusNewsAdminModal({
     }
   };
 
-  const handleAdminLogin = (e: FormEvent) => {
+  const handleAdminLogin = async (e: FormEvent) => {
     e.preventDefault();
     setAuthError("");
 
     const cleanUser = usernameInput.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
 
-    // Check credentials: username 'yonassahile' or 'admin', password '1234' or 'password'
     const isYonas =
       (cleanUser === "yonassahile" || cleanUser === "yonas") &&
       (cleanPass === "1234" || cleanPass === "password");
 
-    const users = CampusDatabase.getUsers();
-    const foundAdmin = users.find(
-      (u) =>
-        u.role === "ADMIN" &&
-        (u.username.toLowerCase() === cleanUser || u.email.toLowerCase() === cleanUser) &&
-        (cleanPass === "1234" || cleanPass === "password")
-    );
+    try {
+      const users = await CampusDatabase.getUsers();
+      const foundAdmin = users.find(
+        (u) =>
+          u.role === "ADMIN" &&
+          (u.username.toLowerCase() === cleanUser || u.email.toLowerCase() === cleanUser) &&
+          (cleanPass === "1234" || cleanPass === "password")
+      );
 
-    if (isYonas || foundAdmin) {
-      setIsAdminAuthenticated(true);
-      setAuthError("");
-    } else {
-      setAuthError("የተሳሳተ የተጠቃሚ ስም ወይም የይለፍ ቃል! (ትክክለኛ፦ username: yonassahile / password: 1234)");
+      if (isYonas || foundAdmin) {
+        setIsAdminAuthenticated(true);
+        setAuthError("");
+        await loadNews();
+      } else {
+        setAuthError("የተሳሳተ የተጠቃሚ ስም ወይም የይለፍ ቃል! (ትክክለኛ፦ username: yonassahile / password: 1234)");
+      }
+    } catch {
+      setAuthError("Unable to connect to server. Please try again.");
     }
   };
 
-  const handlePublishNews = (e: FormEvent) => {
+  const handlePublishNews = async (e: FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
-    if (!title.trim() || !amharicTitle.trim() || !fullContent.trim()) {
+    if (!title.trim() || !fullContent.trim()) {
       setFeedback({
         type: "error",
-        text: "እባክዎ ርዕስ (እንግሊዝኛና አማርኛ) እንዲሁም ሙሉውን የዜና ዝርዝር ያስገቡ።"
+        text: "እባክዎ ርዕስ (እንግሊዝኛ) እንዲሁም ሙሉውን የዜና ዝርዝር ያስገቡ።"
       });
       return;
     }
 
-    const config = categoryConfigs[category];
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const now = new Date();
-    const formattedDate = `${months[now.getMonth()]} ${now.getDate()}, ${now.getFullYear()}`;
+    try {
+      const currentAnnouncements = await CampusDatabase.getAnnouncements();
 
-    const createdItem = CampusDatabase.addCampusNews({
-      title: title.trim(),
-      amharicTitle: amharicTitle.trim(),
-      category,
-      categoryLabel: config.label,
-      categoryAmharic: config.amharic,
-      badgeColor: config.color,
-      date: formattedDate,
-      ethiopianDate: "የካቲት 2018 ዓ.ም.",
-      readTime: readTime.trim() || "2 min read",
-      summary: summary.trim() || title.trim(),
-      fullContent: fullContent.trim(),
-      author: author.trim() || "Mekdela Amba University Public Relations",
-      isBreaking,
-      priorityScore: Number(priorityScore) || 90,
-      highlightTag: highlightTag.trim() || (isBreaking ? "URGENT • አስቸኳይ" : "OFFICIAL NOTICE")
-    });
+      const newAnnouncement: Announcement = {
+        id: "AN_" + Date.now(),
+        courseId: "CAMPUS_NEWS",
+        courseTitle: "Campus News & Announcements",
+        title: title.trim(),
+        content: fullContent.trim(),
+        postedBy: author.trim() || currentUser?.fullName || "University Admin",
+        postedAt: new Date().toISOString()
+      };
 
-    const updated = CampusDatabase.getCampusNews();
-    setNewsList(updated);
-    onNewsUpdated?.();
+      const updated = [newAnnouncement, ...currentAnnouncements];
+      await CampusDatabase.saveAnnouncements(updated);
 
-    setFeedback({
-      type: "success",
-      text: "አዲሱ የዩኒቨርሲቲ ዜና በተሳካ ሁኔታ በዋናው የቀጥታ ስርጭት ባር (News Bar) ላይ ተለጥፏል!"
-    });
+      // Log the action
+      await CampusDatabase.addAuditLog(
+        currentUser?.id || "ADMIN",
+        newAnnouncement.postedBy,
+        "ADMIN",
+        "Post Campus News",
+        "Announcement",
+        newAnnouncement.id,
+        `Published campus news: "${title.trim()}"`
+      );
 
-    // Reset Form
-    setTitle("");
-    setAmharicTitle("");
-    setSummary("");
-    setFullContent("");
-    setIsBreaking(false);
+      // Refresh the list
+      await loadNews();
+      onNewsUpdated?.();
+
+      setFeedback({
+        type: "success",
+        text: "አዲሱ የዩኒቨርሲቲ ዜና በተሳካ ሁኔታ በዋናው የቀጥታ ስርጭት ባር (News Bar) ላይ ተለጥፏል!"
+      });
+
+      // Reset Form
+      setTitle("");
+      setAmharicTitle("");
+      setSummary("");
+      setFullContent("");
+      setIsBreaking(false);
+    } catch (err) {
+      console.error("Failed to publish news:", err);
+      setFeedback({ type: "error", text: "Failed to publish. Please try again." });
+    }
   };
 
-  const handleDeleteNews = (id: string) => {
+  const handleDeleteNews = async (id: string) => {
     if (confirm("እርግጠኛ ነዎት ይህን ዜና ከይፋዊው የዩኒቨርሲቲ ዜና ማሰራጫ ማስወገድ ይፈልጋሉ?")) {
-      CampusDatabase.deleteCampusNews(id);
-      const updated = CampusDatabase.getCampusNews();
-      setNewsList(updated);
-      onNewsUpdated?.();
+      try {
+        const current = await CampusDatabase.getAnnouncements();
+        const updated = current.filter((ann) => ann.id !== id);
+        await CampusDatabase.saveAnnouncements(updated);
+        await loadNews();
+        onNewsUpdated?.();
+      } catch (err) {
+        console.error("Failed to delete:", err);
+        alert("Failed to delete announcement.");
+      }
     }
   };
 
   const handleToggleBreaking = (id: string, current: boolean) => {
-    CampusDatabase.updateCampusNews(id, { isBreaking: !current });
-    const updated = CampusDatabase.getCampusNews();
-    setNewsList(updated);
-    onNewsUpdated?.();
+    // Since we don't store breaking status in the API, we only toggle in UI state.
+    setNewsList(prev =>
+      prev.map(item =>
+        item.id === id ? { ...item, isBreaking: !current } : item
+      )
+    );
+    // Optionally, you could store this flag in localStorage or a separate endpoint.
+    // For now, it's just for visual demo.
   };
 
   if (!isOpen) return null;
@@ -335,7 +465,7 @@ export function CampusNewsAdminModal({
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span className="font-bold text-emerald-900 dark:text-emerald-200">
-                    Authenticated as Admin (Yonas Sahile • Media Directorate)
+                    Authenticated as Admin ({currentUser?.fullName || "Yonas Sahile"} • Media Directorate)
                   </span>
                 </div>
                 <button
@@ -412,11 +542,10 @@ export function CampusNewsAdminModal({
                     </div>
                     <div className="space-y-1 text-xs">
                       <label className="block text-slate-800 dark:text-slate-200 font-semibold">
-                        Amharic Title (የአማርኛ ርዕስ) *
+                        Amharic Title (የአማርኛ ርዕስ) - Optional
                       </label>
                       <input
                         type="text"
-                        required
                         placeholder="ምሳሌ፦ መቅደላ አምባ ዩኒቨርሲቲ አዲስ የቴክኖሎጂ ማዕከል አስመረቀ"
                         className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3.5 py-2 text-xs text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:outline-none"
                         value={amharicTitle}
@@ -433,7 +562,7 @@ export function CampusNewsAdminModal({
                       <select
                         className="w-full border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:outline-none"
                         value={category}
-                        onChange={(e) => setCategory(e.target.value as any)}
+                        onChange={(e) => setCategory(e.target.value)}
                       >
                         <option value="EXIT_EXAM">National Exit Exam (መውጫ ፈተና)</option>
                         <option value="TECH_AI">Smart Campus & AI (ቴክኖሎጂ)</option>
@@ -485,7 +614,7 @@ export function CampusNewsAdminModal({
 
                   <div className="space-y-1 text-xs">
                     <label className="block text-slate-800 dark:text-slate-200 font-semibold">
-                      Brief Lead Summary (አጭር ማጠቃለያ)
+                      Brief Lead Summary (አጭር ማጠቃለያ) - Optional
                     </label>
                     <input
                       type="text"
@@ -510,7 +639,7 @@ export function CampusNewsAdminModal({
                     />
                   </div>
 
-                  {/* Breaking News Toggle */}
+                  {/* Breaking News Toggle (UI only, not stored) */}
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Flame className="w-4 h-4 text-amber-500" />
@@ -530,7 +659,7 @@ export function CampusNewsAdminModal({
                         onChange={(e) => setIsBreaking(e.target.checked)}
                         className="sr-only peer"
                       />
-                      <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
+                      <div className="w-9 h-5 bg-slate-300 peer-focus:outline-none rounded-full dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-500"></div>
                     </label>
                   </div>
 
@@ -552,61 +681,67 @@ export function CampusNewsAdminModal({
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Currently published broadcasts appearing on the top ticker bar:
                   </p>
-                  <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                    {newsList.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                      >
-                        <div className="space-y-1 flex-1">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
-                              {item.categoryLabel}
-                            </span>
-                            {item.isBreaking && (
-                              <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-red-600 text-white flex items-center space-x-1">
-                                <Flame className="w-3 h-3" />
-                                <span>BREAKING</span>
+                  {loading ? (
+                    <div className="p-4 text-center text-slate-400">Loading announcements...</div>
+                  ) : newsList.length === 0 ? (
+                    <div className="p-4 text-center text-slate-400">No announcements yet.</div>
+                  ) : (
+                    <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+                      {newsList.map((item) => (
+                        <div
+                          key={item.id}
+                          className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                        >
+                          <div className="space-y-1 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30">
+                                {item.categoryLabel}
                               </span>
-                            )}
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {item.date}
-                            </span>
+                              {item.isBreaking && (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-red-600 text-white flex items-center space-x-1">
+                                  <Flame className="w-3 h-3" />
+                                  <span>BREAKING</span>
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-400 font-mono">
+                                {item.date}
+                              </span>
+                            </div>
+                            <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-snug">
+                              {item.title}
+                            </h4>
+                            <p className="text-[11px] text-slate-500 line-clamp-1">
+                              {item.amharicTitle}
+                            </p>
                           </div>
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white leading-snug">
-                            {item.title}
-                          </h4>
-                          <p className="text-[11px] text-slate-500 line-clamp-1">
-                            {item.amharicTitle}
-                          </p>
-                        </div>
 
-                        <div className="flex items-center space-x-2 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleBreaking(item.id, !!item.isBreaking)}
-                            title="Toggle Breaking Status"
-                            className={`p-2 rounded-xl text-xs font-semibold border transition flex items-center space-x-1 cursor-pointer ${
-                              item.isBreaking
-                                ? "bg-red-50 dark:bg-red-950/40 border-red-300 text-red-600"
-                                : "bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 hover:text-red-500"
-                            }`}
-                          >
-                            <Flame className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center space-x-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleBreaking(item.id, !!item.isBreaking)}
+                              title="Toggle Breaking Status (UI only)"
+                              className={`p-2 rounded-xl text-xs font-semibold border transition flex items-center space-x-1 cursor-pointer ${
+                                item.isBreaking
+                                  ? "bg-red-50 dark:bg-red-950/40 border-red-300 text-red-600"
+                                  : "bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 hover:text-red-500"
+                              }`}
+                            >
+                              <Flame className="w-3.5 h-3.5" />
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteNews(item.id)}
-                            className="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 transition cursor-pointer"
-                            title="Delete Announcement"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteNews(item.id)}
+                              className="p-2 rounded-xl bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-900/60 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 transition cursor-pointer"
+                              title="Delete Announcement"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -619,7 +754,7 @@ export function CampusNewsAdminModal({
               <span>Media Directorate & Communications</span>
             </span>
             <span className="font-mono text-amber-600 dark:text-amber-400 font-semibold">
-              yonassahile@mau.edu.et
+              {currentUser?.email || "admin@mau.edu.et"}
             </span>
           </div>
         </motion.div>
