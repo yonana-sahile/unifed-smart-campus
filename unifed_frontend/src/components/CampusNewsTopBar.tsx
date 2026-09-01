@@ -28,53 +28,134 @@ import {
   ShieldCheck,
   Lock
 } from "lucide-react";
-import { EthiopianFlag } from "./UniversityHeader";
+import { CampusDatabase } from "../services/api";
+import type { User, Announcement } from "../types";
 
-import type { User, UserRole } from "./types";
-import { CampusDatabase } from "./services/api";
-
-export type NewsItem = CampusNewsItem;
-export const campusNewsList = initialCampusNews;
+// ✅ Define NewsItem type locally (or import if defined elsewhere)
+export interface CampusNewsItem {
+  id: string;
+  title: string;
+  amharicTitle: string;
+  summary: string;
+  fullContent: string;
+  category: string;
+  categoryLabel: string;
+  categoryAmharic: string;
+  badgeColor: string;
+  date: string;
+  ethiopianDate: string;
+  author: string;
+  readTime: string;
+  highlightTag: string;
+  imageUrl?: string;
+}
 
 interface CampusNewsTopBarProps {
   currentUser?: User | null;
 }
 
 export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
-  const [news, setNews] = useState<CampusNewsItem[]>(() => CampusDatabase.getCampusNews());
+  const [news, setNews] = useState<CampusNewsItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [selectedNews, setSelectedNews] = useState<CampusNewsItem | null>(null);
   const [showAllNewsModal, setShowAllNewsModal] = useState(false);
   const [showAdminNewsModal, setShowAdminNewsModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const refreshNews = useCallback(() => {
-    const updated = CampusDatabase.getCampusNews();
-    setNews(updated);
-    if (currentIndex >= updated.length) {
-      setCurrentIndex(0);
+  // ✅ Load news from real API
+  const loadNews = useCallback(async () => {
+    try {
+      setLoading(true);
+      const announcements = await CampusDatabase.getAnnouncements();
+
+      // ✅ Map announcements to CampusNewsItem format
+      const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement) => ({
+        id: ann.id,
+        title: ann.title,
+        amharicTitle: ann.title, // Fallback, you can add Amharic translation
+        summary: ann.content.slice(0, 150) + "...",
+        fullContent: ann.content,
+        category: "ACADEMIC",
+        categoryLabel: "Academic",
+        categoryAmharic: "የአካዳሚክ",
+        badgeColor: "from-blue-600 to-indigo-600 border-blue-400/30 text-white",
+        date: new Date(ann.postedAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        }),
+        ethiopianDate: new Date(ann.postedAt).toLocaleDateString("am-ET"),
+        author: ann.postedBy,
+        readTime: `${Math.ceil(ann.content.split(" ").length / 200)} min read`,
+        highlightTag: "📢 ANNOUNCEMENT",
+        imageUrl: undefined
+      }));
+
+      setNews(mappedNews);
+      if (mappedNews.length > 0 && currentIndex >= mappedNews.length) {
+        setCurrentIndex(0);
+      }
+    } catch (error) {
+      console.error("Failed to load news:", error);
+      // ✅ Fallback: try to load from localStorage
+      const cached = localStorage.getItem("mau_campus_news_cache");
+      if (cached) {
+        try {
+          setNews(JSON.parse(cached));
+        } catch {
+          // Silent fail
+        }
+      }
+    } finally {
+      setLoading(false);
     }
   }, [currentIndex]);
 
-  // Auto-scroll news ticker
+  // ✅ Refresh news function (used by admin modal)
+  const refreshNews = useCallback(() => {
+    loadNews();
+  }, [loadNews]);
+
+  // ✅ Load news on mount
   useEffect(() => {
-    if (isPaused || selectedNews || showAllNewsModal || showAdminNewsModal || news.length === 0) return;
+    loadNews();
+  }, [loadNews]);
+
+  // ✅ Auto-scroll news ticker
+  useEffect(() => {
+    if (isPaused || selectedNews || showAllNewsModal || showAdminNewsModal || news.length === 0 || loading) return;
 
     const rotationTimer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % news.length);
     }, 5500);
 
     return () => clearInterval(rotationTimer);
-  }, [isPaused, selectedNews, showAllNewsModal, showAdminNewsModal, news.length]);
+  }, [isPaused, selectedNews, showAllNewsModal, showAdminNewsModal, news.length, loading]);
 
-  const activeNews = news[currentIndex] || news[0] || initialCampusNews[0];
+  const activeNews = news[currentIndex] || news[0] || null;
 
   const handleCopyLink = (id: string) => {
     navigator.clipboard?.writeText(window.location.href);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
+
+  // ✅ Show loading state
+  if (loading) {
+    return (
+      <nav className="w-full relative z-40 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-slate-100 border-b border-amber-500/40 shadow-lg select-none font-sans overflow-hidden py-2.5 px-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-4 h-4 rounded-full bg-amber-500/30 animate-pulse" />
+            <span className="text-xs text-slate-400 font-mono">Loading campus news...</span>
+          </div>
+          <div className="w-20 h-6 bg-slate-800/50 rounded-lg animate-pulse" />
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <>
@@ -434,7 +515,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
         )}
       </AnimatePresence>
 
-      {/* ADMIN NEWS CREATION & MANAGEMENT MODAL */}
+      {/* ✅ ADMIN NEWS CREATION MODAL */}
       <CampusNewsAdminModal
         isOpen={showAdminNewsModal}
         onClose={() => setShowAdminNewsModal(false)}
@@ -444,4 +525,5 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
     </>
   );
 }
+
 export default CampusNewsTopBar;
