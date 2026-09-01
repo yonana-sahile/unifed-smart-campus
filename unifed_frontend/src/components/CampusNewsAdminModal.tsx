@@ -23,19 +23,30 @@ import {
   FileText,
   Eye
 } from "lucide-react";
-import { User, Announcement } from "../types";
+import type { User } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversitySeal, EthiopianFlag } from "./UniversityHeader";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
 
-// Local type matching the top bar's CampusNewsItem
+// ✅ LOCAL Announcement interface (matches backend)
+interface Announcement {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  content: string;
+  postedBy: string;
+  postedAt: string;
+}
+
+// ✅ LOCAL CampusNewsItem (matches the top bar)
 interface CampusNewsItem {
   id: string;
   title: string;
   amharicTitle: string;
   summary: string;
   fullContent: string;
-  category: string; // will be mapped from categoryLabel
+  category: string;
   categoryLabel: string;
   categoryAmharic: string;
   badgeColor: string;
@@ -55,17 +66,15 @@ interface CampusNewsAdminModalProps {
   currentUser?: User | null;
 }
 
-// Helper to map Announcement to CampusNewsItem
+// Helper to map Announcement -> CampusNewsItem
 const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
-  // Determine category based on title/content or default
+  const titleLower = ann.title.toLowerCase();
   let categoryLabel = "Academic";
   let categoryAmharic = "የአካዳሚክ";
   let badgeColor = "from-blue-600 to-indigo-600 border-blue-400/30 text-white";
   let category = "ACADEMIC";
   let highlightTag = "📢 ANNOUNCEMENT";
 
-  // Simple keyword-based categorization
-  const titleLower = ann.title.toLowerCase();
   if (titleLower.includes("exit exam") || titleLower.includes("ከፍተኛ ፈተና")) {
     categoryLabel = "National Exit Exam";
     categoryAmharic = "ብሔራዊ መውጫ ፈተና";
@@ -90,13 +99,6 @@ const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
     badgeColor = "from-purple-600 via-indigo-600 to-pink-600 border-purple-400 text-white";
     category = "COMMUNITY";
     highlightTag = "👥 COMMUNITY";
-  } else {
-    // Default: Registrar Notice
-    categoryLabel = "Registrar Notice";
-    categoryAmharic = "ሬጅስትራር ማስታወቂያ";
-    badgeColor = "from-blue-600 via-indigo-600 to-sky-600 border-blue-400 text-white";
-    category = "ACADEMIC";
-    highlightTag = "📢 OFFICIAL NOTICE";
   }
 
   const dateObj = new Date(ann.postedAt);
@@ -107,7 +109,7 @@ const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
   return {
     id: ann.id,
     title: ann.title,
-    amharicTitle: ann.title, // We don't have Amharic title, use same
+    amharicTitle: ann.title,
     summary: ann.content.slice(0, 150) + "...",
     fullContent: ann.content,
     category,
@@ -119,7 +121,7 @@ const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
     author: ann.postedBy,
     readTime: `${Math.ceil(ann.content.split(" ").length / 200)} min read`,
     highlightTag,
-    isBreaking: false, // not stored
+    isBreaking: false,
     imageUrl: undefined
   };
 };
@@ -130,17 +132,16 @@ export function CampusNewsAdminModal({
   onNewsUpdated,
   currentUser
 }: CampusNewsAdminModalProps) {
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => {
-    return currentUser?.role === "ADMIN";
-  });
-
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(
+    () => currentUser?.role === "ADMIN"
+  );
   const [activeTab, setActiveTab] = useState<"CREATE" | "MANAGE">("CREATE");
   const [usernameInput, setUsernameInput] = useState("yonassahile");
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
   const [showForgotModal, setShowForgotModal] = useState(false);
 
-  // New News Item Form State
+  // Form state
   const [title, setTitle] = useState("");
   const [amharicTitle, setAmharicTitle] = useState("");
   const [category, setCategory] = useState<string>("ACADEMIC");
@@ -148,16 +149,14 @@ export function CampusNewsAdminModal({
   const [fullContent, setFullContent] = useState("");
   const [author, setAuthor] = useState("MAU ICT Directorate & Communications");
   const [isBreaking, setIsBreaking] = useState(false);
-  const [priorityScore] = useState(90);
   const [highlightTag, setHighlightTag] = useState("OFFICIAL ANNOUNCEMENT");
   const [readTime, setReadTime] = useState("2 min read");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Existing News List
+  // Existing news list
   const [newsList, setNewsList] = useState<CampusNewsItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load announcements from API
   const loadNews = async () => {
     try {
       setLoading(true);
@@ -177,37 +176,6 @@ export function CampusNewsAdminModal({
       loadNews();
     }
   }, [isOpen, isAdminAuthenticated]);
-
-  const categoryConfigs: Record<
-    string,
-    { label: string; amharic: string; color: string }
-  > = {
-    EXIT_EXAM: {
-      label: "National Exit Exam",
-      amharic: "ብሔራዊ መውጫ ፈተና",
-      color: "from-rose-600 via-red-600 to-amber-600 border-rose-400 text-white"
-    },
-    TECH_AI: {
-      label: "Smart Campus & AI",
-      amharic: "ዘመናዊ ቴክኖሎጂ እና ኤአይ",
-      color: "from-amber-500 via-yellow-500 to-amber-600 border-amber-300 text-slate-950 font-bold"
-    },
-    RESEARCH: {
-      label: "Agro-Research",
-      amharic: "ግብርናና የተፈጥሮ ምርምር",
-      color: "from-emerald-600 via-teal-600 to-emerald-700 border-emerald-400 text-white"
-    },
-    ACADEMIC: {
-      label: "Registrar Notice",
-      amharic: "ሬጅስትራር ማስታወቂያ",
-      color: "from-blue-600 via-indigo-600 to-sky-600 border-blue-400 text-white"
-    },
-    COMMUNITY: {
-      label: "Campus Community",
-      amharic: "ማህበረሰብ አገልግሎት",
-      color: "from-purple-600 via-indigo-600 to-pink-600 border-purple-400 text-white"
-    }
-  };
 
   const handleAdminLogin = async (e: FormEvent) => {
     e.preventDefault();
@@ -269,7 +237,6 @@ export function CampusNewsAdminModal({
       const updated = [newAnnouncement, ...currentAnnouncements];
       await CampusDatabase.saveAnnouncements(updated);
 
-      // Log the action
       await CampusDatabase.addAuditLog(
         currentUser?.id || "ADMIN",
         newAnnouncement.postedBy,
@@ -280,16 +247,15 @@ export function CampusNewsAdminModal({
         `Published campus news: "${title.trim()}"`
       );
 
-      // Refresh the list
       await loadNews();
       onNewsUpdated?.();
 
       setFeedback({
         type: "success",
-        text: "አዲሱ የዩኒቨርሲቲ ዜና በተሳካ ሁኔታ በዋናው የቀጥታ ስርጭት ባር (News Bar) ላይ ተለጥፏል!"
+        text: "አዲሱ የዩኒቨርሲቲ ዜና በተሳካ ሁኔታ ተለጥፏል!"
       });
 
-      // Reset Form
+      // Reset form
       setTitle("");
       setAmharicTitle("");
       setSummary("");
@@ -302,7 +268,7 @@ export function CampusNewsAdminModal({
   };
 
   const handleDeleteNews = async (id: string) => {
-    if (confirm("እርግጠኛ ነዎት ይህን ዜና ከይፋዊው የዩኒቨርሲቲ ዜና ማሰራጫ ማስወገድ ይፈልጋሉ?")) {
+    if (confirm("እርግጠኛ ነዎት ይህን ዜና ማስወገድ ይፈልጋሉ?")) {
       try {
         const current = await CampusDatabase.getAnnouncements();
         const updated = current.filter((ann) => ann.id !== id);
@@ -317,14 +283,11 @@ export function CampusNewsAdminModal({
   };
 
   const handleToggleBreaking = (id: string, current: boolean) => {
-    // Since we don't store breaking status in the API, we only toggle in UI state.
     setNewsList(prev =>
       prev.map(item =>
         item.id === id ? { ...item, isBreaking: !current } : item
       )
     );
-    // Optionally, you could store this flag in localStorage or a separate endpoint.
-    // For now, it's just for visual demo.
   };
 
   if (!isOpen) return null;
@@ -366,15 +329,13 @@ export function CampusNewsAdminModal({
             </button>
           </div>
 
-          {/* If NOT Authenticated: Show Secure Admin Login Barrier */}
+          {/* If NOT authenticated */}
           {!isAdminAuthenticated ? (
             <div className="p-6 sm:p-8 space-y-6">
               <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-2xl flex items-start space-x-3">
                 <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
                 <div className="space-y-1 text-xs text-amber-900 dark:text-amber-200">
-                  <p className="font-bold">
-                    Institutional Administrator Verification Required
-                  </p>
+                  <p className="font-bold">Institutional Administrator Verification Required</p>
                   <p className="leading-relaxed text-slate-700 dark:text-slate-300">
                     ይህ ክፍል የተጠበቀ የዩኒቨርሲቲው የሚዲያ እና የህዝብ ግንኙነት አስተዳደር ክፍል ነው። እባክዎ የአድሚን መለያዎን ያስገቡ።
                   </p>
@@ -458,9 +419,9 @@ export function CampusNewsAdminModal({
               </form>
             </div>
           ) : (
-            /* If Authenticated: Show Full News Management Hub */
+            /* Authenticated Admin Panel */
             <div className="p-5 sm:p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-              {/* Authenticated Admin Bar */}
+              {/* Admin bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl text-xs">
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -478,7 +439,7 @@ export function CampusNewsAdminModal({
                 </button>
               </div>
 
-              {/* Navigation Tabs */}
+              {/* Tabs */}
               <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-bold">
                 <button
                   type="button"
@@ -506,7 +467,7 @@ export function CampusNewsAdminModal({
                 </button>
               </div>
 
-              {/* Tab 1: Create News */}
+              {/* Tab content */}
               {activeTab === "CREATE" && (
                 <form onSubmit={handlePublishNews} className="space-y-4">
                   {feedback && (
@@ -639,7 +600,7 @@ export function CampusNewsAdminModal({
                     />
                   </div>
 
-                  {/* Breaking News Toggle (UI only, not stored) */}
+                  {/* Breaking toggle (UI only) */}
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Flame className="w-4 h-4 text-amber-500" />
@@ -675,7 +636,6 @@ export function CampusNewsAdminModal({
                 </form>
               )}
 
-              {/* Tab 2: Manage Existing News */}
               {activeTab === "MANAGE" && (
                 <div className="space-y-3">
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -747,7 +707,7 @@ export function CampusNewsAdminModal({
             </div>
           )}
 
-          {/* Footer Contact Help Desk */}
+          {/* Footer */}
           <div className="p-4 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
             <span className="flex items-center space-x-1">
               <Building2 className="w-3.5 h-3.5 text-amber-500" />
@@ -760,7 +720,6 @@ export function CampusNewsAdminModal({
         </motion.div>
       </div>
 
-      {/* Embedded Forgot Password for Admin Recovery */}
       <ForgotPasswordModal
         isOpen={showForgotModal}
         onClose={() => setShowForgotModal(false)}
@@ -772,4 +731,5 @@ export function CampusNewsAdminModal({
     </AnimatePresence>
   );
 }
+
 export default CampusNewsAdminModal;
