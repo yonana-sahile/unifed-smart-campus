@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Newspaper,
@@ -23,122 +23,52 @@ import {
   Clock,
   Award,
   Zap,
-  Info
+  Info,
+  Plus,
+  ShieldCheck,
+  Lock
 } from "lucide-react";
 import { EthiopianFlag } from "./UniversityHeader";
+import { CampusDatabase, initialCampusNews } from "../mockData";
+import type { User, UserRole } from "./types";
+import { CampusDatabase } from "./services/api";
 
-export interface NewsItem {
-  id: string;
-  title: string;
-  amharicTitle: string;
-  category: "EXIT_EXAM" | "TECH_AI" | "RESEARCH" | "ACADEMIC" | "COMMUNITY";
-  categoryLabel: string;
-  categoryAmharic: string;
-  badgeColor: string;
-  date: string;
-  ethiopianDate: string;
-  readTime: string;
-  summary: string;
-  fullContent: string;
-  author: string;
-  isBreaking?: boolean;
-  priorityScore: number;
-  highlightTag: string;
+export type NewsItem = CampusNewsItem;
+export const campusNewsList = initialCampusNews;
+
+interface CampusNewsTopBarProps {
+  currentUser?: User | null;
 }
 
-export const campusNewsList: NewsItem[] = [
-  {
-    id: "news-1",
-    title: "MoE National Exit Exam Simulation Portal Officially Opens for 2018 E.C. Candidates",
-    amharicTitle: "የ2018 ዓ.ም. የትምህርት ሚኒስቴር የብሔራዊ መውጫ ፈተና (Exit Exam) የሙከራ ፖርታል በይፋ ተከፈተ",
-    category: "EXIT_EXAM",
-    categoryLabel: "National Exit Exam",
-    categoryAmharic: "ብሔራዊ መውጫ ፈተና",
-    badgeColor: "from-rose-600 via-red-600 to-amber-600 border-rose-400 text-white",
-    date: "Feb 28, 2026",
-    ethiopianDate: "የካቲት 21/2018 ዓ.ም.",
-    readTime: "2 min read",
-    summary: "Final year students across all 7 faculties can now take 100-question timed mock trials aligned with national blueprints.",
-    fullContent: "The Ministry of Education in collaboration with Mekdela Amba University Academic Vice President Office has officially inaugurated the 2018 E.C. National Exit Exam Mock Simulation Portal.\n\nAll prospective graduating candidates in Computer Science, Software Engineering, Agricultural Sciences, Law, and Public Health are strongly advised to complete the simulated mock exams in the Central ICT e-Testing Centers at Tulu Awliya and Masha campuses. Timed practice runs are open 24/7 with immediate automated scoring and competency diagnostics.",
-    author: "MAU Registrar & MoE Testing Center",
-    isBreaking: true,
-    priorityScore: 98,
-    highlightTag: "URGENT • አስቸኳይ"
-  },
-  {
-    id: "news-2",
-    title: "Tulu Awliya Main Campus Launches 10Gbps High-Speed Fiber Backbone & AI Research Lab",
-    amharicTitle: "የቱሉ አውሊያ ዋና ካምፓስ የ10Gbps ከፍተኛ ፍጥነት የፋይበር ኔትወርክ እና የኤአይ ምርምር ማዕከል አስመረቀ",
-    category: "TECH_AI",
-    categoryLabel: "Smart Campus & AI",
-    categoryAmharic: "ዘመናዊ ቴክኖሎጂ እና ኤአይ",
-    badgeColor: "from-amber-500 via-yellow-500 to-amber-600 border-amber-300 text-slate-950 font-bold",
-    date: "Feb 26, 2026",
-    ethiopianDate: "የካቲት 19/2018 ዓ.ም.",
-    readTime: "3 min read",
-    summary: "Newly expanded campus data center brings ultra-fast Wi-Fi to all student dormitories, digital library carrels, and AI compute pods.",
-    fullContent: "Mekdela Amba University ICT Directorate has concluded the full installation of the high-resilience Optical Fiber Network across the Tulu Awliya Main Campus.\n\nThe project connects academic blocks, student lounges, dormitories 1-12, and the Digital Library with uninterrupted high-bandwidth connectivity and introduces an AI-assisted cloud computing lab for senior thesis projects and research modeling.",
-    author: "ICT Directorate & AI Center",
-    isBreaking: false,
-    priorityScore: 92,
-    highlightTag: "TECH UPGRADE"
-  },
-  {
-    id: "news-3",
-    title: "Masha Campus Agriculture Institute Publishes Breakthrough Highland Organic Coffee Study",
-    amharicTitle: "የማሻ ካምፓስ የግብርና ተቋም የከፍተኛ ቦታ ኦርጋኒክ ቡና አዲስ የምርምር ውጤት ይፋ አደረገ",
-    category: "RESEARCH",
-    categoryLabel: "Agro-Research",
-    categoryAmharic: "ግብርናና የተፈጥሮ ምርምር",
-    badgeColor: "from-emerald-600 via-teal-600 to-emerald-700 border-emerald-400 text-white",
-    date: "Feb 23, 2026",
-    ethiopianDate: "የካቲት 16/2018 ዓ.ም.",
-    readTime: "4 min read",
-    summary: "Scientific trials in Sheka biosphere showcase 28% higher climate resilience and exceptional specialty cupping scores.",
-    fullContent: "Researchers at the Masha Campus College of Agriculture & Natural Resources have published a comprehensive peer-reviewed journal paper on sustainable agroforestry in the high-altitude cloud forests of Sheka.\n\nThe innovation provides local farmers with disease-resistant, climate-resilient coffee saplings and organic soil enrichment protocols formulated by MAU soil scientists.",
-    author: "Directorate of Research & Community Service",
-    isBreaking: false,
-    priorityScore: 86,
-    highlightTag: "GLOBAL PUBLICATION"
-  },
-  {
-    id: "news-4",
-    title: "Semester II Add/Drop Period and Digital Clearance Window Announced for 2025/2026",
-    amharicTitle: "የሁለተኛ ሴሚስተር የኮርስ ማስተካከያ (Add/Drop) እና የዲጂታል ክሊራንስ መርሃ-ግብር ይፋ ሆነ",
-    category: "ACADEMIC",
-    categoryLabel: "Registrar Notice",
-    categoryAmharic: "ሬጅስትራር ማስታወቂያ",
-    badgeColor: "from-blue-600 via-indigo-600 to-sky-600 border-blue-400 text-white",
-    date: "Feb 20, 2026",
-    ethiopianDate: "የካቲት 13/2018 ዓ.ም.",
-    readTime: "2 min read",
-    summary: "Students can adjust semester course registrations online via the SIS Portal before the strict deadline.",
-    fullContent: "Office of the University Registrar reminds all undergraduate regular and extension students that the Course Add/Drop window for Semester II is strictly accessible through the digital SIS portal.\n\nStudents requiring departmental approval should liaise with their assigned academic advisors through the portal messaging interface.",
-    author: "Office of the University Registrar",
-    isBreaking: false,
-    priorityScore: 89,
-    highlightTag: "DEADLINE NOTICE"
-  }
-];
-
-export function CampusNewsTopBar() {
+export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
+  const [news, setNews] = useState<CampusNewsItem[]>(() => CampusDatabase.getCampusNews());
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null);
+  const [selectedNews, setSelectedNews] = useState<CampusNewsItem | null>(null);
   const [showAllNewsModal, setShowAllNewsModal] = useState(false);
+  const [showAdminNewsModal, setShowAdminNewsModal] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const refreshNews = useCallback(() => {
+    const updated = CampusDatabase.getCampusNews();
+    setNews(updated);
+    if (currentIndex >= updated.length) {
+      setCurrentIndex(0);
+    }
+  }, [currentIndex]);
+
   // Auto-scroll news ticker
   useEffect(() => {
-    if (isPaused || selectedNews || showAllNewsModal) return;
+    if (isPaused || selectedNews || showAllNewsModal || showAdminNewsModal || news.length === 0) return;
 
     const rotationTimer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % campusNewsList.length);
+      setCurrentIndex((prev) => (prev + 1) % news.length);
     }, 5500);
 
     return () => clearInterval(rotationTimer);
-  }, [isPaused, selectedNews, showAllNewsModal]);
+  }, [isPaused, selectedNews, showAllNewsModal, showAdminNewsModal, news.length]);
 
-  const activeNews = campusNewsList[currentIndex];
+  const activeNews = news[currentIndex] || news[0] || initialCampusNews[0];
 
   const handleCopyLink = (id: string) => {
     navigator.clipboard?.writeText(window.location.href);
@@ -178,7 +108,7 @@ export function CampusNewsTopBar() {
 
               {/* Counter Badge */}
               <span className="ml-0.5 px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-black/40 text-yellow-300 border border-yellow-400/30">
-                {campusNewsList.length}
+                {news.length}
               </span>
             </button>
 
@@ -190,77 +120,92 @@ export function CampusNewsTopBar() {
           {/* CENTER: Animated Smooth Ticker Headline */}
           <div className="flex-1 overflow-hidden relative h-7 flex items-center px-1 sm:px-2">
             <AnimatePresence mode="wait">
-              <motion.div
-                key={activeNews.id}
-                initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
-                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
-                transition={{ duration: 0.35, ease: "easeOut" }}
-                className="flex items-center space-x-2.5 truncate cursor-pointer group w-full"
-                onClick={() => setSelectedNews(activeNews)}
-              >
-                {/* Category Pill Tag with distinct gradient */}
-                <span
-                  className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold shadow-xs border bg-gradient-to-r ${activeNews.badgeColor} shrink-0`}
+              {activeNews && (
+                <motion.div
+                  key={activeNews.id}
+                  initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
+                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                  exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
+                  transition={{ duration: 0.35, ease: "easeOut" }}
+                  className="flex items-center space-x-2.5 truncate cursor-pointer group w-full"
+                  onClick={() => setSelectedNews(activeNews)}
                 >
-                  <Zap className="w-2.5 h-2.5 mr-1" />
-                  {activeNews.categoryLabel}
-                </span>
+                  {/* Category Pill Tag with distinct gradient */}
+                  <span
+                    className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold shadow-xs border bg-gradient-to-r ${activeNews.badgeColor} shrink-0`}
+                  >
+                    <Zap className="w-2.5 h-2.5 mr-1" />
+                    {activeNews.categoryLabel}
+                  </span>
 
-                {/* News Headline with Glow on Hover */}
-                <span className="text-xs sm:text-xs font-semibold text-slate-100 group-hover:text-amber-300 transition-colors truncate tracking-wide">
-                  {activeNews.title}
-                </span>
+                  {/* News Headline with Glow on Hover */}
+                  <span className="text-xs sm:text-xs font-semibold text-slate-100 group-hover:text-amber-300 transition-colors truncate tracking-wide">
+                    {activeNews.title}
+                  </span>
 
-                {/* Date & Read time */}
-                <span className="hidden lg:inline-flex items-center text-[10px] text-slate-400 font-mono shrink-0 space-x-1">
-                  <span>•</span>
-                  <Clock className="w-3 h-3 text-amber-400/80" />
-                  <span>{activeNews.readTime}</span>
-                </span>
+                  {/* Date & Read time */}
+                  <span className="hidden lg:inline-flex items-center text-[10px] text-slate-400 font-mono shrink-0 space-x-1">
+                    <span>•</span>
+                    <Clock className="w-3 h-3 text-amber-400/80" />
+                    <span>{activeNews.readTime}</span>
+                  </span>
 
-                {/* Interactive Click Indicator */}
-                <span className="hidden md:inline-flex items-center text-[10px] text-amber-400 font-bold group-hover:translate-x-1 transition-transform shrink-0 ml-auto bg-amber-500/15 hover:bg-amber-500/25 px-2 py-0.5 rounded-full border border-amber-400/30">
-                  <span>ዝርዝር ይመልከቱ</span>
-                  <ChevronRight className="w-3 h-3 ml-0.5" />
-                </span>
-              </motion.div>
+                  {/* Interactive Click Indicator */}
+                  <span className="hidden md:inline-flex items-center text-[10px] text-amber-400 font-bold group-hover:translate-x-1 transition-transform shrink-0 ml-auto bg-amber-500/15 hover:bg-amber-500/25 px-2 py-0.5 rounded-full border border-amber-400/30">
+                    <span>ዝርዝር ይመልከቱ</span>
+                    <ChevronRight className="w-3 h-3 ml-0.5" />
+                  </span>
+                </motion.div>
+              )}
             </AnimatePresence>
           </div>
 
           {/* RIGHT: Modern Sleek Controls & All News Trigger */}
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             {/* Ticker Navigator Buttons */}
-            <div className="flex items-center space-x-0.5 bg-slate-800/90 rounded-lg p-0.5 border border-slate-700 shadow-xs">
-              <button
-                onClick={() =>
-                  setCurrentIndex((prev) => (prev - 1 + campusNewsList.length) % campusNewsList.length)
-                }
-                className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer active:scale-90"
-                title="Previous Headline"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <span className="text-[9px] font-mono text-amber-400 px-1 font-bold min-w-[28px] text-center">
-                {currentIndex + 1}/{campusNewsList.length}
-              </span>
-              <button
-                onClick={() => setCurrentIndex((prev) => (prev + 1) % campusNewsList.length)}
-                className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer active:scale-90"
-                title="Next Headline"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            {news.length > 1 && (
+              <div className="flex items-center space-x-0.5 bg-slate-800/90 rounded-lg p-0.5 border border-slate-700 shadow-xs">
+                <button
+                  onClick={() =>
+                    setCurrentIndex((prev) => (prev - 1 + news.length) % news.length)
+                  }
+                  className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer active:scale-90"
+                  title="Previous Headline"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <span className="text-[9px] font-mono text-amber-400 px-1 font-bold min-w-[28px] text-center">
+                  {currentIndex + 1}/{news.length}
+                </span>
+                <button
+                  onClick={() => setCurrentIndex((prev) => (prev + 1) % news.length)}
+                  className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer active:scale-90"
+                  title="Next Headline"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
 
             {/* "All News Bulletins" Modal Trigger */}
             <button
               onClick={() => setShowAllNewsModal(true)}
-              className="flex items-center space-x-1.5 px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500/25 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/30 text-amber-300 hover:text-amber-100 border border-amber-500/50 text-[10px] sm:text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+              className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500/25 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/30 text-amber-300 hover:text-amber-100 border border-amber-500/50 text-[10px] sm:text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
             >
               <Newspaper className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">All Bulletins</span>
               <span className="sm:hidden">News</span>
+            </button>
+
+            {/* "+ Add News (Admin Gate)" Trigger */}
+            <button
+              onClick={() => setShowAdminNewsModal(true)}
+              className="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-600/30 via-red-600/30 to-amber-600/30 hover:from-amber-600/50 hover:to-red-600/50 text-amber-200 hover:text-white border border-amber-400/40 text-[10px] sm:text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 group"
+              title="Admin Authentication & News Dashboard"
+            >
+              <Plus className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-90 transition-transform" />
+              <span className="hidden md:inline">+ Add News</span>
+              <span className="md:hidden">Add</span>
             </button>
           </div>
         </div>
@@ -397,18 +342,31 @@ export function CampusNewsTopBar() {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => setShowAllNewsModal(false)}
-                  className="w-9 h-9 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 hover:text-white transition cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowAllNewsModal(false);
+                      setShowAdminNewsModal(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Publish Announcement (Admin)</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowAllNewsModal(false)}
+                    className="w-9 h-9 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 hover:text-white transition cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
               {/* News Items Grid */}
               <div className="p-6 overflow-y-auto space-y-4 text-slate-800 dark:text-slate-200">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {campusNewsList.map((item) => (
+                  {news.map((item) => (
                     <div
                       key={item.id}
                       onClick={() => {
@@ -451,19 +409,38 @@ export function CampusNewsTopBar() {
               {/* Footer */}
               <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-xs text-slate-500 font-mono">
-                  Showing {campusNewsList.length} verified publications
+                  Showing {news.length} verified publications
                 </span>
-                <button
-                  onClick={() => setShowAllNewsModal(false)}
-                  className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
-                >
-                  Close
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => {
+                      setShowAllNewsModal(false);
+                      setShowAdminNewsModal(true);
+                    }}
+                    className="px-3.5 py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-600 dark:text-amber-400 border border-amber-500/30 text-xs font-bold transition cursor-pointer"
+                  >
+                    Admin Portal
+                  </button>
+                  <button
+                    onClick={() => setShowAllNewsModal(false)}
+                    className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* ADMIN NEWS CREATION & MANAGEMENT MODAL */}
+      <CampusNewsAdminModal
+        isOpen={showAdminNewsModal}
+        onClose={() => setShowAdminNewsModal(false)}
+        onNewsUpdated={refreshNews}
+        currentUser={currentUser}
+      />
     </>
   );
 }
