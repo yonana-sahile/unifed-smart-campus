@@ -27,8 +27,60 @@ import {
   LogOut
 } from "lucide-react";
 import type { CampusMediaPost } from "../types";
-import { CampusDatabase } from "../services/api"; // ✅ Now using real API
+import { CampusDatabase } from "../services/api";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
+
+// ✅ DEFAULT FALLBACK VIDEOS – shown when API returns empty or fails
+const DEFAULT_MEDIA_POSTS: CampusMediaPost[] = [
+  {
+    id: "default_video_1",
+    title: "Welcome to Mekdela Amba University – Smart Campus Tour",
+    description: "Take a virtual tour of the Tulu Awlia main campus, featuring state‑of‑the‑art laboratories, libraries, and student hubs.",
+    category: "CAMPUS_NEWS",
+    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", // placeholder, you can replace
+    thumbnailUrl: "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=80",
+    postedBy: "MAU ICT Directorate",
+    authorRole: "ADMIN",
+    postedAt: new Date().toISOString(),
+    duration: "04:20",
+    viewsCount: 1200,
+    likesCount: 85,
+    featured: true,
+    tags: ["CampusTour", "MAU", "SmartCampus"]
+  },
+  {
+    id: "default_video_2",
+    title: "2026 Graduation Ceremony – Highlights",
+    description: "A recap of the 25th commencement ceremony, with speeches from the university president and distinguished guests.",
+    category: "GRADUATION_CEREMONY",
+    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    thumbnailUrl: "https://images.unsplash.com/photo-1523580494863-6f3031224c94?w=800&auto=format&fit=crop&q=80",
+    postedBy: "University Media Directorate",
+    authorRole: "ADMIN",
+    postedAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+    duration: "12:30",
+    viewsCount: 3400,
+    likesCount: 210,
+    featured: false,
+    tags: ["Graduation2026", "MAU", "Ceremony"]
+  },
+  {
+    id: "default_video_3",
+    title: "AI & Tech Expo 2026 – Student Innovations",
+    description: "Students showcase their AI‑powered projects, from agricultural drones to smart classroom assistants.",
+    category: "TECH_EXPO",
+    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    thumbnailUrl: "https://images.unsplash.com/photo-1531482615713-2afd69097998?w=800&auto=format&fit=crop&q=80",
+    postedBy: "College of Informatics",
+    authorRole: "ADMIN",
+    postedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    duration: "08:15",
+    viewsCount: 890,
+    likesCount: 67,
+    featured: false,
+    tags: ["AI", "TechExpo", "Innovation"]
+  }
+];
 
 interface CampusMediaBroadcastProps {
   onAdminPostClick?: () => void;
@@ -43,6 +95,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Admin Auth State
   const [isMediaAdminAuth, setIsMediaAdminAuth] = useState(false);
@@ -63,20 +116,42 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const [posterName, setPosterName] = useState("Yonas Sahile (Lead Admin)");
   const [formSuccess, setFormSuccess] = useState(false);
 
-  // Load posts from API on mount
+  // ✅ Load posts from API with fallback
+  const loadPosts = async () => {
+    try {
+      setLoading(true);
+      const data = await CampusDatabase.getMediaPosts();
+
+      if (data && data.length > 0) {
+        setPosts(data);
+        localStorage.setItem("mau_media_posts_cache", JSON.stringify(data));
+      } else {
+        // No data from API → use default fallback
+        setPosts(DEFAULT_MEDIA_POSTS);
+        localStorage.setItem("mau_media_posts_cache", JSON.stringify(DEFAULT_MEDIA_POSTS));
+      }
+    } catch (err) {
+      console.error("Failed to load media posts:", err);
+      // Try cache, then fallback
+      const cached = localStorage.getItem("mau_media_posts_cache");
+      if (cached) {
+        try {
+          setPosts(JSON.parse(cached));
+        } catch {
+          setPosts(DEFAULT_MEDIA_POSTS);
+        }
+      } else {
+        setPosts(DEFAULT_MEDIA_POSTS);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load on mount
   useEffect(() => {
     loadPosts();
   }, []);
-
-  const loadPosts = async () => {
-    try {
-      const data = await CampusDatabase.getMediaPosts();
-      setPosts(data);
-    } catch (err) {
-      console.error("Failed to load media posts:", err);
-      // Optionally set fallback data
-    }
-  };
 
   // Admin verification using real user database
   const handleAdminVerify = async (e: React.FormEvent) => {
@@ -86,7 +161,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     const cleanUser = adminUsername.trim().toLowerCase();
     const cleanPass = adminPassword.trim();
 
-    // Quick check for super admin (Yonas) – optional fallback
     const isYonas =
       (cleanUser === "yonassahile" || cleanUser === "yonas") &&
       (cleanPass === "1234" || cleanPass === "password");
@@ -97,7 +171,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         (u) =>
           u.role === "ADMIN" &&
           (u.username.toLowerCase() === cleanUser || u.email.toLowerCase() === cleanUser) &&
-          (cleanPass === "1234" || cleanPass === "password") // Demo, you can later use hashed verification
+          (cleanPass === "1234" || cleanPass === "password")
       );
 
       if (isYonas || foundAdmin) {
@@ -128,12 +202,12 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // Watch handler (increments views)
+  // Watch handler
   const handleWatch = async (post: CampusMediaPost) => {
     try {
       await CampusDatabase.incrementMediaViews(post.id);
       setActiveVideo(post);
-      loadPosts(); // Refresh to update view count
+      loadPosts(); // Refresh view count
     } catch (err) {
       console.error("Failed to increment views:", err);
       setActiveVideo(post);
@@ -252,6 +326,30 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
+  // ✅ Loading skeleton
+  if (loading) {
+    return (
+      <section className="w-full relative py-12 px-4 sm:px-8 overflow-hidden">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-slate-300/80 dark:border-slate-800/80 pb-6">
+            <div className="space-y-2">
+              <div className="h-6 w-48 bg-slate-200 dark:bg-slate-700 rounded-full animate-pulse" />
+              <div className="h-8 w-64 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse" />
+              <div className="h-4 w-96 bg-slate-200 dark:bg-slate-700 rounded animate-pulse" />
+            </div>
+            <div className="h-10 w-48 bg-slate-200 dark:bg-slate-700 rounded-xl animate-pulse" />
+          </div>
+          <div className="h-64 w-full bg-slate-200 dark:bg-slate-700 rounded-3xl animate-pulse" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="h-64 bg-slate-200 dark:bg-slate-700 rounded-2xl animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section id="campus-media-screen" className="w-full relative py-12 px-4 sm:px-8 overflow-hidden">
       {/* Visual Ambient Backdrop */}
@@ -308,24 +406,21 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
           ))}
         </div>
 
-        {/* Featured Video Cinema Screen (if available) */}
+        {/* Featured Video Cinema Screen */}
         {featuredPost && (
           <div className="relative rounded-3xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl group">
             <div className="grid grid-cols-1 lg:grid-cols-12">
 
-              {/* Media Player / Thumbnail Screen */}
+              {/* Thumbnail */}
               <div className="lg:col-span-7 relative aspect-video bg-black flex items-center justify-center overflow-hidden">
                 <img
                   src={featuredPost.thumbnailUrl}
                   alt={featuredPost.title}
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-80"
                 />
-
-                {/* Dark Vignette Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-slate-950/80 hidden lg:block" />
 
-                {/* Big Floating Play Button */}
                 <button
                   onClick={() => handleWatch(featuredPost)}
                   className="absolute z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition cursor-pointer group/play"
@@ -334,20 +429,18 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   <Play className="w-8 h-8 fill-slate-950 ml-1 group-hover/play:scale-110 transition" />
                 </button>
 
-                {/* Duration Badge */}
                 <div className="absolute bottom-4 left-4 z-10 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur-md text-white text-xs font-mono font-bold flex items-center space-x-1.5 border border-white/20">
                   <Film className="w-3 h-3 text-amber-400" />
                   <span>{featuredPost.duration}</span>
                 </div>
 
-                {/* Live/Featured Tag */}
                 <div className="absolute top-4 left-4 z-10 px-3 py-1 rounded-full bg-red-600 text-white text-[11px] font-bold tracking-wider uppercase flex items-center space-x-1.5 shadow-lg animate-pulse">
                   <span className="w-2 h-2 rounded-full bg-white" />
                   <span>FEATURED BROADCAST</span>
                 </div>
               </div>
 
-              {/* Media Metadata & Description */}
+              {/* Metadata */}
               <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between space-y-4 bg-gradient-to-b from-slate-900 to-slate-950 text-white">
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
@@ -368,7 +461,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     {featuredPost.description}
                   </p>
 
-                  {/* Tags */}
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {featuredPost.tags.map((t, idx) => (
                       <span key={idx} className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded font-mono">
@@ -378,7 +470,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   </div>
                 </div>
 
-                {/* Bottom Stats & Watch Action */}
                 <div className="border-t border-slate-800 pt-4 flex items-center justify-between">
                   <div className="flex items-center space-x-4 text-xs text-slate-400">
                     <span className="flex items-center space-x-1.5">
@@ -431,7 +522,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   onClick={() => handleWatch(post)}
                   className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800/90 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:-translate-y-1"
                 >
-                  {/* Video Thumbnail Screen */}
+                  {/* Thumbnail */}
                   <div className="relative aspect-video bg-slate-950 overflow-hidden">
                     <img
                       src={post.thumbnailUrl}
@@ -440,26 +531,22 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
 
-                    {/* Play Button Overlay */}
                     <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                       <div className="w-12 h-12 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg transform group-hover:scale-110 transition">
                         <Play className="w-6 h-6 fill-slate-950 ml-0.5" />
                       </div>
                     </div>
 
-                    {/* Category Pill */}
                     <div className="absolute top-2.5 left-2.5">
                       <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border backdrop-blur-md ${badge.color}`}>
                         {badge.label}
                       </span>
                     </div>
 
-                    {/* Duration Badge */}
                     <div className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded bg-black/80 text-white text-[11px] font-mono font-bold">
                       {post.duration}
                     </div>
 
-                    {/* Admin Delete Action */}
                     <button
                       onClick={(e) => handleDelete(post.id, e)}
                       title="Delete Video (Admin)"
@@ -469,7 +556,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     </button>
                   </div>
 
-                  {/* Card Content */}
                   <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
                     <div className="space-y-2">
                       <h4 className="font-bold text-slate-900 dark:text-slate-100 text-sm leading-snug line-clamp-2 group-hover:text-primary dark:group-hover:text-amber-400 transition">
@@ -480,7 +566,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       </p>
                     </div>
 
-                    {/* Footer Info */}
                     <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
                       <div className="flex items-center space-x-3">
                         <span className="flex items-center space-x-1">
@@ -636,7 +721,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   </p>
                 </div>
 
-                {/* Tags */}
                 <div className="flex flex-wrap gap-1.5 pt-2">
                   {activeVideo.tags.map((t, idx) => (
                     <span key={idx} className="text-[11px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-2.5 py-0.5 rounded font-mono">
@@ -975,7 +1059,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Embedded Forgot Password for Video Admin */}
+      {/* Forgot Password Modal */}
       <ForgotPasswordModal
         isOpen={showForgotModal}
         onClose={() => setShowForgotModal(false)}
