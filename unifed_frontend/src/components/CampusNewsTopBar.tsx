@@ -29,7 +29,7 @@ import {
   Lock
 } from "lucide-react";
 import { EthiopianFlag } from "./UniversityHeader";
-import { CampusDatabase, initialCampusNews } from "../mockData";
+
 import type { User, UserRole } from "./types";
 import { CampusDatabase } from "./services/api";
 
