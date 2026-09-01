@@ -62,6 +62,61 @@ export interface CampusNewsItem {
   imageUrl?: string;
 }
 
+// ✅ DEFAULT FALLBACK NEWS – displayed when API returns empty or fails
+const DEFAULT_NEWS: CampusNewsItem[] = [
+  {
+    id: "default_1",
+    title: "Welcome to Mekdela Amba University Smart Campus Portal",
+    amharicTitle: "እንኳን ወደ መቅደላ አምባ ዩኒቨርሲቲ ስማርት ካምፓስ ፖርታል በደህና መጡ",
+    summary: "The Unified Smart Campus Management System is now live. Access courses, exams, grades, and more.",
+    fullContent: "The Unified Smart Campus Management System is now live. Access courses, exams, grades, and more.",
+    category: "ACADEMIC",
+    categoryLabel: "Academic",
+    categoryAmharic: "የአካዳሚክ",
+    badgeColor: "from-blue-600 to-indigo-600 border-blue-400/30 text-white",
+    date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    ethiopianDate: new Date().toLocaleDateString("am-ET"),
+    author: "University ICT Directorate",
+    readTime: "1 min read",
+    highlightTag: "📢 WELCOME",
+    imageUrl: undefined
+  },
+  {
+    id: "default_2",
+    title: "Registration for Semester II is Now Open",
+    amharicTitle: "የሁለተኛ ሴሚስተር ምዝገባ ተጀምሯል",
+    summary: "All students are required to register for courses by the deadline.",
+    fullContent: "All students are required to register for courses by the deadline.",
+    category: "ACADEMIC",
+    categoryLabel: "Academic",
+    categoryAmharic: "የአካዳሚክ",
+    badgeColor: "from-blue-600 to-indigo-600 border-blue-400/30 text-white",
+    date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    ethiopianDate: new Date().toLocaleDateString("am-ET"),
+    author: "Registrar's Office",
+    readTime: "1 min read",
+    highlightTag: "📅 REGISTRATION",
+    imageUrl: undefined
+  },
+  {
+    id: "default_3",
+    title: "AI-Powered Smart Campus Initiative Launched",
+    amharicTitle: "በአርቲፊሻል ኢንተሊጀንስ የተጠናከረ ስማርት ካምፓስ ተጀመረ",
+    summary: "Mekdela Amba University unveils AI-driven learning analytics and student support systems.",
+    fullContent: "Mekdela Amba University unveils AI-driven learning analytics and student support systems.",
+    category: "TECH_AI",
+    categoryLabel: "Smart Campus & AI",
+    categoryAmharic: "ዘመናዊ ቴክኖሎጂ እና ኤአይ",
+    badgeColor: "from-amber-500 via-yellow-500 to-amber-600 border-amber-300 text-slate-950 font-bold",
+    date: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+    ethiopianDate: new Date().toLocaleDateString("am-ET"),
+    author: "MAU ICT Directorate",
+    readTime: "2 min read",
+    highlightTag: "🤖 AI & TECH",
+    imageUrl: undefined
+  }
+];
+
 interface CampusNewsTopBarProps {
   currentUser?: User | null;
 }
@@ -76,54 +131,59 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Load news from real API
+  // ✅ Load news from real API with fallback
   const loadNews = useCallback(async () => {
     try {
       setLoading(true);
       const announcements = await CampusDatabase.getAnnouncements();
 
-      // ✅ Map announcements to CampusNewsItem format
-      const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement) => ({
-        id: ann.id,
-        title: ann.title,
-        amharicTitle: ann.title, // Fallback, you can add Amharic translation
-        summary: ann.content.slice(0, 150) + "...",
-        fullContent: ann.content,
-        category: "ACADEMIC",
-        categoryLabel: "Academic",
-        categoryAmharic: "የአካዳሚክ",
-        badgeColor: "from-blue-600 to-indigo-600 border-blue-400/30 text-white",
-        date: new Date(ann.postedAt).toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric"
-        }),
-        ethiopianDate: new Date(ann.postedAt).toLocaleDateString("am-ET"),
-        author: ann.postedBy,
-        readTime: `${Math.ceil(ann.content.split(" ").length / 200)} min read`,
-        highlightTag: "📢 ANNOUNCEMENT",
-        imageUrl: undefined
-      }));
-
-      setNews(mappedNews);
-      if (mappedNews.length > 0 && currentIndex >= mappedNews.length) {
-        setCurrentIndex(0);
+      if (announcements && announcements.length > 0) {
+        // Map API data
+        const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement) => ({
+          id: ann.id,
+          title: ann.title,
+          amharicTitle: ann.title,
+          summary: ann.content.slice(0, 150) + "...",
+          fullContent: ann.content,
+          category: "ACADEMIC",
+          categoryLabel: "Academic",
+          categoryAmharic: "የአካዳሚክ",
+          badgeColor: "from-blue-600 to-indigo-600 border-blue-400/30 text-white",
+          date: new Date(ann.postedAt).toLocaleDateString("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "numeric"
+          }),
+          ethiopianDate: new Date(ann.postedAt).toLocaleDateString("am-ET"),
+          author: ann.postedBy,
+          readTime: `${Math.ceil(ann.content.split(" ").length / 200)} min read`,
+          highlightTag: "📢 ANNOUNCEMENT",
+          imageUrl: undefined
+        }));
+        setNews(mappedNews);
+        localStorage.setItem("mau_campus_news_cache", JSON.stringify(mappedNews));
+      } else {
+        // ✅ No announcements from API → use default fallback
+        setNews(DEFAULT_NEWS);
+        localStorage.setItem("mau_campus_news_cache", JSON.stringify(DEFAULT_NEWS));
       }
     } catch (error) {
       console.error("Failed to load news:", error);
-      // ✅ Fallback: try to load from localStorage
+      // ✅ Try localStorage, else fallback to default
       const cached = localStorage.getItem("mau_campus_news_cache");
       if (cached) {
         try {
           setNews(JSON.parse(cached));
         } catch {
-          // Silent fail
+          setNews(DEFAULT_NEWS);
         }
+      } else {
+        setNews(DEFAULT_NEWS);
       }
     } finally {
       setLoading(false);
     }
-  }, [currentIndex]);
+  }, []);
 
   // ✅ Refresh news function (used by admin modal)
   const refreshNews = useCallback(() => {
