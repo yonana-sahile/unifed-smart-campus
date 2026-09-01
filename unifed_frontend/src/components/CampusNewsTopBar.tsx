@@ -29,10 +29,21 @@ import {
   Lock
 } from "lucide-react";
 import { CampusDatabase } from "../services/api";
-import type { User, Announcement } from "../types";
-import { CampusNewsAdminModal } from "./CampusNewsAdminModal"; // ✅ FIXED: Import added
+import type { User } from "../types";
+import { CampusNewsAdminModal } from "./CampusNewsAdminModal";
 
-// ✅ Define NewsItem type locally (or import if defined elsewhere)
+// ✅ LOCAL Announcement interface (matches backend response)
+interface Announcement {
+  id: string;
+  courseId: string;
+  courseTitle: string;
+  title: string;
+  content: string;
+  postedBy: string;
+  postedAt: string;
+}
+
+// ✅ LOCAL CampusNewsItem interface
 export interface CampusNewsItem {
   id: string;
   title: string;
