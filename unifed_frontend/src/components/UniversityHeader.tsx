@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import type { User } from "../types";
 import { useTheme } from "../context/ThemeContext";
-import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon } from "lucide-react";
+import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon, UserCog, Camera, Edit3 } from "lucide-react";
 import { motion } from "motion/react";
-import mauLogoImg from "../assets/mau_university_log.jpg";
+import mauLogoImg from "../assets/images/mau_university_logo_1787955234858.jpg";
+import { UpdateProfileModal } from "./UpdateProfileModal";
 
 /**
  * Official Federal Democratic Republic of Ethiopia Flag Component
@@ -530,6 +531,7 @@ export function UniversitySeal({
 interface UniversityTopBarProps {
   user: User;
   onLogout: () => void;
+  onUpdateUser?: (updatedUser: User) => void;
   portalTitle: string;
   portalSubtitle?: string;
   badgeText?: string;
@@ -537,13 +539,36 @@ interface UniversityTopBarProps {
 }
 
 export function UniversityTopBar({
-  user,
+  user: initialUser,
   onLogout,
+  onUpdateUser,
   portalTitle,
   portalSubtitle = "Mekdela Amba University • መቅደላ አምባ ዩኒቨርሲቲ",
   badgeText,
   badgeType = "student"
 }: UniversityTopBarProps) {
+  const [currentUser, setCurrentUser] = useState<User>(initialUser);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentUser(initialUser);
+  }, [initialUser]);
+
+  useEffect(() => {
+    const handleUserUpdate = (e: any) => {
+      if (e.detail && e.detail.id === currentUser.id) {
+        setCurrentUser(e.detail);
+      }
+    };
+    window.addEventListener("uscms_user_updated", handleUserUpdate);
+    return () => window.removeEventListener("uscms_user_updated", handleUserUpdate);
+  }, [currentUser.id]);
+
+  const handleProfileSaved = (updatedUser: User) => {
+    setCurrentUser(updatedUser);
+    onUpdateUser?.(updatedUser);
+  };
+
   const getBadgeStyle = () => {
     switch (badgeType) {
       case "federal":
@@ -559,91 +584,130 @@ export function UniversityTopBar({
   };
 
   return (
-    <header className="university-gradient text-white border-b border-slate-700/80 sticky top-0 z-40 px-4 sm:px-8 py-3.5 sm:py-4 shadow-lg">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
-        {/* Left Side: University Seal + Bilingual Title + National Flag Badge */}
-        <div className="flex items-center space-x-3.5 sm:space-x-4">
-          <UniversitySeal className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 drop-shadow-md" />
-          <div className="border-l border-slate-700/80 pl-3.5 sm:pl-4 space-y-0.5">
-            <div className="flex items-center space-x-2 sm:space-x-2.5">
-              <span className="font-display tracking-wider font-extrabold text-sm sm:text-base md:text-lg text-slate-100 uppercase">
-                Mekdela Amba University
-              </span>
-              <span className="hidden sm:inline-block text-[10px] sm:text-[11px] font-mono text-amber-400 font-bold bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
-                መቅደላ አምባ
-              </span>
-              <div className="hidden md:inline-flex items-center space-x-1.5 bg-slate-900/70 border border-slate-700/80 px-2 py-0.5 rounded-md shadow-xs">
-                <EthiopianFlag className="w-4 h-2.5 rounded-xs" />
-                <span className="text-[10px] font-mono text-slate-300 font-bold">FDRE MoE</span>
-              </div>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-300 font-medium flex items-center space-x-2">
-              <span className="text-amber-400 font-semibold">{portalTitle}</span>
-              <span className="text-slate-500 hidden sm:inline">•</span>
-              <span className="text-slate-400 text-xs hidden sm:inline">{portalSubtitle}</span>
-            </p>
-          </div>
-        </div>
-
-        {/* Right Side: Digital Clock + Ethiopian Academic Calendar + Theme Toggle + User Profile + Logout */}
-        <div className="flex items-center justify-between md:justify-end space-x-2.5 sm:space-x-4">
-          {/* Live Digital Clock */}
-          <DigitalClock />
-
-          {/* Official Academic Calendar Pill with National Flag */}
-          <div className="hidden lg:flex flex-col items-end text-right border-r border-slate-700/80 pr-3.5 sm:pr-4 leading-snug">
-            <div className="flex items-center space-x-1.5 text-xs font-mono text-slate-200 font-semibold">
-              <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
-              <span>AY 2025/2026 • Sem II</span>
-            </div>
-            <span className="text-[10px] text-slate-400 font-mono">የካቲት 2018 ዓ.ም. (EC)</span>
-          </div>
-
-          {/* Theme Toggle Button */}
-          <ThemeToggle />
-
-          {/* User Profile Info */}
-          <div className="flex items-center space-x-2.5 sm:space-x-3 pl-1">
-            <div className="text-right leading-tight">
-              <div className="flex items-center justify-end space-x-1.5">
-                <span className="text-xs sm:text-sm font-bold text-slate-100">{user.fullName}</span>
-              </div>
-              <div className="flex items-center justify-end space-x-1.5 mt-0.5">
-                <span className={`text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border ${getBadgeStyle()}`}>
-                  {badgeText || user.role}
+    <>
+      <header className="university-gradient text-white border-b border-slate-700/80 sticky top-0 z-40 px-4 sm:px-8 py-3.5 sm:py-4 shadow-lg">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+          {/* Left Side: University Seal + Bilingual Title + National Flag Badge */}
+          <div className="flex items-center space-x-3.5 sm:space-x-4">
+            <UniversitySeal className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 drop-shadow-md" />
+            <div className="border-l border-slate-700/80 pl-3.5 sm:pl-4 space-y-0.5">
+              <div className="flex items-center space-x-2 sm:space-x-2.5">
+                <span className="font-display tracking-wider font-extrabold text-sm sm:text-base md:text-lg text-slate-100 uppercase">
+                  Mekdela Amba University
                 </span>
-                {user.studentId && (
-                  <span className="text-[10px] sm:text-[11px] font-mono text-slate-400 font-medium">{user.studentId}</span>
-                )}
+                <span className="hidden sm:inline-block text-[10px] sm:text-[11px] font-mono text-amber-400 font-bold bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20">
+                  መቅደላ አምባ
+                </span>
+                <div className="hidden md:inline-flex items-center space-x-1.5 bg-slate-900/70 border border-slate-700/80 px-2 py-0.5 rounded-md shadow-xs">
+                  <EthiopianFlag className="w-4 h-2.5 rounded-xs" />
+                  <span className="text-[10px] font-mono text-slate-300 font-bold">FDRE MoE</span>
+                </div>
               </div>
+              <p className="text-xs sm:text-sm text-slate-300 font-medium flex items-center space-x-2">
+                <span className="text-amber-400 font-semibold">{portalTitle}</span>
+                <span className="text-slate-500 hidden sm:inline">•</span>
+                <span className="text-slate-400 text-xs hidden sm:inline">{portalSubtitle}</span>
+              </p>
             </div>
-
-            {user.avatarUrl ? (
-              <img
-                src={user.avatarUrl}
-                alt={user.fullName}
-                referrerPolicy="no-referrer"
-                className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-amber-500/50 object-cover shadow-md"
-              />
-            ) : (
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-display font-bold text-sm shadow-md">
-                {user.fullName.charAt(0)}
-              </div>
-            )}
           </div>
 
-          <div className="h-7 w-px bg-slate-700 hidden sm:block" />
+          {/* Right Side: Digital Clock + Ethiopian Academic Calendar + Theme Toggle + User Profile + Logout */}
+          <div className="flex items-center justify-between md:justify-end space-x-2 sm:space-x-3.5">
+            {/* Live Digital Clock */}
+            <DigitalClock />
 
-          {/* Logout Button */}
-          <button
-            onClick={onLogout}
-            className="px-3.5 sm:px-4 py-2 bg-slate-800/90 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/50 text-slate-200 hover:text-red-200 rounded-xl text-xs sm:text-sm font-semibold transition duration-150 shadow-md"
-          >
-            Sign Out
-          </button>
+            {/* Official Academic Calendar Pill with National Flag */}
+            <div className="hidden lg:flex flex-col items-end text-right border-r border-slate-700/80 pr-3.5 sm:pr-4 leading-snug">
+              <div className="flex items-center space-x-1.5 text-xs font-mono text-slate-200 font-semibold">
+                <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
+                <span>AY 2025/2026 • Sem II</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">የካቲት 2018 ዓ.ም. (EC)</span>
+            </div>
+
+            {/* Theme Toggle Button */}
+            <ThemeToggle />
+
+            {/* User Profile Info with direct Edit Trigger */}
+            <div className="flex items-center space-x-2 sm:space-x-2.5 pl-1">
+              <button
+                type="button"
+                onClick={() => setIsProfileModalOpen(true)}
+                title="Click to edit profile, update name, password, or avatar • መገለጫዎን ለማዘመን ይጫኑ"
+                className="group flex items-center space-x-2.5 sm:space-x-3 p-1.5 rounded-xl hover:bg-white/10 transition text-left cursor-pointer border border-transparent hover:border-amber-400/40"
+              >
+                <div className="text-right leading-tight hidden sm:block">
+                  <div className="flex items-center justify-end space-x-1.5">
+                    <span className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-amber-300 transition-colors">
+                      {currentUser.fullName}
+                    </span>
+                    <Edit3 className="w-3 h-3 text-slate-400 group-hover:text-amber-300 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <div className="flex items-center justify-end space-x-1.5 mt-0.5">
+                    <span className={`text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border ${getBadgeStyle()}`}>
+                      {badgeText || currentUser.role}
+                    </span>
+                    {currentUser.studentId && (
+                      <span className="text-[10px] sm:text-[11px] font-mono text-slate-400 font-medium">
+                        {currentUser.studentId}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Avatar with hover camera icon */}
+                <div className="relative">
+                  {currentUser.avatarUrl ? (
+                    <img
+                      src={currentUser.avatarUrl}
+                      alt={currentUser.fullName}
+                      referrerPolicy="no-referrer"
+                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-amber-500/60 object-cover shadow-md group-hover:border-amber-400 transition"
+                    />
+                  ) : (
+                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-display font-bold text-sm shadow-md group-hover:border-amber-400 transition">
+                      {currentUser.fullName.charAt(0)}
+                    </div>
+                  )}
+                  <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 p-0.5 rounded-md shadow-xs opacity-80 group-hover:opacity-100 transition-opacity">
+                    <Camera className="w-2.5 h-2.5" />
+                  </div>
+                </div>
+              </button>
+
+              {/* Dedicated "Edit Profile" Button for instant visibility */}
+              <button
+                type="button"
+                onClick={() => setIsProfileModalOpen(true)}
+                className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold transition"
+                title="Update Profile, Name, Password & Avatar"
+              >
+                <UserCog className="w-3.5 h-3.5" />
+                <span>Edit Profile</span>
+              </button>
+            </div>
+
+            <div className="h-7 w-px bg-slate-700 hidden sm:block" />
+
+            {/* Logout Button */}
+            <button
+              onClick={onLogout}
+              className="px-3 sm:px-4 py-2 bg-slate-800/90 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/50 text-slate-200 hover:text-red-200 rounded-xl text-xs sm:text-sm font-semibold transition duration-150 shadow-md"
+            >
+              Sign Out
+            </button>
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      {/* Update Profile Modal */}
+      <UpdateProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={currentUser}
+        onProfileUpdated={handleProfileSaved}
+      />
+    </>
   );
 }
 
