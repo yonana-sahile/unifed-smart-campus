@@ -26,82 +26,120 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
     loadData();
   }, []);
 
+  // ✅ Safe data loading with try/catch and array checks
   const loadData = () => {
-    setStudents(CampusDatabase.getUsers().filter((u) => u.role === "STUDENT"));
-    setGrades(CampusDatabase.getGrades());
-    setSettings(CampusDatabase.getSettings());
+    try {
+      const users = CampusDatabase.getUsers();
+      setStudents(Array.isArray(users) ? users.filter((u) => u.role === "STUDENT") : []);
+    } catch (error) {
+      console.error("Failed to load users:", error);
+      setStudents([]);
+    }
+
+    try {
+      const gradesData = CampusDatabase.getGrades();
+      setGrades(Array.isArray(gradesData) ? gradesData : []);
+    } catch (error) {
+      console.error("Failed to load grades:", error);
+      setGrades([]);
+    }
+
+    try {
+      const settingsData = CampusDatabase.getSettings();
+      setSettings(settingsData || null);
+    } catch (error) {
+      console.error("Failed to load settings:", error);
+      setSettings(null);
+    }
   };
 
   const handleUpdateStudent = () => {
     if (!editingStudent) return;
-    const allUsers = CampusDatabase.getUsers().map((u) => {
-      if (u.id === editingStudent.id) return editingStudent;
-      return u;
-    });
-    CampusDatabase.saveUsers(allUsers);
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "REGISTRAR",
-      "Update Student Record",
-      "User",
-      editingStudent.id,
-      `Updated record details for student: ${editingStudent.fullName}`
-    );
-    alert("Student record updated successfully!");
-    setEditingStudent(null);
-    loadData();
+    try {
+      const allUsers = CampusDatabase.getUsers();
+      if (!Array.isArray(allUsers)) return;
+      const updatedUsers = allUsers.map((u) => {
+        if (u.id === editingStudent.id) return editingStudent;
+        return u;
+      });
+      CampusDatabase.saveUsers(updatedUsers);
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "REGISTRAR",
+        "Update Student Record",
+        "User",
+        editingStudent.id,
+        `Updated record details for student: ${editingStudent.fullName}`
+      );
+      alert("Student record updated successfully!");
+      setEditingStudent(null);
+      loadData();
+    } catch (error) {
+      console.error("Failed to update student:", error);
+      alert("Failed to update student record. Please try again.");
+    }
   };
 
   const handleApproveGrade = (gradeId: string) => {
-    const updatedGrades = grades.map((g) => {
-      if (g.id === gradeId) {
-        return { ...g, status: "APPROVED" as const };
-      }
-      return g;
-    });
-    CampusDatabase.saveGrades(updatedGrades);
-    setGrades(updatedGrades);
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "REGISTRAR",
-      "Approve Semester Grade",
-      "Grade",
-      gradeId,
-      "Officially approved student score to be stamped on transcripts."
-    );
-    alert("Grade verified and approved for transcript posting.");
-    loadData();
+    try {
+      const updatedGrades = grades.map((g) => {
+        if (g.id === gradeId) {
+          return { ...g, status: "APPROVED" as const };
+        }
+        return g;
+      });
+      CampusDatabase.saveGrades(updatedGrades);
+      setGrades(updatedGrades);
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "REGISTRAR",
+        "Approve Semester Grade",
+        "Grade",
+        gradeId,
+        "Officially approved student score to be stamped on transcripts."
+      );
+      alert("Grade verified and approved for transcript posting.");
+      loadData();
+    } catch (error) {
+      console.error("Failed to approve grade:", error);
+      alert("Failed to approve grade. Please try again.");
+    }
   };
 
   const handleRejectGrade = (gradeId: string) => {
-    const updatedGrades = grades.map((g) => {
-      if (g.id === gradeId) {
-        return { ...g, status: "RETURNED" as const };
-      }
-      return g;
-    });
-    CampusDatabase.saveGrades(updatedGrades);
-    setGrades(updatedGrades);
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "REGISTRAR",
-      "Reject Semester Grade",
-      "Grade",
-      gradeId,
-      "Returned grades to subject instructor for revision."
-    );
-    alert("Grades returned to instructor for revision.");
-    loadData();
+    try {
+      const updatedGrades = grades.map((g) => {
+        if (g.id === gradeId) {
+          return { ...g, status: "RETURNED" as const };
+        }
+        return g;
+      });
+      CampusDatabase.saveGrades(updatedGrades);
+      setGrades(updatedGrades);
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "REGISTRAR",
+        "Reject Semester Grade",
+        "Grade",
+        gradeId,
+        "Returned grades to subject instructor for revision."
+      );
+      alert("Grades returned to instructor for revision.");
+      loadData();
+    } catch (error) {
+      console.error("Failed to reject grade:", error);
+      alert("Failed to reject grade. Please try again.");
+    }
   };
 
-  const filteredStudents = students.filter(
+  const filteredStudents = Array.isArray(students) ? students.filter(
     (st) =>
       st.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (st.studentId && st.studentId.includes(searchQuery))
-  );
+  ) : [];
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="registrar_dashboard_main">
@@ -421,9 +459,27 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
   const [grades, setGrades] = useState<Grade[]>([]);
 
   useEffect(() => {
-    setCourses(CampusDatabase.getCourses());
-    setGrades(CampusDatabase.getGrades());
+    loadData();
   }, []);
+
+  // ✅ Safe data loading
+  const loadData = () => {
+    try {
+      const coursesData = CampusDatabase.getCourses();
+      setCourses(Array.isArray(coursesData) ? coursesData : []);
+    } catch (error) {
+      console.error("Failed to load courses:", error);
+      setCourses([]);
+    }
+
+    try {
+      const gradesData = CampusDatabase.getGrades();
+      setGrades(Array.isArray(gradesData) ? gradesData : []);
+    } catch (error) {
+      console.error("Failed to load grades:", error);
+      setGrades([]);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="dept_head_dashboard_main">
@@ -574,9 +630,23 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
     loadData();
   }, []);
 
+  // ✅ Safe data loading
   const loadData = () => {
-    setUsers(CampusDatabase.getUsers());
-    setAuditLogs(CampusDatabase.getAuditLogs());
+    try {
+      const usersData = CampusDatabase.getUsers();
+      setUsers(Array.isArray(usersData) ? usersData : []);
+    } catch (error) {
+      console.error("Failed to load users:", error);
+      setUsers([]);
+    }
+
+    try {
+      const logsData = CampusDatabase.getAuditLogs();
+      setAuditLogs(Array.isArray(logsData) ? logsData : []);
+    } catch (error) {
+      console.error("Failed to load audit logs:", error);
+      setAuditLogs([]);
+    }
   };
 
   const handleAddUser = () => {
@@ -597,35 +667,46 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
       avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150"
     };
 
-    const updatedUsers = [...users, newUserObj];
-    CampusDatabase.saveUsers(updatedUsers);
-    setUsers(updatedUsers);
+    try {
+      const updatedUsers = [...users, newUserObj];
+      CampusDatabase.saveUsers(updatedUsers);
+      setUsers(updatedUsers);
 
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "ADMIN",
-      "Create User Account",
-      "User",
-      newUserObj.id,
-      `Provisioned new user account: ${newUserFullName} with role ${newUserRole}`
-    );
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "ADMIN",
+        "Create User Account",
+        "User",
+        newUserObj.id,
+        `Provisioned new user account: ${newUserFullName} with role ${newUserRole}`
+      );
 
-    alert(`Successfully created user: ${newUserFullName}`);
-    setNewUserFullName("");
-    setNewUserEmail("");
+      alert(`Successfully created user: ${newUserFullName}`);
+      setNewUserFullName("");
+      setNewUserEmail("");
+      loadData();
+    } catch (error) {
+      console.error("Failed to create user:", error);
+      alert("Failed to create user. Please try again.");
+    }
   };
 
   const toggleUserStatus = (userId: string) => {
-    const updatedUsers = users.map((u) => {
-      if (u.id === userId) {
-        return { ...u, isActive: !u.isActive };
-      }
-      return u;
-    });
-    CampusDatabase.saveUsers(updatedUsers);
-    setUsers(updatedUsers);
-    alert("User status updated successfully!");
+    try {
+      const updatedUsers = users.map((u) => {
+        if (u.id === userId) {
+          return { ...u, isActive: !u.isActive };
+        }
+        return u;
+      });
+      CampusDatabase.saveUsers(updatedUsers);
+      setUsers(updatedUsers);
+      alert("User status updated successfully!");
+    } catch (error) {
+      console.error("Failed to toggle user status:", error);
+      alert("Failed to update user status. Please try again.");
+    }
   };
 
   return (
@@ -957,10 +1038,31 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     loadData();
   }, []);
 
+  // ✅ Safe data loading
   const loadData = () => {
-    setStudents(CampusDatabase.getUsers().filter(u => u.role === "STUDENT"));
-    setGrades(CampusDatabase.getGrades());
-    setAuditLogs(CampusDatabase.getAuditLogs().slice(0, 30));
+    try {
+      const usersData = CampusDatabase.getUsers();
+      setStudents(Array.isArray(usersData) ? usersData.filter(u => u.role === "STUDENT") : []);
+    } catch (error) {
+      console.error("Failed to load users:", error);
+      setStudents([]);
+    }
+
+    try {
+      const gradesData = CampusDatabase.getGrades();
+      setGrades(Array.isArray(gradesData) ? gradesData : []);
+    } catch (error) {
+      console.error("Failed to load grades:", error);
+      setGrades([]);
+    }
+
+    try {
+      const logsData = CampusDatabase.getAuditLogs();
+      setAuditLogs(Array.isArray(logsData) ? logsData.slice(0, 30) : []);
+    } catch (error) {
+      console.error("Failed to load audit logs:", error);
+      setAuditLogs([]);
+    }
   };
 
   const triggerHEMISSync = () => {
@@ -969,15 +1071,17 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       setIsSyncing(false);
       const now = new Date().toISOString();
       setLastSyncTime(now);
-      CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
-        "GOVERNMENT_AUDITOR",
-        "HEMIS Master Sync",
-        "System",
-        "CentralHEMIS",
-        "Triggered fully encrypted full-ledger synchronization with Ministry of Education HEMIS servers (SSLv3 SHA-512)."
-      );
+      try {
+        CampusDatabase.addAuditLog(
+          user.id,
+          user.fullName,
+          "GOVERNMENT_AUDITOR",
+          "HEMIS Master Sync",
+          "System",
+          "CentralHEMIS",
+          "Triggered fully encrypted full-ledger synchronization with Ministry of Education HEMIS servers (SSLv3 SHA-512)."
+        );
+      } catch (e) { /* ignore */ }
       showToast("HEMIS master database synchronization completed successfully!");
       loadData();
     }, 1800);
@@ -988,15 +1092,17 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       ...prev,
       [studentId]: "VERIFIED"
     }));
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "GOVERNMENT_AUDITOR",
-      "Verify National Fayda ID",
-      "User",
-      studentId,
-      `Verified national biometric ID 'Fayda' registration status for ${name}.`
-    );
+    try {
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "GOVERNMENT_AUDITOR",
+        "Verify National Fayda ID",
+        "User",
+        studentId,
+        `Verified national biometric ID 'Fayda' registration status for ${name}.`
+      );
+    } catch (e) { /* ignore */ }
     showToast(`National Fayda ID verified for ${name}!`);
   };
 
@@ -1005,15 +1111,17 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       ...prev,
       [studentId]: "APPROVED"
     }));
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "GOVERNMENT_AUDITOR",
-      "Issue Exit Exam Hall Ticket",
-      "User",
-      studentId,
-      `Officially issued MoE National Exit Examination Hall Ticket for graduating senior: ${name}.`
-    );
+    try {
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "GOVERNMENT_AUDITOR",
+        "Issue Exit Exam Hall Ticket",
+        "User",
+        studentId,
+        `Officially issued MoE National Exit Examination Hall Ticket for graduating senior: ${name}.`
+      );
+    } catch (e) { /* ignore */ }
     showToast(`National Exit Exam Ticket issued for ${name}!`);
   };
 
@@ -1022,15 +1130,17 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       ...prev,
       [studentId]: "FLAGGED"
     }));
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "GOVERNMENT_AUDITOR",
-      "Flag Exit Exam Eligibility",
-      "User",
-      studentId,
-      `Flagged graduating senior: ${name} from exit exam due to outstanding institutional reviews.`
-    );
+    try {
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "GOVERNMENT_AUDITOR",
+        "Flag Exit Exam Eligibility",
+        "User",
+        studentId,
+        `Flagged graduating senior: ${name} from exit exam due to outstanding institutional reviews.`
+      );
+    } catch (e) { /* ignore */ }
     showToast(`Flagged exit exam ticket for ${name}.`);
   };
 
@@ -1041,15 +1151,17 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       setGrantReleased(true);
       const mockHash = "0x" + Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join("");
       setGrantHash(mockHash);
-      CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
-        "GOVERNMENT_AUDITOR",
-        "Release Capital Operational Grant",
-        "Finance",
-        "GRANT_2026_Q2",
-        `Authorized Federal Ministry capital operational grant of 25,000,000 ETB for campus laboratory scaling. Hash: ${mockHash}`
-      );
+      try {
+        CampusDatabase.addAuditLog(
+          user.id,
+          user.fullName,
+          "GOVERNMENT_AUDITOR",
+          "Release Capital Operational Grant",
+          "Finance",
+          "GRANT_2026_Q2",
+          `Authorized Federal Ministry capital operational grant of 25,000,000 ETB for campus laboratory scaling. Hash: ${mockHash}`
+        );
+      } catch (e) { /* ignore */ }
       showToast("MoE Semester Grant of 25,000,000 ETB released successfully!");
     }, 1500);
   };

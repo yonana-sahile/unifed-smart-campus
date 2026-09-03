@@ -46,16 +46,53 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     loadData();
   }, []);
 
-  const loadData = () => {
-    setCourses(CampusDatabase.getCourses());
-    setMaterials(CampusDatabase.getMaterials());
-    setAnnouncements(CampusDatabase.getAnnouncements());
-    setAssignments(CampusDatabase.getAssignments());
-    setSubmissions(CampusDatabase.getSubmissions());
-    setExams(CampusDatabase.getExams());
-    setExamAttempts(CampusDatabase.getExamAttempts());
-    setGrades(CampusDatabase.getGrades());
-    setSettings(CampusDatabase.getSettings());
+  // ✅ FIXED: Async data loading with proper error handling
+  const loadData = async () => {
+    try {
+      const [
+        coursesData,
+        materialsData,
+        announcementsData,
+        assignmentsData,
+        submissionsData,
+        examsData,
+        examAttemptsData,
+        gradesData,
+        settingsData,
+      ] = await Promise.all([
+        CampusDatabase.getCourses(),
+        CampusDatabase.getMaterials(),
+        CampusDatabase.getAnnouncements(),
+        CampusDatabase.getAssignments(),
+        CampusDatabase.getSubmissions(),
+        CampusDatabase.getExams(),
+        CampusDatabase.getExamAttempts(),
+        CampusDatabase.getGrades(),
+        CampusDatabase.getSettings(),
+      ]);
+
+      setCourses(Array.isArray(coursesData) ? coursesData : []);
+      setMaterials(Array.isArray(materialsData) ? materialsData : []);
+      setAnnouncements(Array.isArray(announcementsData) ? announcementsData : []);
+      setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
+      setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
+      setExams(Array.isArray(examsData) ? examsData : []);
+      setExamAttempts(Array.isArray(examAttemptsData) ? examAttemptsData : []);
+      setGrades(Array.isArray(gradesData) ? gradesData : []);
+      setSettings(settingsData || null);
+    } catch (error) {
+      console.error("Failed to load student data:", error);
+      // Fallback to empty arrays
+      setCourses([]);
+      setMaterials([]);
+      setAnnouncements([]);
+      setAssignments([]);
+      setSubmissions([]);
+      setExams([]);
+      setExamAttempts([]);
+      setGrades([]);
+      setSettings(null);
+    }
   };
 
   // Start exam timer

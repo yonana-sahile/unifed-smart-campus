@@ -16,6 +16,110 @@ import { ForgotPasswordModal } from "./components/ForgotPasswordModal";
 import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
+// ✅ LOCAL DEMO USERS – used for 1‑Click Login fallback
+const DEMO_USERS: User[] = [
+  {
+    id: "U_ST01",
+    username: "tadesse",
+    fullName: "Tadesse G.",
+    email: "tadesse@mau.edu.et",
+    role: "STUDENT",
+    isActive: true,
+    studentId: "MAU1402271",
+    academicYear: 4,
+    semester: 2,
+    program: "Software Engineering",
+    cgpa: 3.67,
+    outstandingFees: 0,
+    avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150"
+  },
+  {
+    id: "U_IN01",
+    username: "chalachew",
+    fullName: "Dr. Chalachew",
+    email: "chalachew@mau.edu.et",
+    role: "INSTRUCTOR",
+    isActive: true,
+    instructorId: "INST101",
+    department: "Software Engineering",
+    specialization: "AI & ML",
+    avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
+  },
+  {
+    id: "U_REG01",
+    username: "almaz",
+    fullName: "Almaz Kebede",
+    email: "registrar@mau.edu.et",
+    role: "REGISTRAR",
+    isActive: true,
+    staffId: "REG001",
+    avatarUrl: "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150"
+  },
+  {
+    id: "U_DEPT01",
+    username: "befekadu",
+    fullName: "Dr. Befekadu",
+    email: "dephead@mau.edu.et",
+    role: "DEPARTMENT_HEAD",
+    isActive: true,
+    staffId: "DH101",
+    department: "Software Engineering",
+    avatarUrl: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=150"
+  },
+  {
+    id: "U_DEAN01",
+    username: "getachew",
+    fullName: "Prof. Getachew",
+    email: "dean@mau.edu.et",
+    role: "DEAN",
+    isActive: true,
+    staffId: "DEAN001",
+    avatarUrl: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150"
+  },
+  {
+    id: "U_ADMIN01",
+    username: "selamawit",
+    fullName: "Selamawit T.",
+    email: "admin@mau.edu.et",
+    role: "ADMIN",
+    isActive: true,
+    staffId: "ADMIN001",
+    avatarUrl: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150"
+  },
+  {
+    id: "U_LIB01",
+    username: "alemayehu",
+    fullName: "Alemayehu B.",
+    email: "library@mau.edu.et",
+    role: "LIBRARY_STAFF",
+    isActive: true,
+    staffId: "LIB001",
+    librarySection: "Digital Resources",
+    avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150"
+  },
+  {
+    id: "U_FIN01",
+    username: "meron",
+    fullName: "Meron Desta",
+    email: "finance@mau.edu.et",
+    role: "FINANCE_OFFICER",
+    isActive: true,
+    officerId: "FIN001",
+    avatarUrl: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150"
+  },
+  {
+    id: "U_AUD01",
+    username: "tolossa",
+    fullName: "Dr. Tolossa Seme",
+    email: "tolossa.seme@moe.gov.et",
+    role: "AUDITOR",
+    isActive: true,
+    staffId: "MOE001",
+    department: "Ministry of Education",
+    avatarUrl: "https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=150"
+  }
+];
+
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [emailInput, setEmailInput] = useState("");
@@ -89,24 +193,54 @@ export default function App() {
     setPasswordInput("");
   };
 
+  // ✅ UPDATED: Quick login with local fallback
   const handleQuickLogin = (email: string) => {
     setEmailInput(email);
     setPasswordInput("password");
 
-    // Auto-login
-    const found = CampusDatabase.getUsers().find((u) => u.email === email);
-    if (found) {
-      localStorage.setItem("uscms_current_user", JSON.stringify(found));
-      setCurrentUser(found);
-      CampusDatabase.addAuditLog(
-        found.id,
-        found.fullName,
-        found.role,
-        "Institutional Login",
-        "User",
-        found.id,
-        "Quick demo authorization session established."
-      );
+    // 1. Try local demo users first (no backend needed)
+    const localUser = DEMO_USERS.find((u) => u.email === email);
+    if (localUser) {
+      localStorage.setItem("uscms_current_user", JSON.stringify(localUser));
+      setCurrentUser(localUser);
+      // Optionally log audit (skip if backend unavailable)
+      try {
+        CampusDatabase.addAuditLog(
+          localUser.id,
+          localUser.fullName,
+          localUser.role,
+          "Institutional Login",
+          "User",
+          localUser.id,
+          "Quick demo authorization session established (local fallback)."
+        );
+      } catch {
+        // Ignore audit failure
+      }
+      return;
+    }
+
+    // 2. Fallback: try the backend API
+    try {
+      const found = CampusDatabase.getUsers().find((u) => u.email === email);
+      if (found) {
+        localStorage.setItem("uscms_current_user", JSON.stringify(found));
+        setCurrentUser(found);
+        CampusDatabase.addAuditLog(
+          found.id,
+          found.fullName,
+          found.role,
+          "Institutional Login",
+          "User",
+          found.id,
+          "Quick demo authorization session established (API)."
+        );
+      } else {
+        alert("User not found. Please check credentials or use the demo profiles.");
+      }
+    } catch (error) {
+      console.error("Quick login failed:", error);
+      alert("Unable to login. Please ensure the backend is running or use the demo profiles.");
     }
   };
 
@@ -155,6 +289,7 @@ export default function App() {
     );
   }
 
+  // --- LOGIN PAGE (same as before) ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/80 dark:from-[#06111f] dark:via-[#071526] dark:to-[#0a1d35] flex flex-col font-sans relative selection:bg-amber-400 selection:text-slate-900 transition-colors duration-300">
       {/* Background ambient lighting */}
@@ -202,23 +337,19 @@ export default function App() {
         </div>
       </header>
 
-      {/* Main Single Sign-On Gateway Container (Positioned below top navbar, no overlap on desktop/PC) */}
+      {/* Main Single Sign-On Gateway Container */}
       <main className="flex-1 flex items-center justify-center p-4 sm:p-6 lg:p-12 relative z-10 my-4 sm:my-8">
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
 
           {/* Left Side: University Heritage & System Overview */}
           <div className="lg:col-span-6 space-y-6 text-slate-800 dark:text-white text-center lg:text-left">
-            {/* University Crest & Waving National Flag Display */}
             <div className="flex flex-col sm:flex-row items-center sm:items-end justify-center lg:justify-start gap-4 sm:gap-5">
               <div className="flex items-end space-x-3.5 shrink-0">
-                {/* Free-standing Waving Ethiopian Flag on Flagpole on the left */}
                 <div className="shrink-0 flex items-end justify-center">
                   <StarryFlag scale={0.68} poleHeightCustom={190} showText={false} />
                 </div>
-                {/* University Crest Seal on the right */}
                 <UniversitySeal className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 shadow-xl shrink-0" />
               </div>
-
               <div className="space-y-1 text-center sm:text-left pb-1">
                 <div className="inline-flex items-center space-x-2 bg-gradient-to-r from-emerald-500/10 via-amber-500/10 to-red-500/10 border border-amber-500/30 dark:border-amber-400/20 px-3.5 py-1 rounded-full text-[11px] font-mono text-slate-800 dark:text-amber-300 font-bold shadow-xs">
                   <EthiopianFlag className="w-4 h-2.5 rounded-xs shadow-xs" />
@@ -242,7 +373,6 @@ export default function App() {
               Welcome to the centralized Student Information System (SIS) and Academic Governance Portal. Designed to uphold rigorous educational standards through automated grading policies (50/20/30 continuous assessment), proctored online examinations, automated degree audits, and real-time Ministry of Education (HEMIS) synchronization.
             </p>
 
-            {/* Academic Features Badges */}
             <div className="grid grid-cols-3 gap-3 pt-2">
               <div className="p-3.5 bg-white/80 dark:bg-slate-900/80 rounded-2xl border border-slate-200/90 dark:border-slate-800 text-left space-y-1 shadow-sm backdrop-blur-xs">
                 <BookOpen className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -261,7 +391,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Quick Trust Action Bar */}
             <div className="pt-2 flex flex-wrap items-center gap-3">
               <button
                 type="button"
@@ -289,7 +418,6 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
             >
-              {/* Header with University Royal Navy */}
               <div className="university-gradient text-white p-6 text-center relative border-b border-amber-500/20">
                 <div className="flex items-center justify-center space-x-2.5 mb-2">
                   <UniversitySeal className="w-8 h-8 drop-shadow-sm" />
@@ -699,4 +827,3 @@ export default function App() {
     </div>
   );
 }
-
