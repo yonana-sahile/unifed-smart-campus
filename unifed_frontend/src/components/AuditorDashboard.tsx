@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import type { User, Grade, AuditLog } from "../types";
+import { User, Grade, AuditLog } from "../types";
 import { CampusDatabase } from "../services/api"; // ✅ Changed from mockData
 import { AcademicFooter, EthiopianFlag } from "./UniversityHeader";
+import { UpdateProfileModal } from "./UpdateProfileModal";
 import {
   ShieldAlert,
   FileText,
@@ -11,11 +12,33 @@ import {
   BarChart2,
   Coins,
   CheckSquare,
-  Database
+  Database,
+  UserCog,
+  Camera,
+  Edit3
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
+  // ✅ Profile update state
+  const [currentUser, setCurrentUser] = useState<User>(user);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  useEffect(() => {
+    setCurrentUser(user);
+  }, [user]);
+
+  useEffect(() => {
+    const handleUserUpdate = (e: any) => {
+      if (e.detail && e.detail.id === currentUser.id) {
+        setCurrentUser(e.detail);
+      }
+    };
+    window.addEventListener("uscms_user_updated", handleUserUpdate);
+    return () => window.removeEventListener("uscms_user_updated", handleUserUpdate);
+  }, [currentUser.id]);
+
+  // Dashboard state
   const [activeTab, setActiveTab] = useState<"hemis" | "exit-exams" | "grading-audit" | "grants" | "reports">("hemis");
   const [students, setStudents] = useState<User[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -23,6 +46,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>("2026-06-28T10:15:22Z");
 
+  // States for Fayda & Exit Exam interactive tools
   const [faydaStatus, setFaydaStatus] = useState<{ [id: string]: "VERIFIED" | "PENDING" | "FLAGGED" }>({
     "U_ST01": "VERIFIED",
     "U_ST02": "VERIFIED",
@@ -44,7 +68,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     loadData();
   }, []);
 
-  // ✅ FIXED: Async data loading
+  // ✅ FIXED: Async data loading with proper error handling
   const loadData = async () => {
     try {
       const [usersData, gradesData, logsData] = await Promise.all([
@@ -73,8 +97,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       setLastSyncTime(now);
       try {
         await CampusDatabase.addAuditLog(
-          user.id,
-          user.fullName,
+          currentUser.id,
+          currentUser.fullName,
           "GOVERNMENT_AUDITOR",
           "HEMIS Master Sync",
           "System",
@@ -98,8 +122,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }));
     try {
       await CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
+        currentUser.id,
+        currentUser.fullName,
         "GOVERNMENT_AUDITOR",
         "Verify National Fayda ID",
         "User",
@@ -121,8 +145,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }));
     try {
       await CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
+        currentUser.id,
+        currentUser.fullName,
         "GOVERNMENT_AUDITOR",
         "Issue Exit Exam Hall Ticket",
         "User",
@@ -144,8 +168,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }));
     try {
       await CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
+        currentUser.id,
+        currentUser.fullName,
         "GOVERNMENT_AUDITOR",
         "Flag Exit Exam Eligibility",
         "User",
@@ -169,8 +193,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
       setGrantHash(mockHash);
       try {
         await CampusDatabase.addAuditLog(
-          user.id,
-          user.fullName,
+          currentUser.id,
+          currentUser.fullName,
           "GOVERNMENT_AUDITOR",
           "Release Capital Operational Grant",
           "Finance",
@@ -192,15 +216,18 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }, 4000);
   };
 
+  // Basic stats for Quality Audit
   const averageGpa = students.length > 0 ? (students.reduce((acc, s) => acc + (s.cgpa || 0), 0) / students.length).toFixed(2) : "0.00";
 
-  const letterGradeCounts = grades.reduce((acc, g) => {
+  // Grade Distribution count
+  const letterGradeCounts = Array.isArray(grades) ? grades.reduce((acc, g) => {
     acc[g.letterGrade] = (acc[g.letterGrade] || 0) + 1;
     return acc;
-  }, {} as { [key: string]: number });
+  }, {} as { [key: string]: number }) : {};
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
+      {/* Interactive notification toaster */}
       <AnimatePresence>
         {activeNotification && (
           <motion.div
@@ -216,6 +243,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
         )}
       </AnimatePresence>
 
+      {/* Main Government Header with Profile Update */}
       <header className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 text-white border-b border-emerald-500/20 sticky top-0 z-40 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
         <div className="flex items-center space-x-4">
           <div className="bg-emerald-500/15 border border-emerald-400/30 p-1.5 rounded-xl flex items-center justify-center shadow-inner">
@@ -237,13 +265,55 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
           </div>
         </div>
 
-        <div className="flex items-center space-x-4">
-          <div className="text-right">
-            <span className="block text-sm font-semibold text-slate-100">{user.fullName}</span>
-            <span className="block text-[10px] text-emerald-400 font-mono uppercase font-bold tracking-wider">
-              Senior Federal Inspector
-            </span>
-          </div>
+        {/* ✅ Profile section with edit button */}
+        <div className="flex items-center space-x-3">
+          <button
+            type="button"
+            onClick={() => setIsProfileModalOpen(true)}
+            title="Click to edit profile, update name, password, or avatar • መገለጫዎን ለማዘመን ይጫኑ"
+            className="group flex items-center space-x-3 p-1.5 rounded-xl hover:bg-white/10 transition text-left cursor-pointer border border-transparent hover:border-emerald-400/40"
+          >
+            <div className="text-right">
+              <div className="flex items-center justify-end space-x-1">
+                <span className="text-sm font-semibold text-slate-100 group-hover:text-emerald-300 transition-colors">
+                  {currentUser.fullName}
+                </span>
+                <Edit3 className="w-3 h-3 text-slate-400 group-hover:text-emerald-300 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
+              <span className="block text-[10px] text-emerald-400 font-mono uppercase font-bold tracking-wider">
+                Senior Federal Inspector
+              </span>
+            </div>
+
+            <div className="relative">
+              {currentUser.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.fullName}
+                  referrerPolicy="no-referrer"
+                  className="w-9 h-9 rounded-xl border border-emerald-500/60 object-cover shadow-md group-hover:border-emerald-400 transition"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 font-display font-bold text-sm shadow-md group-hover:border-emerald-400 transition">
+                  {currentUser.fullName.charAt(0)}
+                </div>
+              )}
+              <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-slate-950 p-0.5 rounded-md shadow-xs opacity-80 group-hover:opacity-100 transition-opacity">
+                <Camera className="w-2.5 h-2.5" />
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsProfileModalOpen(true)}
+            className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold transition"
+            title="Update Profile, Name, Password & Avatar"
+          >
+            <UserCog className="w-3.5 h-3.5" />
+            <span>Edit Profile</span>
+          </button>
+
           <div className="h-8 w-px bg-slate-700" />
           <button
             onClick={onLogout}
@@ -254,8 +324,19 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
         </div>
       </header>
 
+      {/* ✅ Update Profile Modal */}
+      <UpdateProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={currentUser}
+        onProfileUpdated={(updated) => setCurrentUser(updated)}
+      />
+
+      {/* Main Container Layout */}
       <div className="flex-1 flex flex-col lg:flex-row">
+        {/* Left Side Navigation Sidebar */}
         <aside className="w-full lg:w-72 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800/80">
+          {/* Quick Stats Summary Card */}
           <div className="p-5 border-b border-slate-800/50 bg-slate-950/20">
             <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-2 font-bold">
               Audited Institution
@@ -347,6 +428,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
             </button>
           </nav>
 
+          {/* Secure Audit Badge */}
           <div className="p-5 border-t border-slate-800 bg-slate-950/30 space-y-2 mt-auto">
             <div className="flex items-center space-x-2 text-xs text-slate-400">
               <Shield className="w-3.5 h-3.5 text-emerald-500" />
@@ -358,7 +440,9 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
           </div>
         </aside>
 
+        {/* Right Side Auditing Canvas */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+          {/* TAB 1: HEMIS MASTER INTEGRATION */}
           {activeTab === "hemis" && (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
@@ -506,6 +590,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
             </div>
           )}
 
+          {/* TAB 2: EXIT EXAM COMPLIANCE */}
           {activeTab === "exit-exams" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
@@ -663,6 +748,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
             </div>
           )}
 
+          {/* TAB 3: ACADEMIC GRADE AUDIT */}
           {activeTab === "grading-audit" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
@@ -733,7 +819,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-600 font-sans text-xs md:text-sm">
-                        {grades.map((g) => (
+                        {Array.isArray(grades) && grades.map((g) => (
                           <tr key={g.id} className="hover:bg-slate-50/20">
                             <td className="p-3 font-semibold text-slate-800">{g.studentName}</td>
                             <td className="p-3 font-mono font-bold text-primary">{g.courseCode}</td>
@@ -756,6 +842,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
             </div>
           )}
 
+          {/* TAB 4: CAPITAL OPERATIONS GRANTS */}
           {activeTab === "grants" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
@@ -871,6 +958,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
             </div>
           )}
 
+          {/* TAB 5: COMPLIANCE REPORTS */}
           {activeTab === "reports" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
@@ -899,7 +987,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div>
                     <p>REPORT SERIAL: <span className="font-bold text-slate-800">MOE-QA-2026-MAU-SE</span></p>
-                    <p>AUDITOR IN CHARGE: <span className="font-bold text-slate-800">{user.fullName}</span></p>
+                    <p>AUDITOR IN CHARGE: <span className="font-bold text-slate-800">{currentUser.fullName}</span></p>
                   </div>
                   <div className="text-right">
                     <p>DATE COMPILED: <span className="font-bold text-slate-800">{new Date().toLocaleDateString()}</span></p>
@@ -954,18 +1042,18 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                     onClick={async () => {
                       try {
                         await CampusDatabase.addAuditLog(
-                          user.id,
-                          user.fullName,
+                          currentUser.id,
+                          currentUser.fullName,
                           "GOVERNMENT_AUDITOR",
                           "Print Quality Dossier",
                           "Report",
                           "QA_REPORT_2026",
                           "Generated and printed official PDF compliance report dossier."
                         );
+                        window.print();
                       } catch (error) {
                         console.error("Failed to print report:", error);
                       }
-                      window.print();
                     }}
                     className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md"
                   >
