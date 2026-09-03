@@ -1,4 +1,4 @@
-import { User } from "../types";
+import type { User } from "../types";
 import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
 
 export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {

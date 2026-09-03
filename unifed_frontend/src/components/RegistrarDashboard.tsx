@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Grade, SystemSettings } from "../types";
+import type { User, Grade, SystemSettings } from "../types";
 import { CampusDatabase } from "../services/api"; // ✅ Changed from mockData
 import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
 import { SmartClearancePortal } from "./SmartClearancePortal";
