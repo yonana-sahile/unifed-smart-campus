@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade } from "../types";
-import { CampusDatabase } from "../services/api"; // ✅ changed from ../mockData
+import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
 import {
   BookOpen,
@@ -39,36 +39,29 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const [exams, setExams] = useState<Exam[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
 
-  // Selected course context (defaults to SOFT401)
   const [selectedCourseId, setSelectedCourseId] = useState<string>("C_SOFT401");
 
-  // Material Creation State
   const [newMaterialTitle, setNewMaterialTitle] = useState("");
   const [newMaterialType, setNewMaterialType] = useState<"PDF" | "Video" | "Document" | "Slide">("PDF");
   const [newMaterialDesc, setNewMaterialDesc] = useState("");
 
-  // Announcement State
   const [newAnnounceTitle, setNewAnnounceTitle] = useState("");
   const [newAnnounceContent, setNewAnnounceContent] = useState("");
 
-  // Assignment State
   const [newAssignTitle, setNewAssignTitle] = useState("");
   const [newAssignDueDate, setNewAssignDueDate] = useState("2026-07-15T23:59");
   const [newAssignDesc, setNewAssignDesc] = useState("");
 
-  // Manual Exam Creation State
   const [newExamTitle, setNewExamTitle] = useState("");
   const [newExamDuration, setNewExamDuration] = useState(45);
   const [newExamInstructions, setNewExamInstructions] = useState("");
 
-  // Smart Exam Generator State
   const [smartTopic, setSmartTopic] = useState("");
   const [smartQty, setSmartQty] = useState(4);
   const [smartDifficulty, setSmartDifficulty] = useState("Medium");
   const [generatingExam, setGeneratingExam] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([]);
 
-  // Attendance Ledger (student ID -> status: present or absent)
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [attendanceMap, setAttendanceMap] = useState<{ [studentId: string]: boolean }>({
     "U_ST01": true,
@@ -76,13 +69,11 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     "U_ST03": false
   });
 
-  // Assignment Grading state
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [gradingScore, setGradingScore] = useState<number>(0);
   const [gradingFeedback, setGradingFeedback] = useState("");
 
-  // Student AI Analytics & Dropout Predictor state
-  const [analyzingStudentId, setAnalyzingStudentId] = useState<string>("U_ST03"); // Default to Tarekegn Abebe who has outstanding fees and issues
+  const [analyzingStudentId, setAnalyzingStudentId] = useState<string>("U_ST03");
   const [analyticsResult, setAnalyticsResult] = useState<any>(null);
   const [calculatingPredictor, setCalculatingPredictor] = useState(false);
 
@@ -90,22 +81,57 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     loadData();
   }, []);
 
-  const loadData = () => {
-    setCourses(CampusDatabase.getCourses().filter((c) => c.instructorId === user.id));
-    setMaterials(CampusDatabase.getMaterials());
-    setAnnouncements(CampusDatabase.getAnnouncements());
-    setAssignments(CampusDatabase.getAssignments());
-    setSubmissions(CampusDatabase.getSubmissions());
-    setExams(CampusDatabase.getExams());
-    setGrades(CampusDatabase.getGrades());
+  // ✅ FIXED: Async data loading with proper error handling
+  const loadData = async () => {
+    try {
+      const [
+        coursesData,
+        materialsData,
+        announcementsData,
+        assignmentsData,
+        submissionsData,
+        examsData,
+        gradesData,
+      ] = await Promise.all([
+        CampusDatabase.getCourses(),
+        CampusDatabase.getMaterials(),
+        CampusDatabase.getAnnouncements(),
+        CampusDatabase.getAssignments(),
+        CampusDatabase.getSubmissions(),
+        CampusDatabase.getExams(),
+        CampusDatabase.getGrades(),
+      ]);
+
+      // Filter courses for this instructor
+      const filteredCourses = Array.isArray(coursesData)
+        ? coursesData.filter((c) => c.instructorId === user.id)
+        : [];
+
+      setCourses(filteredCourses);
+      setMaterials(Array.isArray(materialsData) ? materialsData : []);
+      setAnnouncements(Array.isArray(announcementsData) ? announcementsData : []);
+      setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
+      setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
+      setExams(Array.isArray(examsData) ? examsData : []);
+      setGrades(Array.isArray(gradesData) ? gradesData : []);
+    } catch (error) {
+      console.error("Failed to load instructor data:", error);
+      setCourses([]);
+      setMaterials([]);
+      setAnnouncements([]);
+      setAssignments([]);
+      setSubmissions([]);
+      setExams([]);
+      setGrades([]);
+    }
   };
 
   const getActiveCourse = () => {
     return courses.find((c) => c.id === selectedCourseId) || courses[0];
   };
 
-  // Add Announcement
-  const handlePostAnnouncement = () => {
+  // ✅ FIXED: Async handlers with await
+  const handlePostAnnouncement = async () => {
     if (!newAnnounceTitle || !newAnnounceContent) return;
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
@@ -121,10 +147,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
 
     const updatedAnn = [newAnn, ...announcements];
-    CampusDatabase.saveAnnouncements(updatedAnn);
+    await CampusDatabase.saveAnnouncements(updatedAnn);
     setAnnouncements(updatedAnn);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "INSTRUCTOR",
@@ -139,8 +165,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("Announcement broadcasted successfully!");
   };
 
-  // Add Materials
-  const handleAddMaterial = () => {
+  const handleAddMaterial = async () => {
     if (!newMaterialTitle || !newMaterialDesc) return;
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
@@ -155,10 +180,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
 
     const updatedMats = [newMat, ...materials];
-    CampusDatabase.saveMaterials(updatedMats);
+    await CampusDatabase.saveMaterials(updatedMats);
     setMaterials(updatedMats);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "INSTRUCTOR",
@@ -173,8 +198,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("Course material uploaded and published successfully!");
   };
 
-  // Add Assignment
-  const handleAddAssignment = () => {
+  const handleAddAssignment = async () => {
     if (!newAssignTitle || !newAssignDesc) return;
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
@@ -189,10 +213,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
 
     const updatedAs = [newAs, ...assignments];
-    CampusDatabase.saveAssignments(updatedAs);
+    await CampusDatabase.saveAssignments(updatedAs);
     setAssignments(updatedAs);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "INSTRUCTOR",
@@ -207,8 +231,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("Assignment publication complete!");
   };
 
-  // Grade Submission
-  const handleGradeSubmission = () => {
+  const handleGradeSubmission = async () => {
     if (!selectedSubmission) return;
 
     const updatedSubmissions = submissions.map((s) => {
@@ -223,24 +246,23 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       return s;
     });
 
-    CampusDatabase.saveSubmissions(updatedSubmissions);
+    await CampusDatabase.saveSubmissions(updatedSubmissions);
     setSubmissions(updatedSubmissions);
 
     // Update continuous assessment score in grade object
-    const currentGrades = CampusDatabase.getGrades();
+    const currentGrades = await CampusDatabase.getGrades();
     const studentGrade = currentGrades.find(
       (g) => g.studentId === selectedSubmission.studentId && g.courseId === selectedSubmission.courseId
     );
 
     if (studentGrade) {
-      // Map score out of 100 to continuous assessment weight (max 50)
       studentGrade.continuousAssessmentScore = parseFloat(((gradingScore / 100) * 50).toFixed(1));
       studentGrade.totalGrade = studentGrade.continuousAssessmentScore + studentGrade.midExamScore + studentGrade.finalExamScore;
-      CampusDatabase.saveGrades(currentGrades);
+      await CampusDatabase.saveGrades(currentGrades);
       setGrades(currentGrades);
     }
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "INSTRUCTOR",
@@ -254,20 +276,16 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     setSelectedSubmission(null);
     setGradingFeedback("");
     setGradingScore(0);
-    loadData();
+    await loadData();
   };
 
-  // Submit Final Grade (Verification Gate)
-  const handleSubmitFinalGrade = (gradeId: string) => {
+  const handleSubmitFinalGrade = async (gradeId: string) => {
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
 
-    // UC-I-09 Check: Verify student attendance minimum before final grade submission
     const gradeObj = grades.find((g) => g.id === gradeId);
     if (!gradeObj) return;
 
-    // Simulated attendance tracking check
-    // If student is Tarekegn Abebe, his attendance is low (e.g. 70%), so warn instructor
     if (gradeObj.studentName.includes("Tarekegn") || gradeObj.studentId === "U_ST03") {
       const confirmProceed = window.confirm(
         `Attendance WARNING (UC-I-09): Student ${gradeObj.studentName} has only met 70% attendance. Current policies require 80% minimum. Do you have official clearance to proceed with grade submission?`
@@ -282,10 +300,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       return g;
     });
 
-    CampusDatabase.saveGrades(updatedGrades);
+    await CampusDatabase.saveGrades(updatedGrades);
     setGrades(updatedGrades);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "INSTRUCTOR",
@@ -298,7 +316,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("Final grade submitted to Registrar directory successfully!");
   };
 
-  // ✅ UPDATED: Smart Exam Generator using Django API
   const handleGenerateSmartExam = async () => {
     if (!smartTopic) {
       alert("Please provide a topic for smart question generation.");
@@ -331,8 +348,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
-  // Save the generated exam
-  const handleSaveGeneratedExam = () => {
+  const handleSaveGeneratedExam = async () => {
     if (generatedQuestions.length === 0) return;
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
@@ -344,7 +360,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       courseId: activeCourse.id,
       courseTitle: activeCourse.courseTitle,
       examTitle: `Smart Exam: ${smartTopic} (${smartDifficulty})`,
-      examDate: new Date(Date.now() + 86400000).toISOString().slice(0, 16), // Tomorrow
+      examDate: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
       durationMinutes: 60,
       totalMarks: totalMarks,
       instructions: "This exam was dynamically modeled and audited using the server-side AI engine. All standard testing regulations apply.",
@@ -352,11 +368,11 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       questions: generatedQuestions
     };
 
-    const currentExams = CampusDatabase.getExams();
-    CampusDatabase.saveExams([newExam, ...currentExams]);
+    const currentExams = await CampusDatabase.getExams();
+    await CampusDatabase.saveExams([newExam, ...currentExams]);
     setExams([newExam, ...currentExams]);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "INSTRUCTOR",
@@ -372,7 +388,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     setActiveTab("exams");
   };
 
-  // ✅ UPDATED: AI Dropout Risk Predictor using Django API
   const handlePredictDropoutRisk = async () => {
     setCalculatingPredictor(true);
     setAnalyticsResult(null);
@@ -390,7 +405,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="instructor_dashboard_main">
-      {/* UNIVERSITY INSTITUTIONAL HEADER */}
       <UniversityTopBar
         user={user}
         onLogout={onLogout}
@@ -400,11 +414,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         badgeType="faculty"
       />
 
-      {/* CORE WORKSPACE */}
       <div className="flex-1 flex" id="instructor_workspace_inner">
-        {/* SIDEBAR NAVIGATION */}
         <aside className="w-64 bg-[#071526] text-slate-300 flex flex-col border-r border-slate-800/80">
-          {/* Course select picker */}
           <div className="p-3.5 border-b border-slate-800/80 space-y-1.5 bg-slate-950/40">
             <label className="text-[10px] font-mono text-amber-400/90 uppercase tracking-widest font-bold">Active Course Context</label>
             <select
@@ -505,7 +516,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
           </div>
         </aside>
 
-        {/* CONTENT CONTEXT VIEW */}
         <main className="flex-1 p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
             {/* TAB: BULLETIN & SYLLABUS */}
@@ -525,7 +535,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Broadcaster form */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                     <h3 className="font-display font-bold text-slate-800 text-base flex items-center space-x-2">
                       <Volume2 className="w-5 h-5 text-primary" />
@@ -556,7 +565,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     </div>
                   </div>
 
-                  {/* Existing announcements view */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                     <h3 className="font-display font-bold text-slate-800 text-base">Active Course Announcements</h3>
                     <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto space-y-3 pr-2">
@@ -592,7 +600,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Upload Material form */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 h-fit">
                     <h3 className="font-display font-bold text-slate-800 text-base">Upload Handout</h3>
                     <div className="space-y-3 text-xs">
@@ -606,7 +613,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           onChange={(e) => setNewMaterialTitle(e.target.value)}
                         />
                       </div>
-
                       <div className="space-y-1">
                         <label className="block font-medium text-slate-600">Format Category</label>
                         <select
@@ -620,7 +626,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           <option value="Slide">Syllabus Slides</option>
                         </select>
                       </div>
-
                       <div className="space-y-1">
                         <label className="block font-medium text-slate-600">Description</label>
                         <textarea
@@ -631,7 +636,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           onChange={(e) => setNewMaterialDesc(e.target.value)}
                         />
                       </div>
-
                       <button
                         onClick={handleAddMaterial}
                         className="w-full bg-primary hover:bg-primary-600 text-white py-2.5 rounded-lg font-semibold transition"
@@ -641,7 +645,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     </div>
                   </div>
 
-                  {/* Handouts list */}
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                     <h3 className="font-display font-bold text-slate-800 text-base">Published Course Resources</h3>
                     <div className="divide-y divide-slate-100">
@@ -657,9 +660,9 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                               </span>
                             </div>
                             <button
-                              onClick={() => {
+                              onClick={async () => {
                                 const updated = materials.filter((x) => x.id !== m.id);
-                                CampusDatabase.saveMaterials(updated);
+                                await CampusDatabase.saveMaterials(updated);
                                 setMaterials(updated);
                               }}
                               className="text-slate-400 hover:text-danger p-2 transition"
@@ -690,7 +693,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Submissions List */}
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                     <h3 className="font-display font-bold text-slate-800 text-base">Student Submissions</h3>
                     <div className="divide-y divide-slate-100">
@@ -732,7 +734,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     </div>
                   </div>
 
-                  {/* Grading details panel */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 h-fit">
                     <h3 className="font-display font-bold text-slate-800 text-base">Grading Console</h3>
                     {selectedSubmission ? (
@@ -804,7 +805,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Parameter builder form */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 h-fit">
                     <h3 className="font-display font-bold text-slate-800 text-base">Generation Parameters</h3>
                     <div className="space-y-4 text-xs">
@@ -872,7 +872,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     </div>
                   </div>
 
-                  {/* Generated Questions results output */}
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-3">
                       <h3 className="font-display font-bold text-slate-800 text-base">Generated Questions Output</h3>
@@ -1077,9 +1076,9 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   </div>
 
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       alert(`Attendance saved successfully for ${attendanceDate}! Audit ledger updated.`);
-                      CampusDatabase.addAuditLog(
+                      await CampusDatabase.addAuditLog(
                         user.id,
                         user.fullName,
                         "INSTRUCTOR",
@@ -1117,7 +1116,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Select Student Selector */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 h-fit">
                     <h3 className="font-display font-bold text-slate-800 text-base">Select Student</h3>
                     <div className="space-y-3 text-xs">
@@ -1151,7 +1149,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     </div>
                   </div>
 
-                  {/* Prediction Output Results */}
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-6">
                     <h3 className="font-display font-bold text-slate-800 text-base border-b border-slate-100 pb-3">
                       Risk Prediction Report
@@ -1179,7 +1176,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           </div>
                         </div>
 
-                        {/* Metrics summary list */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                           <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                             <span className="block text-[10px] text-slate-400 font-mono">ATTENDANCE</span>
@@ -1199,7 +1195,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           </div>
                         </div>
 
-                        {/* Summary / Feedback */}
                         <div className="space-y-2">
                           <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">Advisor Evaluation & Justification</span>
                           <p className="bg-blue-50/30 text-slate-700 p-4 rounded-xl border border-blue-50 text-xs md:text-sm leading-relaxed">
@@ -1207,7 +1202,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           </p>
                         </div>
 
-                        {/* Recommendations / Interventions */}
                         {(analyticsResult.interventions || analyticsResult.keyRiskFactors) && (
                           <div className="space-y-2">
                             <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">Intervention Protocols</span>
@@ -1233,7 +1227,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         </main>
       </div>
 
-      {/* INSTITUTIONAL FOOTER */}
       <AcademicFooter />
     </div>
   );
