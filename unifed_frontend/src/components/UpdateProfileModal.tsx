@@ -1,6 +1,6 @@
 import { useState, useRef, ChangeEvent, FormEvent } from "react";
 import { User } from "../types";
-import { CampusDatabase } from "../mockData";
+import { CampusDatabase } from "../services/api"; // ✅ Changed from mockData
 import { EthiopianFlag, UniversitySeal } from "./UniversityHeader";
 import {
   X,
@@ -157,7 +157,8 @@ export function UpdateProfileModal({
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  // ✅ FIXED: Async handleSubmit with proper error handling
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
     setSuccessMessage("");
@@ -198,7 +199,7 @@ export function UpdateProfileModal({
 
     setIsSubmitting(true);
 
-    setTimeout(() => {
+    try {
       const updatedUser: User = {
         ...user,
         fullName: fullName.trim(),
@@ -208,8 +209,8 @@ export function UpdateProfileModal({
         password: updatedPassword
       };
 
-      // 1. Update in CampusDatabase
-      CampusDatabase.updateUser(updatedUser);
+      // 1. Update in CampusDatabase via API
+      await CampusDatabase.updateUser(updatedUser);
 
       // 2. Update in current user session
       localStorage.setItem("uscms_current_user", JSON.stringify(updatedUser));
@@ -217,27 +218,35 @@ export function UpdateProfileModal({
       // 3. Dispatch system-wide broadcast event
       window.dispatchEvent(new CustomEvent("uscms_user_updated", { detail: updatedUser }));
 
-      // 4. Log in institutional audit trail
-      CampusDatabase.addAuditLog(
-        user.id,
-        updatedUser.fullName,
-        user.role,
-        "Update User Profile & Security Credentials",
-        "User",
-        user.id,
-        `User successfully updated profile credentials (Name: ${updatedUser.fullName}${wantPasswordChange ? ", Password Changed" : ""}${avatarUrl !== user.avatarUrl ? ", Avatar Updated" : ""}).`
-      );
+      // 4. Log in institutional audit trail (non-blocking)
+      try {
+        await CampusDatabase.addAuditLog(
+          user.id,
+          updatedUser.fullName,
+          user.role,
+          "Update User Profile & Security Credentials",
+          "User",
+          user.id,
+          `User successfully updated profile credentials (Name: ${updatedUser.fullName}${wantPasswordChange ? ", Password Changed" : ""}${avatarUrl !== user.avatarUrl ? ", Avatar Updated" : ""}).`
+        );
+      } catch (auditErr) {
+        console.warn("Audit log failed:", auditErr);
+      }
 
       // 5. Notify parent component
       onProfileUpdated(updatedUser);
 
-      setIsSubmitting(false);
       setSuccessMessage("Your profile and credentials have been updated successfully! • መገለጫዎ በተሳካ ሁኔታ ተዘምኗል!");
 
       setTimeout(() => {
         onClose();
       }, 1200);
-    }, 600);
+    } catch (error) {
+      console.error("Failed to update profile:", error);
+      setErrorMessage("Failed to update profile. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const getRoleDisplayName = (role: string) => {
