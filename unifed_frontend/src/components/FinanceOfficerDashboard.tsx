@@ -56,13 +56,32 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
     loadData();
   }, []);
 
-  const loadData = () => {
-    setPayments(CampusDatabase.getPayments());
-    setScholarships(CampusDatabase.getScholarships());
-    setStudents(CampusDatabase.getUsers().filter((u) => u.role === "STUDENT"));
+  // ✅ FIXED: Async data loading with proper error handling
+  const loadData = async () => {
+    try {
+      const [
+        paymentsData,
+        scholarshipsData,
+        usersData,
+      ] = await Promise.all([
+        CampusDatabase.getPayments(),
+        CampusDatabase.getScholarships(),
+        CampusDatabase.getUsers(),
+      ]);
+
+      setPayments(Array.isArray(paymentsData) ? paymentsData : []);
+      setScholarships(Array.isArray(scholarshipsData) ? scholarshipsData : []);
+      setStudents(Array.isArray(usersData) ? usersData.filter((u) => u.role === "STUDENT") : []);
+    } catch (error) {
+      console.error("Failed to load finance data:", error);
+      setPayments([]);
+      setScholarships([]);
+      setStudents([]);
+    }
   };
 
-  const handleVerifyPayment = (paymentId: string) => {
+  // ✅ FIXED: Async payment verification
+  const handleVerifyPayment = async (paymentId: string) => {
     const receiptNum = "MAU-REC-" + Math.floor(Math.random() * 90000 + 10000);
     const updated = payments.map((p) => {
       if (p.id === paymentId) {
@@ -76,61 +95,73 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
       return p;
     });
 
-    CampusDatabase.savePayments(updated);
-    setPayments(updated);
-
-    // Update student's balance if it was cost sharing or fee
-    const payment = payments.find((p) => p.id === paymentId);
-    if (payment) {
-      const allUsers = CampusDatabase.getUsers();
-      const updatedUsers = allUsers.map((u) => {
-        if (u.id === payment.studentId) {
-          const currentFees = u.outstandingFees || 0;
-          const currentCostSharing = u.costSharingBalance || 0;
-          return {
-            ...u,
-            outstandingFees: Math.max(0, currentFees - payment.amount),
-            costSharingBalance: payment.paymentType === "COST_SHARING" ? Math.max(0, currentCostSharing - payment.amount) : currentCostSharing
-          };
-        }
-        return u;
-      });
-      CampusDatabase.saveUsers(updatedUsers);
-      setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
-
-      CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
-        "FINANCE_OFFICER",
-        "Verify Payment",
-        "PaymentTransaction",
-        paymentId,
-        `Verified ${payment.paymentMethod} transaction of ${payment.amount} ETB for student ${payment.studentName} (Ref: ${payment.referenceNumber}). Issued receipt ${receiptNum}.`
-      );
-    }
-
-    alert(`Payment verified successfully! Receipt Number: ${receiptNum}`);
-  };
-
-  const handleRejectPayment = (paymentId: string) => {
-    if (window.confirm("Are you sure you want to reject this payment transaction?")) {
-      const updated = payments.map((p) => (p.id === paymentId ? { ...p, status: "REJECTED" as const } : p));
-      CampusDatabase.savePayments(updated);
+    try {
+      await CampusDatabase.savePayments(updated);
       setPayments(updated);
 
-      CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
-        "FINANCE_OFFICER",
-        "Reject Payment",
-        "PaymentTransaction",
-        paymentId,
-        `Rejected fraudulent or invalid payment reference.`
-      );
+      // Update student's balance if it was cost sharing or fee
+      const payment = payments.find((p) => p.id === paymentId);
+      if (payment) {
+        const allUsers = await CampusDatabase.getUsers();
+        const updatedUsers = allUsers.map((u) => {
+          if (u.id === payment.studentId) {
+            const currentFees = u.outstandingFees || 0;
+            const currentCostSharing = u.costSharingBalance || 0;
+            return {
+              ...u,
+              outstandingFees: Math.max(0, currentFees - payment.amount),
+              costSharingBalance: payment.paymentType === "COST_SHARING" ? Math.max(0, currentCostSharing - payment.amount) : currentCostSharing
+            };
+          }
+          return u;
+        });
+        await CampusDatabase.saveUsers(updatedUsers);
+        setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
+
+        await CampusDatabase.addAuditLog(
+          user.id,
+          user.fullName,
+          "FINANCE_OFFICER",
+          "Verify Payment",
+          "PaymentTransaction",
+          paymentId,
+          `Verified ${payment.paymentMethod} transaction of ${payment.amount} ETB for student ${payment.studentName} (Ref: ${payment.referenceNumber}). Issued receipt ${receiptNum}.`
+        );
+      }
+
+      alert(`Payment verified successfully! Receipt Number: ${receiptNum}`);
+    } catch (error) {
+      console.error("Failed to verify payment:", error);
+      alert("Failed to verify payment. Please try again.");
     }
   };
 
-  const handleCollectFeeManual = (e: FormEvent) => {
+  // ✅ FIXED: Async payment rejection
+  const handleRejectPayment = async (paymentId: string) => {
+    if (window.confirm("Are you sure you want to reject this payment transaction?")) {
+      try {
+        const updated = payments.map((p) => (p.id === paymentId ? { ...p, status: "REJECTED" as const } : p));
+        await CampusDatabase.savePayments(updated);
+        setPayments(updated);
+
+        await CampusDatabase.addAuditLog(
+          user.id,
+          user.fullName,
+          "FINANCE_OFFICER",
+          "Reject Payment",
+          "PaymentTransaction",
+          paymentId,
+          `Rejected fraudulent or invalid payment reference.`
+        );
+      } catch (error) {
+        console.error("Failed to reject payment:", error);
+        alert("Failed to reject payment. Please try again.");
+      }
+    }
+  };
+
+  // ✅ FIXED: Async manual fee collection
+  const handleCollectFeeManual = async (e: FormEvent) => {
     e.preventDefault();
     const student = students.find((s) => s.id === selectedStudentId);
     if (!student) {
@@ -153,38 +184,45 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
       verifiedBy: user.fullName
     };
 
-    const updatedPayments = [newTx, ...payments];
-    CampusDatabase.savePayments(updatedPayments);
-    setPayments(updatedPayments);
+    try {
+      const updatedPayments = [newTx, ...payments];
+      await CampusDatabase.savePayments(updatedPayments);
+      setPayments(updatedPayments);
 
-    // Deduct student outstanding fees
-    const allUsers = CampusDatabase.getUsers();
-    const updatedUsers = allUsers.map((u) => {
-      if (u.id === student.id) {
-        const fees = u.outstandingFees || 0;
-        return { ...u, outstandingFees: Math.max(0, fees - Number(feeAmount)) };
-      }
-      return u;
-    });
-    CampusDatabase.saveUsers(updatedUsers);
-    setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
+      // Deduct student outstanding fees
+      const allUsers = await CampusDatabase.getUsers();
+      const updatedUsers = allUsers.map((u) => {
+        if (u.id === student.id) {
+          const fees = u.outstandingFees || 0;
+          return { ...u, outstandingFees: Math.max(0, fees - Number(feeAmount)) };
+        }
+        return u;
+      });
+      await CampusDatabase.saveUsers(updatedUsers);
+      setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
 
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "FINANCE_OFFICER",
-      "Process Fee Payment",
-      "PaymentTransaction",
-      newTx.id,
-      `Manually processed ${feeAmount} ETB fee payment for ${student.fullName} via ${feeMethod}. Issued receipt ${receiptNum}.`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "FINANCE_OFFICER",
+        "Process Fee Payment",
+        "PaymentTransaction",
+        newTx.id,
+        `Manually processed ${feeAmount} ETB fee payment for ${student.fullName} via ${feeMethod}. Issued receipt ${receiptNum}.`
+      );
 
-    setActiveReceipt(newTx);
-    setSelectedStudentId("");
-    setReferenceInput("");
+      setActiveReceipt(newTx);
+      setSelectedStudentId("");
+      setReferenceInput("");
+      alert(`Payment of ${feeAmount} ETB processed successfully!`);
+    } catch (error) {
+      console.error("Failed to process fee:", error);
+      alert("Failed to process fee. Please try again.");
+    }
   };
 
-  const handleAwardScholarship = (e: FormEvent) => {
+  // ✅ FIXED: Async scholarship award
+  const handleAwardScholarship = async (e: FormEvent) => {
     e.preventDefault();
     const student = students.find((s) => s.id === schStudentId);
     if (!student) {
@@ -204,37 +242,43 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
       issuedDate: new Date().toISOString().split("T")[0]
     };
 
-    const updatedScholarships = [newSch, ...scholarships];
-    CampusDatabase.saveScholarships(updatedScholarships);
-    setScholarships(updatedScholarships);
+    try {
+      const updatedScholarships = [newSch, ...scholarships];
+      await CampusDatabase.saveScholarships(updatedScholarships);
+      setScholarships(updatedScholarships);
 
-    // Credit student fees or cost sharing
-    const allUsers = CampusDatabase.getUsers();
-    const updatedUsers = allUsers.map((u) => {
-      if (u.id === student.id) {
-        const currentCost = u.costSharingBalance || 0;
-        return { ...u, costSharingBalance: Math.max(0, currentCost - Number(schAmount)) };
-      }
-      return u;
-    });
-    CampusDatabase.saveUsers(updatedUsers);
-    setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
+      // Credit student fees or cost sharing
+      const allUsers = await CampusDatabase.getUsers();
+      const updatedUsers = allUsers.map((u) => {
+        if (u.id === student.id) {
+          const currentCost = u.costSharingBalance || 0;
+          return { ...u, costSharingBalance: Math.max(0, currentCost - Number(schAmount)) };
+        }
+        return u;
+      });
+      await CampusDatabase.saveUsers(updatedUsers);
+      setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
 
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "FINANCE_OFFICER",
-      "Award Scholarship",
-      "Scholarship",
-      newSch.id,
-      `Awarded ${schAmount} ETB ${schType} grant to ${student.fullName}.`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "FINANCE_OFFICER",
+        "Award Scholarship",
+        "Scholarship",
+        newSch.id,
+        `Awarded ${schAmount} ETB ${schType} grant to ${student.fullName}.`
+      );
 
-    alert(`Scholarship of ${schAmount} ETB awarded and credited to ${student.fullName}!`);
-    setSchStudentId("");
+      alert(`Scholarship of ${schAmount} ETB awarded and credited to ${student.fullName}!`);
+      setSchStudentId("");
+    } catch (error) {
+      console.error("Failed to award scholarship:", error);
+      alert("Failed to award scholarship. Please try again.");
+    }
   };
 
-  const filteredPayments = payments.filter((p) => {
+  // Filtered payments with safe array check
+  const filteredPayments = Array.isArray(payments) ? payments.filter((p) => {
     const matchesSearch =
       p.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.referenceNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -242,13 +286,20 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
     const matchesMethod = selectedMethodFilter === "ALL" || p.paymentMethod === selectedMethodFilter;
     const matchesStatus = selectedStatusFilter === "ALL" || p.status === selectedStatusFilter;
     return matchesSearch && matchesMethod && matchesStatus;
-  });
+  }) : [];
 
-  const totalVerified = payments
-    .filter((p) => p.status === "VERIFIED")
-    .reduce((sum, p) => sum + p.amount, 0);
+  const totalVerified = Array.isArray(payments)
+    ? payments.filter((p) => p.status === "VERIFIED").reduce((sum, p) => sum + p.amount, 0)
+    : 0;
 
-  const pendingVerificationCount = payments.filter((p) => p.status === "PENDING").length;
+  const pendingVerificationCount = Array.isArray(payments)
+    ? payments.filter((p) => p.status === "PENDING").length
+    : 0;
+
+  // Safe students reduce for cost sharing debt pool
+  const totalCostSharingDebt = Array.isArray(students)
+    ? students.reduce((sum, s) => sum + (s.costSharingBalance || 0), 0)
+    : 0;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#071526] flex flex-col font-sans" id="finance_dashboard_main">
@@ -388,7 +439,7 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
                   <span className="text-xs font-mono font-bold text-slate-400 uppercase">Cost Sharing Debt Pool</span>
                   <p className="text-2xl md:text-3xl font-serif font-bold text-primary mt-1">
-                    {students.reduce((sum, s) => sum + (s.costSharingBalance || 0), 0).toLocaleString()} ETB
+                    {totalCostSharingDebt.toLocaleString()} ETB
                   </p>
                   <span className="text-[11px] text-slate-500 font-medium">MoE national graduate ledger</span>
                 </div>
@@ -827,17 +878,22 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
 
                 <div className="pt-4 flex justify-end">
                   <button
-                    onClick={() => {
-                      CampusDatabase.addAuditLog(
-                        user.id,
-                        user.fullName,
-                        "FINANCE_OFFICER",
-                        "Export Financial Report",
-                        "Report",
-                        "FIN_REP_2026",
-                        "Exported official revenue and cost sharing audit dossier (PDF)."
-                      );
-                      alert("Official University Financial Statement PDF exported successfully!");
+                    onClick={async () => {
+                      try {
+                        await CampusDatabase.addAuditLog(
+                          user.id,
+                          user.fullName,
+                          "FINANCE_OFFICER",
+                          "Export Financial Report",
+                          "Report",
+                          "FIN_REP_2026",
+                          "Exported official revenue and cost sharing audit dossier (PDF)."
+                        );
+                        alert("Official University Financial Statement PDF exported successfully!");
+                      } catch (error) {
+                        console.error("Failed to export report:", error);
+                        alert("Failed to export report. Please try again.");
+                      }
                     }}
                     className="bg-primary hover:bg-primary/90 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs flex items-center space-x-2"
                   >
@@ -897,9 +953,7 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
 
             <div className="pt-3 flex space-x-2">
               <button
-                onClick={() => {
-                  window.print();
-                }}
+                onClick={() => window.print()}
                 className="flex-1 bg-primary hover:bg-primary/90 text-white font-semibold py-2.5 rounded-xl text-xs flex items-center justify-center space-x-1.5"
               >
                 <Download className="w-3.5 h-3.5" />

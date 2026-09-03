@@ -54,11 +54,19 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
     loadData();
   }, []);
 
-  const loadData = () => {
-    setResources(CampusDatabase.getLibraryResources());
+  // ✅ FIXED: Async data loading with proper error handling
+  const loadData = async () => {
+    try {
+      const resourcesData = await CampusDatabase.getLibraryResources();
+      setResources(Array.isArray(resourcesData) ? resourcesData : []);
+    } catch (error) {
+      console.error("Failed to load library resources:", error);
+      setResources([]);
+    }
   };
 
-  const handleUploadResource = (e: FormEvent) => {
+  // ✅ FIXED: Async upload handler
+  const handleUploadResource = async (e: FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newAuthor) {
       alert("Please specify the title and author of the resource.");
@@ -66,7 +74,8 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
     }
 
     setUploading(true);
-    setTimeout(() => {
+
+    try {
       const newRes: LibraryResource = {
         id: "LIB_" + Date.now(),
         title: newTitle,
@@ -83,10 +92,10 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
       };
 
       const updated = [newRes, ...resources];
-      CampusDatabase.saveLibraryResources(updated);
+      await CampusDatabase.saveLibraryResources(updated);
       setResources(updated);
 
-      CampusDatabase.addAuditLog(
+      await CampusDatabase.addAuditLog(
         user.id,
         user.fullName,
         "LIBRARY_STAFF",
@@ -96,7 +105,6 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
         `Cataloged and published new ${newResourceType.toLowerCase()}: "${newTitle}" by ${newAuthor}`
       );
 
-      setUploading(false);
       alert(`Resource "${newTitle}" successfully added to the University Digital Repository!`);
 
       // Reset form
@@ -106,28 +114,54 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
       setNewDescription("");
       setUploadFileName("");
       setActiveTab("catalog");
-    }, 800);
-  };
-
-  const handleDeleteResource = (resourceId: string, title: string) => {
-    if (window.confirm(`Are you sure you want to remove "${title}" from the digital library catalog?`)) {
-      const updated = resources.filter((r) => r.id !== resourceId);
-      CampusDatabase.saveLibraryResources(updated);
-      setResources(updated);
-
-      CampusDatabase.addAuditLog(
-        user.id,
-        user.fullName,
-        "LIBRARY_STAFF",
-        "Delete E-Resource",
-        "LibraryResource",
-        resourceId,
-        `Removed resource "${title}" from the digital library catalog.`
-      );
+    } catch (error) {
+      console.error("Failed to upload resource:", error);
+      alert("Failed to upload resource. Please try again.");
+    } finally {
+      setUploading(false);
     }
   };
 
-  const filteredResources = resources.filter((r) => {
+  // ✅ FIXED: Async delete handler
+  const handleDeleteResource = async (resourceId: string, title: string) => {
+    if (window.confirm(`Are you sure you want to remove "${title}" from the digital library catalog?`)) {
+      try {
+        const updated = resources.filter((r) => r.id !== resourceId);
+        await CampusDatabase.saveLibraryResources(updated);
+        setResources(updated);
+
+        await CampusDatabase.addAuditLog(
+          user.id,
+          user.fullName,
+          "LIBRARY_STAFF",
+          "Delete E-Resource",
+          "LibraryResource",
+          resourceId,
+          `Removed resource "${title}" from the digital library catalog.`
+        );
+      } catch (error) {
+        console.error("Failed to delete resource:", error);
+        alert("Failed to delete resource. Please try again.");
+      }
+    }
+  };
+
+  // ✅ FIXED: Async download handler
+  const handleDownloadResource = async (resourceId: string, title: string, fileSize: string) => {
+    try {
+      const updated = resources.map((r) =>
+        r.id === resourceId ? { ...r, downloadsCount: r.downloadsCount + 1 } : r
+      );
+      await CampusDatabase.saveLibraryResources(updated);
+      setResources(updated);
+      alert(`Simulating secure download for "${title}" (${fileSize})`);
+    } catch (error) {
+      console.error("Failed to update download count:", error);
+      alert("Download simulation failed. Please try again.");
+    }
+  };
+
+  const filteredResources = Array.isArray(resources) ? resources.filter((r) => {
     const matchesSearch =
       r.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       r.author.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -135,9 +169,9 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
     const matchesCategory = selectedCategory === "ALL" || r.category === selectedCategory;
     const matchesType = selectedType === "ALL" || r.resourceType === selectedType;
     return matchesSearch && matchesCategory && matchesType;
-  });
+  }) : [];
 
-  const totalDownloads = resources.reduce((sum, r) => sum + r.downloadsCount, 0);
+  const totalDownloads = Array.isArray(resources) ? resources.reduce((sum, r) => sum + r.downloadsCount, 0) : 0;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#071526] flex flex-col font-sans" id="library_dashboard_main">
@@ -341,14 +375,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
 
                       <div className="flex items-center space-x-2">
                         <button
-                          onClick={() => {
-                            const updated = resources.map((r) =>
-                              r.id === res.id ? { ...r, downloadsCount: r.downloadsCount + 1 } : r
-                            );
-                            CampusDatabase.saveLibraryResources(updated);
-                            setResources(updated);
-                            alert(`Simulating secure download for "${res.title}" (${res.fileSize})`);
-                          }}
+                          onClick={() => handleDownloadResource(res.id, res.title, res.fileSize)}
                           className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
                           title="Download asset"
                         >
@@ -623,8 +650,8 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
 
                 <div className="grid grid-cols-2 gap-4 text-xs font-mono p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                   <div>
-                    <p>TOTAL E-BOOKS: <span className="font-bold text-slate-800 dark:text-white">{resources.filter(r => r.resourceType === "BOOK").length}</span></p>
-                    <p>TOTAL VIDEO LECTURES: <span className="font-bold text-slate-800 dark:text-white">{resources.filter(r => r.resourceType === "VIDEO").length}</span></p>
+                    <p>TOTAL E-BOOKS: <span className="font-bold text-slate-800 dark:text-white">{Array.isArray(resources) ? resources.filter(r => r.resourceType === "BOOK").length : 0}</span></p>
+                    <p>TOTAL VIDEO LECTURES: <span className="font-bold text-slate-800 dark:text-white">{Array.isArray(resources) ? resources.filter(r => r.resourceType === "VIDEO").length : 0}</span></p>
                   </div>
                   <div className="text-right">
                     <p>TOTAL DOWNLOADS: <span className="font-bold text-emerald-600">{totalDownloads}</span></p>
@@ -638,17 +665,22 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
 
                 <div className="pt-4 flex justify-end">
                   <button
-                    onClick={() => {
-                      CampusDatabase.addAuditLog(
-                        user.id,
-                        user.fullName,
-                        "LIBRARY_STAFF",
-                        "Generate Library Report",
-                        "Report",
-                        "LIB_REP_2026",
-                        "Generated and downloaded official digital library usage and dissemination report."
-                      );
-                      alert("Official Library Summary PDF Report successfully exported!");
+                    onClick={async () => {
+                      try {
+                        await CampusDatabase.addAuditLog(
+                          user.id,
+                          user.fullName,
+                          "LIBRARY_STAFF",
+                          "Generate Library Report",
+                          "Report",
+                          "LIB_REP_2026",
+                          "Generated and downloaded official digital library usage and dissemination report."
+                        );
+                        alert("Official Library Summary PDF Report successfully exported!");
+                      } catch (error) {
+                        console.error("Failed to generate report:", error);
+                        alert("Failed to generate report. Please try again.");
+                      }
                     }}
                     className="bg-primary hover:bg-primary/90 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs flex items-center space-x-2"
                   >
