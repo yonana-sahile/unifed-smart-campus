@@ -1,5 +1,5 @@
 import { useState, useRef, ChangeEvent, FormEvent } from "react";
-import { User } from "../types";
+import type { User } from "../types";
 import { CampusDatabase } from "../services/api"; // ✅ Changed from mockData
 import { EthiopianFlag, UniversitySeal } from "./UniversityHeader";
 import {

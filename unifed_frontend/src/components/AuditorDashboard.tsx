@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Grade, AuditLog } from "../types";
+import type { User, Grade, AuditLog } from "../types";
 import { CampusDatabase } from "../services/api"; // ✅ Changed from mockData
 import { AcademicFooter, EthiopianFlag } from "./UniversityHeader";
 import { UpdateProfileModal } from "./UpdateProfileModal";
