@@ -369,10 +369,7 @@ const mockAuditLogs: AuditLog[] = [
   },
 ];
 
-// ... add other necessary mock arrays (materials, assignments, submissions, exams, etc.)
-// For brevity, we can leave them as empty arrays if not immediately needed.
-// But to be safe, add minimal ones.
-
+// ... other empty mock arrays
 const mockMaterials: CourseMaterial[] = [];
 const mockAssignments: Assignment[] = [];
 const mockSubmissions: Submission[] = [];
@@ -423,6 +420,10 @@ export const getUsers = (): Promise<User[]> =>
   withMock(mockUsers, () => api.get('/users/').then(r => r.data));
 export const saveUsers = (users: User[]): Promise<User[]> =>
   withMock(users, () => api.put('/users/', users).then(r => r.data));
+
+// ✅ NEW: Update a single user
+export const updateUser = (user: User): Promise<User> =>
+  withMock(user, () => api.put(`/users/${user.id}/`, user).then(r => r.data));
 
 // ---------- COURSES ----------
 export const getCourses = (): Promise<Course[]> =>
@@ -683,6 +684,7 @@ export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
 export const CampusDatabase = {
   getUsers,
   saveUsers,
+  updateUser, // ✅ NEW
   getCourses,
   saveCourses,
   getMaterials,
