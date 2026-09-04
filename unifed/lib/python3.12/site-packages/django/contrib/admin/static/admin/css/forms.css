@@ -24,28 +24,24 @@ form .form-row p {
 
 .flex-container {
     display: flex;
-}
-
-.form-multiline {
     flex-wrap: wrap;
 }
 
-.form-multiline > div,
-.form-multiline > fieldset {
+.form-multiline > div {
     padding-bottom: 10px;
 }
 
 /* FORM LABELS */
 
-legend, label {
+label {
     font-weight: normal;
     color: var(--body-quiet-color);
     font-size: 0.8125rem;
 }
 
-.required legend, legend.required,
 .required label, label.required {
     font-weight: bold;
+    color: var(--body-fg);
 }
 
 /* RADIO BUTTONS */
@@ -77,48 +73,21 @@ form ul.inline li {
     padding-right: 7px;
 }
 
-/* FIELDSETS */
-
-fieldset .fieldset-heading,
-fieldset .inline-heading,
-:not(.inline-related) .collapse summary {
-    border: 1px solid var(--header-bg);
-    margin: 0;
-    padding: 8px;
-    font-weight: 400;
-    font-size: 0.8125rem;
-    background: var(--header-bg);
-    color: var(--header-link-color);
-}
-
 /* ALIGNED FIELDSETS */
 
-.aligned fieldset {
-    flex-grow: 1;
-    border-top: none;
-}
-
-.aligned fieldset > div {
-    width: 100%;
-}
-
-.aligned legend {
-    float: inline-start;
-}
-
-.aligned legend,
 .aligned label {
     display: block;
     padding: 4px 10px 0 0;
-    min-width: 160px;
     width: 160px;
     word-wrap: break-word;
+    line-height: 1;
 }
 
 .aligned label:not(.vCheckboxLabel):after {
     content: '';
     display: inline-block;
     vertical-align: middle;
+    height: 1.625rem;
 }
 
 .aligned label + p, .aligned .checkbox-row + div.help, .aligned label + div.readonly {
@@ -149,7 +118,7 @@ form .aligned ul {
 }
 
 form .aligned div.radiolist {
-    display: block;
+    display: inline-block;
     margin: 0;
     padding: 0;
 }
@@ -185,10 +154,6 @@ form .aligned select + div.help {
     padding-left: 10px;
 }
 
-form .aligned select option:checked {
-    background-color: var(--selected-row);
-}
-
 form .aligned ul li {
     list-style: none;
 }
@@ -199,7 +164,11 @@ form .aligned table p {
 }
 
 .aligned .vCheckboxLabel {
-    padding: 1px 0 0 5px;
+    float: none;
+    width: auto;
+    display: inline-block;
+    vertical-align: -3px;
+    padding: 0 0 5px 5px;
 }
 
 .aligned .vCheckboxLabel + p.help,
@@ -217,13 +186,18 @@ fieldset .fieldBox {
 
 /* WIDE FIELDSETS */
 
-.wide label,
-.wide legend {
+.wide label {
     width: 200px;
 }
 
-form .wide p.help,
+form .wide p,
 form .wide ul.errorlist,
+form .wide input + p.help,
+form .wide input + div.help {
+    margin-left: 200px;
+}
+
+form .wide p.help,
 form .wide div.help {
     padding-left: 50px;
 }
@@ -237,16 +211,35 @@ form div.help ul {
     width: 450px;
 }
 
-/* COLLAPSIBLE FIELDSETS */
+/* COLLAPSED FIELDSETS */
 
-.collapse summary .fieldset-heading,
-.collapse summary .inline-heading {
+fieldset.collapsed * {
+    display: none;
+}
+
+fieldset.collapsed h2, fieldset.collapsed {
+    display: block;
+}
+
+fieldset.collapsed {
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+fieldset.collapsed h2 {
+    background: var(--darkened-bg);
+    color: var(--body-quiet-color);
+}
+
+fieldset .collapse-toggle {
+    color: var(--header-link-color);
+}
+
+fieldset.collapsed .collapse-toggle {
     background: transparent;
-    border: none;
-    color: currentColor;
     display: inline;
-    margin: 0;
-    padding: 0;
+    color: var(--link-fg);
 }
 
 /* MONOSPACE TEXTAREAS */
@@ -355,7 +348,7 @@ body.popup .submit-row {
     width: 48em;
 }
 
-.app-flatpages.model-flatpage #id_content {
+.flatpages-flatpage #id_content {
     height: 40.2em;
 }
 
@@ -398,16 +391,14 @@ body.popup .submit-row {
     position: relative;
 }
 
-.inline-related h4,
-.inline-related:not(.tabular) .collapse summary {
+.inline-related h3 {
     margin: 0;
-    color: var(--body-medium-color);
+    color: var(--body-quiet-color);
     padding: 5px;
     font-size: 0.8125rem;
     background: var(--darkened-bg);
-    border: 1px solid var(--hairline-color);
-    border-left-color: var(--darkened-bg);
-    border-right-color: var(--darkened-bg);
+    border-top: 1px solid var(--hairline-color);
+    border-bottom: 1px solid var(--hairline-color);
 }
 
 .inline-related h3 span.delete {
@@ -426,16 +417,23 @@ body.popup .submit-row {
     width: 100%;
 }
 
+.inline-related fieldset.module h3 {
+    margin: 0;
+    padding: 2px 5px 3px 5px;
+    font-size: 0.6875rem;
+    text-align: left;
+    font-weight: bold;
+    background: #bcd;
+    color: var(--body-bg);
+}
+
 .inline-group .tabular fieldset.module {
     border: none;
 }
 
-.inline-related.tabular div.wrapper {
-    overflow-x: auto;
-}
-
 .inline-related.tabular fieldset.module table {
     width: 100%;
+    overflow-x: scroll;
 }
 
 .last-related fieldset {
@@ -449,6 +447,7 @@ body.popup .submit-row {
 .inline-group .tabular tr td.original {
     padding: 2px 0 0 0;
     width: 0;
+    _position: relative;
 }
 
 .inline-group .tabular th.original {
@@ -456,19 +455,27 @@ body.popup .submit-row {
     padding: 0;
 }
 
-.inline-group .tabular td {
-    font-size: 1rem;
-}
-
 .inline-group .tabular td.original p {
     position: absolute;
     left: 0;
-    height: 1.2em;
+    height: 1.1em;
     padding: 2px 9px;
     overflow: hidden;
-    font-size: 0.875rem;
+    font-size: 0.5625rem;
     font-weight: bold;
     color: var(--body-quiet-color);
+    _width: 700px;
+}
+
+.inline-group ul.tools {
+    padding: 0;
+    margin: 0;
+    list-style: none;
+}
+
+.inline-group ul.tools li {
+    display: inline;
+    padding: 0 5px;
 }
 
 .inline-group div.add-row,
@@ -484,8 +491,11 @@ body.popup .submit-row {
     border-bottom: 1px solid var(--hairline-color);
 }
 
+.inline-group ul.tools a.add,
 .inline-group div.add-row a,
 .inline-group .tabular tr.add-row td a {
+    background: url(../img/icon-addlink.svg) 0 1px no-repeat;
+    padding-left: 16px;
     font-size: 0.75rem;
 }
 

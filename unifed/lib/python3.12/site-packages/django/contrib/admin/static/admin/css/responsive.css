@@ -43,7 +43,7 @@ input[type="submit"], button {
         justify-content: flex-start;
     }
 
-    #site-name {
+    #branding h1 {
         margin: 0 0 8px;
         line-height: 1.2;
     }
@@ -170,16 +170,10 @@ input[type="submit"], button {
 
     /* Forms */
 
-    legend,
     label {
-        font-size: 1rem;
+        font-size: 0.875rem;
     }
 
-    /*
-    Minifiers remove the default (text) "type" attribute from "input" HTML
-    tags. Add input:not([type]) to make the CSS stylesheet work the same.
-    */
-    .form-row input:not([type]),
     .form-row input[type=text],
     .form-row input[type=password],
     .form-row input[type=email],
@@ -193,7 +187,7 @@ input[type="submit"], button {
         margin: 0;
         padding: 6px 8px;
         min-height: 2.25rem;
-        font-size: 1rem;
+        font-size: 0.875rem;
     }
 
     .form-row select {
@@ -243,6 +237,22 @@ input[type="submit"], button {
         padding: 7px;
     }
 
+    /* Related widget */
+
+    .related-widget-wrapper {
+        float: none;
+    }
+
+    .related-widget-wrapper-link + .selector {
+        max-width: calc(100% - 30px);
+        margin-right: 15px;
+    }
+
+    select + .related-widget-wrapper-link,
+    .related-widget-wrapper-link + .related-widget-wrapper-link {
+        margin-left: 10px;
+    }
+
     /* Selector */
 
     .selector {
@@ -255,8 +265,12 @@ input[type="submit"], button {
         align-items: center;
     }
 
+    .selector .selector-filter label {
+        margin: 0 8px 0 0;
+    }
+
     .selector .selector-filter input {
-        width: 100%;
+        width: auto;
         min-height: 0;
         flex: 1 1;
     }
@@ -274,7 +288,30 @@ input[type="submit"], button {
         margin-bottom: 5px;
     }
 
-    .selector-chooseall, .selector-clearall {
+    .selector ul.selector-chooser {
+        width: 26px;
+        height: 52px;
+        padding: 2px 0;
+        margin: auto 15px;
+        border-radius: 20px;
+        transform: translateY(-10px);
+    }
+
+    .selector-add, .selector-remove {
+        width: 20px;
+        height: 20px;
+        background-size: 20px auto;
+    }
+
+    .selector-add {
+        background-position: 0 -120px;
+    }
+
+    .selector-remove {
+        background-position: 0 -80px;
+    }
+
+    a.selector-chooseall, a.selector-clearall {
         align-self: center;
     }
 
@@ -296,12 +333,51 @@ input[type="submit"], button {
     }
 
     .stacked ul.selector-chooser {
+        width: 52px;
+        height: 26px;
         padding: 0 2px;
+        margin: 15px auto;
         transform: none;
     }
 
     .stacked .selector-chooser li {
         padding: 3px;
+    }
+
+    .stacked .selector-add, .stacked .selector-remove {
+        background-size: 20px auto;
+    }
+
+    .stacked .selector-add {
+        background-position: 0 -40px;
+    }
+
+    .stacked .active.selector-add {
+        background-position: 0 -40px;
+    }
+
+    .active.selector-add:focus, .active.selector-add:hover {
+        background-position: 0 -140px;
+    }
+
+    .stacked .active.selector-add:focus, .stacked .active.selector-add:hover {
+        background-position: 0 -60px;
+    }
+
+    .stacked .selector-remove {
+        background-position: 0 0;
+    }
+
+    .stacked .active.selector-remove {
+        background-position: 0 0;
+    }
+
+    .active.selector-remove:focus, .active.selector-remove:hover {
+        background-position: 0 -100px;
+    }
+
+    .stacked .active.selector-remove:focus, .stacked .active.selector-remove:hover {
+        background-position: 0 -20px;
     }
 
     .help-tooltip, .selector .help-icon {
@@ -338,8 +414,16 @@ input[type="submit"], button {
     /* Messages */
 
     ul.messagelist li {
-        padding: 10px 10px 10px 55px;
-        background-position-x: 30px;
+        padding-left: 55px;
+        background-position: 30px 12px;
+    }
+
+    ul.messagelist li.error {
+        background-position: 30px 12px;
+    }
+
+    ul.messagelist li.warning {
+        background-position: 30px 14px;
     }
 
     /* Login */
@@ -348,7 +432,7 @@ input[type="submit"], button {
         padding: 15px 20px;
     }
 
-    .login #site-name {
+    .login #branding h1 {
         margin: 0;
     }
 
@@ -380,8 +464,12 @@ input[type="submit"], button {
 @media (max-width: 767px) {
     /* Layout */
 
-    #header, #content {
+    #header, #content, #footer {
         padding: 15px;
+    }
+
+    #footer:empty {
+        padding: 0;
     }
 
     div.breadcrumbs {
@@ -410,13 +498,9 @@ input[type="submit"], button {
 
     /* Changelist */
 
-    #changelist .changelist-form-container {
+    #changelist {
+        align-items: stretch;
         flex-direction: column;
-    }
-
-    #changelist .changelist-form-container:has(#changelist-filter) > div {
-        max-width: 100%;
-        width: 100%;
     }
 
     #toolbar {
@@ -441,12 +525,25 @@ input[type="submit"], button {
     }
 
     #changelist-filter {
-        width: 100%;
+        position: static;
+        width: auto;
         margin-top: 30px;
     }
 
     .object-tools {
-        text-align: left;
+        float: none;
+        margin: 0 0 15px;
+        padding: 0;
+        overflow: hidden;
+    }
+
+    .object-tools li {
+        height: auto;
+        margin-left: 0;
+    }
+
+    .object-tools li + li {
+        margin-left: 15px;
     }
 
     /* Forms */
@@ -468,10 +565,6 @@ input[type="submit"], button {
         flex-flow: column;
     }
 
-    .flex-container.checkbox-row {
-        flex-flow: row;
-    }
-
     textarea {
         max-width: none;
     }
@@ -485,10 +578,12 @@ input[type="submit"], button {
         padding-top: 15px;
     }
 
-    .aligned legend,
+    fieldset.collapsed .form-row {
+        display: none;
+    }
+
     .aligned label {
         width: 100%;
-        min-width: auto;
         padding: 0 0 10px;
     }
 
@@ -501,6 +596,10 @@ input[type="submit"], button {
     .aligned .form-row textarea {
         flex: 1 1 auto;
         max-width: 100%;
+    }
+
+    .aligned .checkbox-row {
+        align-items: center;
     }
 
     .aligned .checkbox-row input {
@@ -560,10 +659,6 @@ input[type="submit"], button {
         margin-top: 5px;
     }
 
-    form .aligned fieldset div.flex-container {
-        display: unset;
-    }
-
     /* Related widget */
 
     .related-widget-wrapper {
@@ -574,7 +669,6 @@ input[type="submit"], button {
 
     .related-widget-wrapper .selector {
         order: 1;
-        flex: 1 0 auto;
     }
 
     .related-widget-wrapper > a {
@@ -589,14 +683,23 @@ input[type="submit"], button {
         align-self: center;
     }
 
+    select + .related-widget-wrapper-link,
+    .related-widget-wrapper-link + .related-widget-wrapper-link {
+        margin-left: 15px;
+    }
+
     /* Selector */
 
     .selector {
         flex-direction: column;
-        gap: 10px 0;
+    }
+
+    .selector > * {
+        float: none;
     }
 
     .selector-available, .selector-chosen {
+        margin-bottom: 0;
         flex: 1 1 auto;
     }
 
@@ -605,10 +708,12 @@ input[type="submit"], button {
     }
 
     .selector ul.selector-chooser {
-        display: flex;
-        width: 60px;
-        height: 30px;
+        display: block;
+        float: none;
+        width: 52px;
+        height: 26px;
         padding: 0 2px;
+        margin: 15px auto 20px;
         transform: none;
     }
 
@@ -620,16 +725,16 @@ input[type="submit"], button {
         background-position: 0 0;
     }
 
-    :enabled.selector-remove:focus, :enabled.selector-remove:hover {
-        background-position: 0 -24px;
+    .active.selector-remove:focus, .active.selector-remove:hover {
+        background-position: 0 -20px;
     }
 
     .selector-add  {
-        background-position: 0 -48px;
+        background-position: 0 -40px;
     }
 
-    :enabled.selector-add:focus, :enabled.selector-add:hover {
-        background-position: 0 -72px;
+    .active.selector-add:focus, .active.selector-add:hover {
+        background-position: 0 -60px;
     }
 
     /* Inlines */
@@ -728,8 +833,16 @@ input[type="submit"], button {
     /* Messages */
 
     ul.messagelist li {
-        padding: 10px 10px 10px 40px;
-        background-position-x: 15px;
+        padding-left: 40px;
+        background-position: 15px 12px;
+    }
+
+    ul.messagelist li.error {
+        background-position: 15px 12px;
+    }
+
+    ul.messagelist li.warning {
+        background-position: 15px 14px;
     }
 
     /* Paginator */

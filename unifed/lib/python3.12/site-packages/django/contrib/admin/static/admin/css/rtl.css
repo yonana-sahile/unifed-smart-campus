@@ -13,7 +13,7 @@ th {
     margin-right: 1.5em;
 }
 
-.viewlink, .addlink, .changelink, .hidelink {
+.viewlink, .addlink, .changelink {
     padding-left: 0;
     padding-right: 16px;
     background-position: 100% 1px;
@@ -26,12 +26,7 @@ th {
 }
 
 .object-tools {
-    text-align: left;
-}
-
-.object-tools li + li {
-    margin-right: 15px;
-    margin-left: 0;
+    float: left;
 }
 
 thead th:first-child,
@@ -112,20 +107,9 @@ thead th.sorted .text {
     border-left: none;
 }
 
-.paginator ul {
-    margin-left: 6px;
-    margin-right: 0;
-}
-
-.paginator input {
-    margin-left: 0;
-    margin-right: auto;
-}
-
 /* FORMS */
 
-.aligned label,
-.aligned legend {
+.aligned label {
     padding: 0 0 3px 1em;
 }
 
@@ -157,7 +141,6 @@ form ul.inline li {
 
 form .aligned p.help,
 form .aligned div.help {
-    margin-left: 0;
     margin-right: 160px;
     padding-right: 10px;
 }
@@ -171,11 +154,17 @@ form .aligned p.time div.help.timezonewarning {
     padding-right: 0;
 }
 
-form .wide p.help,
-form .wide ul.errorlist,
-form .wide div.help {
+form .wide p.help, form .wide div.help {
     padding-left: 0;
     padding-right: 50px;
+}
+
+form .wide p,
+form .wide ul.errorlist,
+form .wide input + p.help,
+form .wide input + div.help {
+    margin-right: 200px;
+    margin-left: 0px;
 }
 
 .submit-row {
@@ -203,7 +192,12 @@ fieldset .fieldBox {
     top: 0;
     left: auto;
     right: 10px;
-    background: url(../img/calendar-icons.svg) 0 -15px no-repeat;
+    background: url(../img/calendar-icons.svg) 0 -30px no-repeat;
+}
+
+.calendarbox .calendarnav-previous:focus,
+.calendarbox .calendarnav-previous:hover {
+    background-position: 0 -45px;
 }
 
 .calendarnav-next {
@@ -211,6 +205,11 @@ fieldset .fieldBox {
     right: auto;
     left: 10px;
     background: url(../img/calendar-icons.svg) 0 0 no-repeat;
+}
+
+.calendarbox .calendarnav-next:focus,
+.calendarbox .calendarnav-next:hover {
+    background-position: 0 -15px;
 }
 
 .calendar caption, .calendarbox h2 {
@@ -226,28 +225,34 @@ fieldset .fieldBox {
 }
 
 .selector-add {
-    background: url(../img/selector-icons.svg) 0 -96px no-repeat;
-    background-size: 24px auto;
+  background: url(../img/selector-icons.svg) 0 -64px no-repeat;
 }
 
-:enabled.selector-add:focus, :enabled.selector-add:hover {
-    background-position: 0 -120px;
+.active.selector-add:focus, .active.selector-add:hover {
+  background-position: 0 -80px;
 }
 
 .selector-remove {
-    background: url(../img/selector-icons.svg) 0 -144px no-repeat;
-    background-size: 24px auto;
+  background: url(../img/selector-icons.svg) 0 -96px no-repeat;
 }
 
-:enabled.selector-remove:focus, :enabled.selector-remove:hover {
-    background-position: 0 -168px;
+.active.selector-remove:focus, .active.selector-remove:hover {
+  background-position: 0 -112px;
 }
 
-:enabled.selector-chooseall:focus, :enabled.selector-chooseall:hover {
+a.selector-chooseall {
+    background: url(../img/selector-icons.svg) right -128px no-repeat;
+}
+
+a.active.selector-chooseall:focus, a.active.selector-chooseall:hover {
     background-position: 100% -144px;
 }
 
-:enabled.selector-clearall:focus, :enabled.selector-clearall:hover {
+a.selector-clearall {
+    background: url(../img/selector-icons.svg) 0 -160px no-repeat;
+}
+
+a.active.selector-clearall:focus, a.active.selector-clearall:hover {
     background-position: 0 -176px;
 }
 
@@ -280,17 +285,4 @@ form .form-row p.datetime {
 .inline-related h3 span.delete label {
     margin-left: inherit;
     margin-right: 2px;
-}
-
-.inline-group .tabular td.original p {
-    right: 0;
-}
-
-.selector .selector-chooser {
-    margin: 0;
-}
-
-ul.messagelist li {
-    padding: 10px 65px 10px 10px;
-    background-position-x: calc(100% - 40px);
 }
