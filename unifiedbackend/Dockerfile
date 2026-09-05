@@ -8,10 +8,11 @@ ENV PYTHONUNBUFFERED=1
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (including PostgreSQL client for health checks)
 RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
@@ -24,5 +25,5 @@ COPY . .
 # Expose port 8000
 EXPOSE 8000
 
-# Run the application
+# Run the application (development mode)
 CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
