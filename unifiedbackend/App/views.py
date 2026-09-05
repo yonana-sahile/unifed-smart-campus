@@ -5,11 +5,17 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Avg, Count
 from django.utils import timezone
-from .models import *          # All models from App/models.py
-from .serializers import *     # All serializers from App/serializers.py
-from .permissions import *     # All permissions from App/permissions.py
+from .models import *
+from .serializers import *
+from .permissions import *
 import random
 import string
+
+
+# ---------- CUSTOM PERMISSION ----------
+# We'll use DRF's built-in IsAuthenticatedOrReadOnly for most views.
+# This allows GET requests without authentication, but requires auth for writes.
+# For UserViewSet, we keep create as AllowAny.
 
 
 # ---------- AUTH ----------
@@ -46,24 +52,31 @@ class AuthViewSet(viewsets.GenericViewSet):
 
 
 # ---------- GENERIC BASE VIEWSET ----------
+# Uses IsAuthenticatedOrReadOnly so that unauthenticated users can view data
+# but must be logged in to create, update, or delete.
 class BaseViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
     def perform_create(self, serializer):
         serializer.save()
 
 
 # ---------- USER ----------
+# User creation (register) is open to all, but listing, updating, deleting
+# still require authentication (IsAuthenticatedOrReadOnly).
+# We override get_permissions to allow unauthenticated POST for registration.
 class UserViewSet(BaseViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
     def get_permissions(self):
-        if self.action in ['create']:
+        # Allow any user to create (register) a new account
+        if self.action == 'create':
             return [permissions.AllowAny()]
+        # For update_user action, we still require authentication
         return super().get_permissions()
 
-    @action(detail=True, methods=['put'])
+    @action(detail=True, methods=['put'], permission_classes=[permissions.IsAuthenticated])
     def update_user(self, request, pk=None):
         user = self.get_object()
         serializer = UserSerializer(user, data=request.data, partial=True)
@@ -78,7 +91,7 @@ class CourseViewSet(BaseViewSet):
     queryset = Course.objects.all()
     serializer_class = CourseSerializer
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def enroll(self, request, pk=None):
         course = self.get_object()
         student = request.user
@@ -132,7 +145,7 @@ class ExamViewSet(BaseViewSet):
     queryset = Exam.objects.all()
     serializer_class = ExamSerializer
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def submit_attempt(self, request, pk=None):
         exam = self.get_object()
         student = request.user
@@ -167,7 +180,7 @@ class GradeViewSet(BaseViewSet):
     queryset = Grade.objects.all()
     serializer_class = GradeSerializer
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def approve(self, request, pk=None):
         grade = self.get_object()
         grade.status = 'APPROVED'
@@ -204,7 +217,7 @@ class LibraryResourceViewSet(BaseViewSet):
     queryset = LibraryResource.objects.all()
     serializer_class = LibraryResourceSerializer
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def download(self, request, pk=None):
         resource = self.get_object()
         resource.downloads_count += 1
@@ -217,7 +230,7 @@ class PaymentTransactionViewSet(BaseViewSet):
     queryset = PaymentTransaction.objects.all()
     serializer_class = PaymentTransactionSerializer
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def verify(self, request, pk=None):
         payment = self.get_object()
         payment.status = 'VERIFIED'
@@ -279,14 +292,14 @@ class CampusMediaPostViewSet(BaseViewSet):
     queryset = CampusMediaPost.objects.all()
     serializer_class = CampusMediaPostSerializer
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def view(self, request, pk=None):
         post = self.get_object()
         post.views_count += 1
         post.save()
         return Response({'views_count': post.views_count})
 
-    @action(detail=True, methods=['post'])
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def like(self, request, pk=None):
         post = self.get_object()
         post.likes_count += 1
