@@ -1,5 +1,5 @@
-# Use official Node image
-FROM node:18-alpine
+# Use Node 20 LTS (required for Vite 8 + rolldown compatibility)
+FROM node:20-alpine
 
 # Set work directory
 WORKDIR /app
@@ -10,14 +10,14 @@ COPY package*.json ./
 # Install dependencies
 RUN npm install
 
-# Copy project
+# Copy the rest of the project
 COPY . .
 
-# Build the app
+# Build the app (uses vite build directly, no tsc)
 RUN npm run build
 
-# Expose port 5173
+# Expose the development server port
 EXPOSE 5173
 
-# Serve the app with Vite preview (or dev mode)
+# Run the preview server (or switch to dev for hot‑reload)
 CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "5173"]
