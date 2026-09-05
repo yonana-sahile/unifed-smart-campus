@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./unifiedbackend
+    container_name: smart-campus-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./unifiedbackend:/app
+    environment:
+      - DEBUG=1
+      - DJANGO_SETTINGS_MODULE=unifiedbackend.settings
+      # If you use PostgreSQL, add DB credentials here
+    command: python manage.py runserver 0.0.0.0:8000
+
+  frontend:
+    build: ./unifed_frontend
+    container_name: smart-campus-frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./unifed_frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000/api   # ⬅️ This is key!
+    depends_on:
+      - backend
+    command: npm run dev -- --host 0.0.0.0 --port 5173
