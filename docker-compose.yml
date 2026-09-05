@@ -1,6 +1,25 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: smart-campus-db
+    environment:
+      - POSTGRES_DB=smartcampus_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Backend
   backend:
     build: ./unifiedbackend
     container_name: smart-campus-backend
@@ -11,9 +30,17 @@ services:
     environment:
       - DEBUG=1
       - DJANGO_SETTINGS_MODULE=unifiedbackend.settings
-      # If you use PostgreSQL, add DB credentials here
+      - DB_NAME=smartcampus_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_HOST=db
+      - DB_PORT=5432
+    depends_on:
+      db:
+        condition: service_healthy
     command: python manage.py runserver 0.0.0.0:8000
 
+  # React Frontend
   frontend:
     build: ./unifed_frontend
     container_name: smart-campus-frontend
@@ -23,7 +50,10 @@ services:
       - ./unifed_frontend:/app
       - /app/node_modules
     environment:
-      - VITE_API_URL=http://localhost:8000/api   # ⬅️ This is key!
+      - VITE_API_URL=http://localhost:8000/api
     depends_on:
       - backend
     command: npm run dev -- --host 0.0.0.0 --port 5173
+
+volumes:
+  postgres_data:
