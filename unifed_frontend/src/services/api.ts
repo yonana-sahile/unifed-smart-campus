@@ -421,7 +421,6 @@ export const getUsers = (): Promise<User[]> =>
 export const saveUsers = (users: User[]): Promise<User[]> =>
   withMock(users, () => api.put('/users/', users).then(r => r.data));
 
-// ✅ NEW: Update a single user
 export const updateUser = (user: User): Promise<User> =>
   withMock(user, () => api.put(`/users/${user.id}/`, user).then(r => r.data));
 
@@ -644,12 +643,14 @@ export const addCampusAlert = (alert: Omit<CampusAlert, 'id' | 'timestamp'>): Pr
     () => api.post('/campus-alerts/', alert).then(r => r.data)
   );
 
-// ---------- CAMPUS MEDIA POSTS ----------
+// ✅ ---------- CAMPUS MEDIA POSTS (UPDATED) ----------
 export const getMediaPosts = (): Promise<CampusMediaPost[]> =>
   withMock(mockMediaPosts, () => api.get('/media-posts/').then(r => r.data));
+
 export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPost[]> =>
   withMock(posts, () => api.put('/media-posts/', posts).then(r => r.data));
 
+// URL-based media post (JSON)
 export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'viewsCount' | 'likesCount'>): Promise<CampusMediaPost> =>
   withMock(
     {
@@ -661,6 +662,15 @@ export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'vi
     } as any,
     () => api.post('/media-posts/', post).then(r => r.data)
   );
+
+// ✅ NEW: File upload media post (multipart/form-data)
+export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => {
+  return api.post('/media-posts/', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }).then(r => r.data);
+};
 
 export const deleteMediaPost = (id: string): Promise<{ success: boolean }> =>
   withMock(
@@ -684,7 +694,7 @@ export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
 export const CampusDatabase = {
   getUsers,
   saveUsers,
-  updateUser, // ✅ NEW
+  updateUser,
   getCourses,
   saveCourses,
   getMaterials,
@@ -739,6 +749,7 @@ export const CampusDatabase = {
   getMediaPosts,
   saveMediaPosts,
   addMediaPost,
+  uploadMediaPost, // ✅ NEW
   deleteMediaPost,
   incrementMediaViews,
   toggleMediaLike,
