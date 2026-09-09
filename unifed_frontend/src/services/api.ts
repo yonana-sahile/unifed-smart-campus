@@ -29,7 +29,8 @@ import type {
 } from '../types';
 
 // ✅ SET THIS TO true TO USE MOCK DATA (no backend needed)
-const USE_MOCK = true;
+// ❗️ Change to false when you want real API calls (including video uploads)
+const USE_MOCK = false;
 
 // ---------- INLINE MOCK DATA ----------
 const mockUsers: User[] = [
@@ -663,13 +664,31 @@ export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'vi
     () => api.post('/media-posts/', post).then(r => r.data)
   );
 
-// ✅ NEW: File upload media post (multipart/form-data)
+// ✅ File upload media post (multipart/form-data) – now with mock fallback
 export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => {
-  return api.post('/media-posts/', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  }).then(r => r.data);
+  return withMock(
+    {
+      id: 'media_' + Date.now(),
+      title: formData.get('title') as string || 'Uploaded Video',
+      description: formData.get('description') as string || '',
+      category: formData.get('category') as string || 'CAMPUS_NEWS',
+      videoUrl: '',
+      thumbnailUrl: formData.get('thumbnailUrl') as string || '',
+      postedBy: formData.get('postedBy') as string || 'Admin',
+      authorRole: formData.get('authorRole') as string || 'ADMIN',
+      postedAt: new Date().toISOString(),
+      duration: formData.get('duration') as string || '00:00',
+      viewsCount: 0,
+      likesCount: 0,
+      featured: formData.get('featured') === 'true',
+      tags: JSON.parse(formData.get('tags') as string || '[]'),
+    } as CampusMediaPost,
+    () => api.post('/media-posts/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    }).then(r => r.data)
+  );
 };
 
 export const deleteMediaPost = (id: string): Promise<{ success: boolean }> =>
@@ -749,7 +768,7 @@ export const CampusDatabase = {
   getMediaPosts,
   saveMediaPosts,
   addMediaPost,
-  uploadMediaPost, // ✅ NEW
+  uploadMediaPost,
   deleteMediaPost,
   incrementMediaViews,
   toggleMediaLike,
