@@ -24,7 +24,9 @@ import {
   KeyRound,
   UserCheck,
   AlertCircle,
-  LogOut
+  LogOut,
+  Upload,
+  FileVideo
 } from "lucide-react";
 import type { CampusMediaPost } from "../types";
 import { CampusDatabase } from "../services/api";
@@ -37,7 +39,7 @@ const DEFAULT_MEDIA_POSTS: CampusMediaPost[] = [
     title: "Welcome to Mekdela Amba University – Smart Campus Tour",
     description: "Take a virtual tour of the Tulu Awlia main campus, featuring state‑of‑the‑art laboratories, libraries, and student hubs.",
     category: "CAMPUS_NEWS",
-    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", // placeholder, you can replace
+    videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     thumbnailUrl: "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?w=800&auto=format&fit=crop&q=80",
     postedBy: "MAU ICT Directorate",
     authorRole: "ADMIN",
@@ -116,6 +118,10 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const [posterName, setPosterName] = useState("Yonas Sahile (Lead Admin)");
   const [formSuccess, setFormSuccess] = useState(false);
 
+  // ✅ NEW: Local file upload state
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileName, setSelectedFileName] = useState<string>("");
+
   // ✅ Load posts from API with fallback
   const loadPosts = async () => {
     try {
@@ -126,20 +132,14 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         setPosts(data);
         localStorage.setItem("mau_media_posts_cache", JSON.stringify(data));
       } else {
-        // No data from API → use default fallback
         setPosts(DEFAULT_MEDIA_POSTS);
         localStorage.setItem("mau_media_posts_cache", JSON.stringify(DEFAULT_MEDIA_POSTS));
       }
     } catch (err) {
       console.error("Failed to load media posts:", err);
-      // Try cache, then fallback
       const cached = localStorage.getItem("mau_media_posts_cache");
       if (cached) {
-        try {
-          setPosts(JSON.parse(cached));
-        } catch {
-          setPosts(DEFAULT_MEDIA_POSTS);
-        }
+        try { setPosts(JSON.parse(cached)); } catch { setPosts(DEFAULT_MEDIA_POSTS); }
       } else {
         setPosts(DEFAULT_MEDIA_POSTS);
       }
@@ -152,6 +152,15 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   useEffect(() => {
     loadPosts();
   }, []);
+
+  // ✅ Cleanup blob URL when component unmounts or file changes
+  useEffect(() => {
+    return () => {
+      if (selectedFile) {
+        URL.revokeObjectURL(videoUrl);
+      }
+    };
+  }, [selectedFile, videoUrl]);
 
   // Admin verification using real user database
   const handleAdminVerify = async (e: React.FormEvent) => {
@@ -184,6 +193,47 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       console.error("Failed to verify admin:", err);
       setAdminError("Unable to connect to server. Please try again.");
     }
+  };
+
+  // ✅ NEW: Handle local file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith("video/")) {
+      alert("Please select a valid video file (MP4, WebM, etc.)");
+      return;
+    }
+
+    // Validate file size (max 200MB)
+    if (file.size > 200 * 1024 * 1024) {
+      alert("File size exceeds 200MB limit. Please choose a smaller video.");
+      return;
+    }
+
+    // Revoke previous blob URL if any
+    if (videoUrl && videoUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(videoUrl);
+    }
+
+    const blobUrl = URL.createObjectURL(file);
+    setVideoUrl(blobUrl);
+    setSelectedFile(file);
+    setSelectedFileName(file.name);
+  };
+
+  // ✅ NEW: Clear selected file
+  const handleClearFile = () => {
+    if (videoUrl && videoUrl.startsWith("blob:")) {
+      URL.revokeObjectURL(videoUrl);
+    }
+    setVideoUrl("");
+    setSelectedFile(null);
+    setSelectedFileName("");
+    // Clear the file input value
+    const fileInput = document.getElementById("videoFileInput") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
   };
 
   // Like handler
@@ -239,7 +289,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // Create post handler
+  // Create post handler (updated to handle blob URLs)
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !videoUrl.trim()) return;
@@ -286,6 +336,11 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         setThumbnailUrl("");
         setTagsInput("");
         setIsFeatured(false);
+        setSelectedFile(null);
+        setSelectedFileName("");
+        // Clear file input
+        const fileInput = document.getElementById("videoFileInput") as HTMLInputElement;
+        if (fileInput) fileInput.value = "";
       }, 1200);
     } catch (err) {
       console.error("Failed to create post:", err);
@@ -326,7 +381,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // ✅ Loading skeleton
+  // ✅ Loading skeleton (unchanged)
   if (loading) {
     return (
       <section className="w-full relative py-12 px-4 sm:px-8 overflow-hidden">
@@ -352,10 +407,9 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
   return (
     <section id="campus-media-screen" className="w-full relative py-12 px-4 sm:px-8 overflow-hidden">
-      {/* Visual Ambient Backdrop */}
       <div className="max-w-7xl mx-auto space-y-8">
 
-        {/* Screen Header Bar */}
+        {/* Screen Header Bar (unchanged) */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-slate-300/80 dark:border-slate-800/80 pb-6">
           <div className="space-y-2">
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold">
@@ -370,7 +424,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
             </p>
           </div>
 
-          {/* Admin Video Post Action */}
           <div className="flex items-center space-x-3 shrink-0">
             <button
               onClick={() => {
@@ -387,7 +440,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
           </div>
         </div>
 
-        {/* Category Filter Pills */}
+        {/* Category Filter Pills (unchanged) */}
         <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-thin">
           <Filter className="w-4 h-4 text-slate-400 shrink-0 mr-1" />
           {categories.map((c) => (
@@ -406,12 +459,10 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
           ))}
         </div>
 
-        {/* Featured Video Cinema Screen */}
+        {/* Featured Video Cinema Screen (unchanged) */}
         {featuredPost && (
           <div className="relative rounded-3xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl group">
             <div className="grid grid-cols-1 lg:grid-cols-12">
-
-              {/* Thumbnail */}
               <div className="lg:col-span-7 relative aspect-video bg-black flex items-center justify-center overflow-hidden">
                 <img
                   src={featuredPost.thumbnailUrl}
@@ -440,7 +491,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                 </div>
               </div>
 
-              {/* Metadata */}
               <div className="lg:col-span-5 p-6 sm:p-8 flex flex-col justify-between space-y-4 bg-gradient-to-b from-slate-900 to-slate-950 text-white">
                 <div className="space-y-3">
                   <div className="flex items-center space-x-2">
@@ -495,13 +545,12 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     <ExternalLink className="w-3.5 h-3.5" />
                   </button>
                 </div>
-
               </div>
             </div>
           </div>
         )}
 
-        {/* Video Grid Section */}
+        {/* Video Grid Section (unchanged) */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
@@ -522,7 +571,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   onClick={() => handleWatch(post)}
                   className="bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800/90 rounded-2xl overflow-hidden shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer hover:-translate-y-1"
                 >
-                  {/* Thumbnail */}
                   <div className="relative aspect-video bg-slate-950 overflow-hidden">
                     <img
                       src={post.thumbnailUrl}
@@ -604,10 +652,9 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
             })}
           </div>
         </div>
-
       </div>
 
-      {/* VIDEO PLAYER MODAL */}
+      {/* VIDEO PLAYER MODAL (unchanged) */}
       <AnimatePresence>
         {activeVideo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/90 backdrop-blur-md">
@@ -617,7 +664,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-slate-900 border border-slate-800 rounded-3xl max-w-4xl w-full shadow-2xl overflow-hidden flex flex-col font-sans max-h-[92vh]"
             >
-              {/* Modal Top Bar */}
               <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-white">
                 <div className="flex items-center space-x-2.5 overflow-hidden">
                   <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${getCategoryBadge(activeVideo.category).color}`}>
@@ -635,7 +681,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                 </button>
               </div>
 
-              {/* Video Player Area */}
               <div className="relative aspect-video bg-black w-full">
                 {activeVideo.videoUrl.includes("youtube.com") || activeVideo.videoUrl.includes("youtu.be") ? (
                   <iframe
@@ -651,33 +696,43 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   />
                 ) : (
                   <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
-                    <img
-                      src={activeVideo.thumbnailUrl}
-                      alt={activeVideo.title}
-                      className="w-full h-full object-cover opacity-60"
-                    />
-                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-3 bg-black/60">
-                      <div className="w-16 h-16 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg">
-                        <Play className="w-8 h-8 fill-slate-950 ml-1" />
-                      </div>
-                      <p className="text-xs text-slate-300 max-w-md">
-                        Simulated High-Definition University Optical Network Stream. Video stream configured for campus intranet.
-                      </p>
-                      <a
-                        href={activeVideo.videoUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition flex items-center space-x-1.5"
-                      >
-                        <span>Open Direct Media Link</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
-                    </div>
+                    {activeVideo.videoUrl.startsWith("blob:") ? (
+                      <video
+                        src={activeVideo.videoUrl}
+                        controls
+                        autoPlay
+                        className="w-full h-full object-contain"
+                      />
+                    ) : (
+                      <>
+                        <img
+                          src={activeVideo.thumbnailUrl}
+                          alt={activeVideo.title}
+                          className="w-full h-full object-cover opacity-60"
+                        />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center space-y-3 bg-black/60">
+                          <div className="w-16 h-16 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center shadow-lg">
+                            <Play className="w-8 h-8 fill-slate-950 ml-1" />
+                          </div>
+                          <p className="text-xs text-slate-300 max-w-md">
+                            Simulated High-Definition University Optical Network Stream. Video stream configured for campus intranet.
+                          </p>
+                          <a
+                            href={activeVideo.videoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition flex items-center space-x-1.5"
+                          >
+                            <span>Open Direct Media Link</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>
 
-              {/* Video Details & Interaction */}
               <div className="p-4 sm:p-6 bg-slate-900 text-slate-300 space-y-4 overflow-y-auto">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-4">
                   <div className="space-y-1">
@@ -688,7 +743,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       Published on {new Date(activeVideo.postedAt).toLocaleDateString("en-US", { dateStyle: "full" })}
                     </p>
                   </div>
-
                   <div className="flex items-center space-x-3">
                     <button
                       onClick={(e) => handleLike(activeVideo.id, e)}
@@ -701,7 +755,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       <Heart className={`w-4 h-4 ${likedPosts[activeVideo.id] ? "fill-rose-500 text-rose-500" : ""}`} />
                       <span>{activeVideo.likesCount + (likedPosts[activeVideo.id] ? 1 : 0)} Likes</span>
                     </button>
-
                     <button
                       onClick={(e) => handleShare(activeVideo, e)}
                       className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 flex items-center space-x-1.5 text-xs transition cursor-pointer"
@@ -711,7 +764,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     </button>
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <h4 className="text-xs font-bold text-slate-400 uppercase font-mono">
                     Broadcast Overview
@@ -720,7 +772,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     {activeVideo.description}
                   </p>
                 </div>
-
                 <div className="flex flex-wrap gap-1.5 pt-2">
                   {activeVideo.tags.map((t, idx) => (
                     <span key={idx} className="text-[11px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-2.5 py-0.5 rounded font-mono">
@@ -734,7 +785,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         )}
       </AnimatePresence>
 
-      {/* ADMIN POST VIDEO MODAL */}
+      {/* ADMIN POST VIDEO MODAL – Updated with file upload */}
       <AnimatePresence>
         {showAdminModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-sm">
@@ -744,7 +795,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden font-sans max-h-[92vh] flex flex-col"
             >
-              {/* Modal Header */}
+              {/* Modal Header (unchanged) */}
               <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-primary to-slate-900 text-white flex items-center justify-between border-b border-amber-500/20">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
@@ -772,7 +823,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                 </button>
               </div>
 
-              {/* If NOT Authenticated: Show Video Upload Password Gate */}
+              {/* If NOT Authenticated: Show Video Upload Password Gate (unchanged) */}
               {!isMediaAdminAuth ? (
                 <div className="p-6 sm:p-8 space-y-6">
                   <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-2xl flex items-start space-x-3">
@@ -864,7 +915,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   </form>
                 </div>
               ) : (
-                /* Authenticated Form Content */
+                /* Authenticated Form Content – updated with file upload */
                 <form onSubmit={handleCreatePost} className="p-6 sm:p-8 space-y-4 overflow-y-auto flex-1 text-slate-800 dark:text-slate-200">
                   <div className="flex items-center justify-between p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs">
                     <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
@@ -895,7 +946,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     </div>
                   ) : (
                     <>
-                      {/* Video Title */}
+                      {/* Video Title (unchanged) */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Broadcast Title / የቪዲዮው ርዕስ *
@@ -910,7 +961,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         />
                       </div>
 
-                      {/* Category & Duration Grid */}
+                      {/* Category & Duration Grid (unchanged) */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -944,22 +995,71 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Video URL */}
-                      <div className="space-y-1.5">
+                      {/* Video URL / File Upload Section – UPDATED */}
+                      <div className="space-y-3">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                          Video Stream URL / የቪዲዮ ሊንክ (YouTube or MP4) *
+                          Video Source • የቪዲዮ ምንጭ <span className="text-red-500">*</span>
                         </label>
-                        <input
-                          type="url"
-                          required
-                          value={videoUrl}
-                          onChange={(e) => setVideoUrl(e.target.value)}
-                          placeholder="https://www.youtube.com/watch?v=..."
-                          className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-amber-400 text-slate-900 dark:text-white"
-                        />
+
+                        {/* URL Input (unchanged) */}
+                        <div className="relative">
+                          <ExternalLink className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
+                          <input
+                            type="url"
+                            value={videoUrl}
+                            onChange={(e) => setVideoUrl(e.target.value)}
+                            placeholder="https://www.youtube.com/watch?v=... or paste video URL"
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-amber-400 text-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        {/* File Upload Area – NEW */}
+                        <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40 transition hover:border-amber-400">
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <div className="flex items-center space-x-3 w-full sm:w-auto">
+                              <FileVideo className="w-6 h-6 text-amber-500 shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
+                                  {selectedFileName || "Choose a video file from your computer"}
+                                </p>
+                                <p className="text-[10px] text-slate-400">
+                                  MP4, WebM, OGG • Max 200MB
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center space-x-2 shrink-0">
+                              <input
+                                type="file"
+                                id="videoFileInput"
+                                accept="video/*"
+                                onChange={handleFileSelect}
+                                className="hidden"
+                              />
+                              <label
+                                htmlFor="videoFileInput"
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded-lg text-xs cursor-pointer transition shadow-sm flex items-center space-x-1.5"
+                              >
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>Browse Files</span>
+                              </label>
+                              {selectedFileName && (
+                                <button
+                                  type="button"
+                                  onClick={handleClearFile}
+                                  className="px-3 py-2 bg-slate-200 dark:bg-slate-700 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-300 text-slate-700 dark:text-slate-300 font-semibold rounded-lg text-xs transition"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-[10px] text-slate-500 mt-2 text-center sm:text-left">
+                            Select a file to automatically set the video source. You can also paste a URL above.
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Thumbnail URL */}
+                      {/* Thumbnail URL (unchanged) */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Custom Thumbnail Image URL (Optional)
@@ -976,7 +1076,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </p>
                       </div>
 
-                      {/* Description */}
+                      {/* Description (unchanged) */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Broadcast Description / ማብራሪያ
@@ -990,7 +1090,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         />
                       </div>
 
-                      {/* Tags & Poster Name */}
+                      {/* Tags & Poster Name (unchanged) */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -1019,7 +1119,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Featured Checkbox */}
+                      {/* Featured Checkbox (unchanged) */}
                       <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center space-x-3">
                         <input
                           type="checkbox"
@@ -1033,7 +1133,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </label>
                       </div>
 
-                      {/* Submit Button */}
+                      {/* Submit Button (unchanged) */}
                       <div className="pt-3 flex items-center justify-end space-x-3">
                         <button
                           type="button"
@@ -1059,7 +1159,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Forgot Password Modal */}
+      {/* Forgot Password Modal (unchanged) */}
       <ForgotPasswordModal
         isOpen={showForgotModal}
         onClose={() => setShowForgotModal(false)}
