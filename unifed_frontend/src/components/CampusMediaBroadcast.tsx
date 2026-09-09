@@ -166,7 +166,10 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       (cleanPass === "1234" || cleanPass === "password");
 
     try {
-      const users = await CampusDatabase.getUsers();
+      const usersResponse = await CampusDatabase.getUsers();
+      // Handle both array and paginated object responses
+      const users = Array.isArray(usersResponse) ? usersResponse : (usersResponse.results || []);
+
       const foundAdmin = users.find(
         (u) =>
           u.role === "ADMIN" &&
