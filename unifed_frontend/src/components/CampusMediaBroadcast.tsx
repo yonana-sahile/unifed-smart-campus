@@ -153,15 +153,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     loadPosts();
   }, []);
 
-  // ✅ Cleanup blob URL when component unmounts or file changes
-  useEffect(() => {
-    return () => {
-      if (selectedFile) {
-        URL.revokeObjectURL(videoUrl);
-      }
-    };
-  }, [selectedFile, videoUrl]);
-
   // Admin verification using real user database
   const handleAdminVerify = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,7 +186,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // ✅ NEW: Handle local file selection
+  // ✅ NEW: Handle local file selection – no blob URL, just store file
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -212,23 +203,14 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       return;
     }
 
-    // Revoke previous blob URL if any
-    if (videoUrl && videoUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(videoUrl);
-    }
-
-    const blobUrl = URL.createObjectURL(file);
-    setVideoUrl(blobUrl);
     setSelectedFile(file);
     setSelectedFileName(file.name);
+    // Clear any URL that might have been entered
+    setVideoUrl("");
   };
 
   // ✅ NEW: Clear selected file
   const handleClearFile = () => {
-    if (videoUrl && videoUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(videoUrl);
-    }
-    setVideoUrl("");
     setSelectedFile(null);
     setSelectedFileName("");
     // Clear the file input value
@@ -289,10 +271,10 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // Create post handler (updated to handle blob URLs)
+  // ✅ FIXED: Create post handler – use multipart when file selected, otherwise JSON
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !videoUrl.trim()) return;
+    if (!title.trim() || (!videoUrl.trim() && !selectedFile)) return;
 
     const tags = tagsInput
       .split(",")
@@ -310,22 +292,47 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
     const finalThumb = thumbnailUrl.trim() || defaultThumbs[category] || defaultThumbs.CAMPUS_NEWS;
 
+    // Base post data (without videoUrl or file)
+    const postData = {
+      title: title.trim(),
+      description: description.trim() || "Official Mekdela Amba University media broadcast and documentary stream.",
+      category,
+      thumbnailUrl: finalThumb,
+      postedBy: posterName.trim() || "University Media Directorate",
+      authorRole: "ADMIN",
+      duration: duration.trim() || "10:00",
+      featured: isFeatured,
+      tags: tags.length > 0 ? tags : ["MAU", "CampusLive", "Ethiopia"]
+    };
+
     try {
-      await CampusDatabase.addMediaPost({
-        title: title.trim(),
-        description: description.trim() || "Official Mekdela Amba University media broadcast and documentary stream.",
-        category,
-        videoUrl: videoUrl.trim(),
-        thumbnailUrl: finalThumb,
-        postedBy: posterName.trim() || "University Media Directorate",
-        authorRole: "ADMIN",
-        duration: duration.trim() || "10:00",
-        featured: isFeatured,
-        tags: tags.length > 0 ? tags : ["MAU", "CampusLive", "Ethiopia"]
-      });
+      if (selectedFile) {
+        // 📤 Upload with file using multipart/form-data
+        const formData = new FormData();
+        // Append all post fields as strings (or JSON for arrays)
+        Object.entries(postData).forEach(([key, value]) => {
+          if (key === 'tags') {
+            formData.append('tags', JSON.stringify(value));
+          } else if (key === 'featured') {
+            formData.append('featured', String(value));
+          } else {
+            formData.append(key, value);
+          }
+        });
+        // Append the video file
+        formData.append('video_file', selectedFile);
+
+        await CampusDatabase.uploadMediaPost(formData);
+      } else {
+        // 📎 Upload with URL only (JSON)
+        await CampusDatabase.addMediaPost({
+          ...postData,
+          videoUrl: videoUrl.trim()
+        });
+      }
 
       setFormSuccess(true);
-      loadPosts(); // Refresh the list
+      loadPosts();
       setTimeout(() => {
         setFormSuccess(false);
         setShowAdminModal(false);
@@ -338,7 +345,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         setIsFeatured(false);
         setSelectedFile(null);
         setSelectedFileName("");
-        // Clear file input
         const fileInput = document.getElementById("videoFileInput") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
       }, 1200);
@@ -1001,7 +1007,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                           Video Source • የቪዲዮ ምንጭ <span className="text-red-500">*</span>
                         </label>
 
-                        {/* URL Input (unchanged) */}
+                        {/* URL Input (disabled when file selected) */}
                         <div className="relative">
                           <ExternalLink className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
                           <input
@@ -1009,7 +1015,8 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                             value={videoUrl}
                             onChange={(e) => setVideoUrl(e.target.value)}
                             placeholder="https://www.youtube.com/watch?v=... or paste video URL"
-                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-amber-400 text-slate-900 dark:text-white"
+                            disabled={!!selectedFile}
+                            className="w-full pl-10 pr-4 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-amber-400 text-slate-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
 
