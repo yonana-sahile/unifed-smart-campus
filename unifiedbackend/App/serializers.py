@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
-from .models import *  # Imports all models from App/models.py
+from .models import *
 
 
 # ---------- USER ----------
@@ -197,8 +197,28 @@ class CampusAlertSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# ---------- CAMPUS MEDIA POST ----------
+# ---------- CAMPUS MEDIA POST (UPDATED) ----------
 class CampusMediaPostSerializer(serializers.ModelSerializer):
+    video_source = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = CampusMediaPost
-        fields = '__all__'
+        fields = [
+            'id', 'title', 'description', 'category',
+            'video_file', 'video_url', 'video_source',
+            'thumbnail_url', 'posted_by', 'author_role',
+            'posted_at', 'duration', 'views_count',
+            'likes_count', 'featured', 'tags'
+        ]
+        read_only_fields = ['id', 'posted_at', 'views_count', 'likes_count']
+        extra_kwargs = {
+            'video_url': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'video_file': {'required': False},
+            'duration': {'required': False, 'allow_blank': True, 'allow_null': True},
+        }
+
+    def get_video_source(self, obj):
+        """Return the video URL from file or URL field."""
+        if obj.video_file:
+            return obj.video_file.url
+        return obj.video_url
