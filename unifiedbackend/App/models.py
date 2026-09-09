@@ -43,7 +43,6 @@ class User(AbstractUser):
 
     bio = models.TextField(blank=True, null=True)
 
-    # ✅ ADD THIS PROPERTY
     @property
     def full_name(self):
         """Return the user's full name."""
@@ -51,6 +50,7 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.full_name} ({self.role})"
+
 
 # ---------- COURSE ----------
 class Course(models.Model):
@@ -628,7 +628,7 @@ class CampusAlert(models.Model):
         return self.title
 
 
-# ---------- CAMPUS MEDIA POST ----------
+# ✅ ---------- CAMPUS MEDIA POST (UPDATED WITH FILE UPLOAD) ----------
 class CampusMediaPost(models.Model):
     CATEGORY_CHOICES = (
         ('CAMPUS_NEWS', 'Campus News'),
@@ -642,12 +642,16 @@ class CampusMediaPost(models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField()
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES)
-    video_url = models.URLField(max_length=500)
-    thumbnail_url = models.URLField(max_length=500)
+
+    # ✅ NEW: Support for both URL-based and file-based videos
+    video_file = models.FileField(upload_to='videos/%Y/%m/%d/', blank=True, null=True)
+    video_url = models.URLField(max_length=500, blank=True, null=True)
+
+    thumbnail_url = models.URLField(max_length=500, blank=True, null=True)
     posted_by = models.CharField(max_length=100)
     author_role = models.CharField(max_length=50)
     posted_at = models.DateTimeField(auto_now_add=True)
-    duration = models.CharField(max_length=20)
+    duration = models.CharField(max_length=20, blank=True, null=True)
     views_count = models.IntegerField(default=0)
     likes_count = models.IntegerField(default=0)
     featured = models.BooleanField(default=False)
@@ -655,3 +659,10 @@ class CampusMediaPost(models.Model):
 
     def __str__(self):
         return self.title
+
+    @property
+    def video_source(self):
+        """Return the video URL if video_file exists, otherwise return video_url."""
+        if self.video_file:
+            return self.video_file.url
+        return self.video_url
