@@ -287,7 +287,7 @@ class CampusAlertViewSet(BaseViewSet):
     serializer_class = CampusAlertSerializer
 
 
-# ---------- CAMPUS MEDIA POST ----------
+# ✅ ---------- CAMPUS MEDIA POST (UPDATED WITH FILE UPLOAD) ----------
 class CampusMediaPostViewSet(BaseViewSet):
     queryset = CampusMediaPost.objects.all()
     serializer_class = CampusMediaPostSerializer
@@ -305,6 +305,20 @@ class CampusMediaPostViewSet(BaseViewSet):
         post.likes_count += 1
         post.save()
         return Response({'likes_count': post.likes_count})
+
+    # ✅ Override create to handle file uploads (multipart/form-data)
+    def create(self, request, *args, **kwargs):
+        # Copy request data to allow modification
+        data = request.data.copy()
+        # If a file is present, attach it to the data dict
+        if request.FILES.get('video_file'):
+            data['video_file'] = request.FILES['video_file']
+        # The serializer will validate that at least one source exists
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            self.perform_create(serializer)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ---------- AI ----------
