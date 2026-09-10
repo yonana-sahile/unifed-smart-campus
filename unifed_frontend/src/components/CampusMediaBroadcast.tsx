@@ -778,7 +778,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                           <p className="text-xs text-slate-300 max-w-md">
                             Simulated High-Definition University Optical Network Stream. Video stream configured for campus intranet.
                           </p>
-
+                          <a
                             href={activeVideo.videoUrl}
                             target="_blank"
                             rel="noreferrer"
