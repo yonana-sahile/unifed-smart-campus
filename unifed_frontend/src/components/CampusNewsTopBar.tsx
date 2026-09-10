@@ -134,9 +134,19 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
   const loadNews = useCallback(async () => {
     try {
       setLoading(true);
-      const announcements = await CampusDatabase.getAnnouncements();
+      const raw: any = await CampusDatabase.getAnnouncements();
 
-      if (announcements && announcements.length > 0) {
+      // ✅ FIXED: defensively unwrap DRF pagination envelope.
+      // Django's PageNumberPagination (settings.py PAGE_SIZE=100) wraps
+      // every list response in { count, next, previous, results }.
+      // Without this unwrap, `announcements.length` is `undefined`, the
+      // `if (length > 0)` check fails, and the component silently falls
+      // back to DEFAULT_NEWS — hiding every real published announcement.
+      const announcements: Announcement[] = Array.isArray(raw)
+        ? raw
+        : (Array.isArray(raw?.results) ? raw.results : []);
+
+      if (announcements.length > 0) {
         const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement) => ({
           id: ann.id,
           title: ann.title,
