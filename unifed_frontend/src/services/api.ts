@@ -41,6 +41,18 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+
+  // ✅ FIX: don't let the instance-level 'application/json' header leak
+  // into multipart/form-data (file upload) requests. Axios would normally
+  // let the browser auto-set 'multipart/form-data; boundary=...' for a
+  // FormData body, but an explicitly-set Content-Type header takes
+  // priority and blocks that from happening. Without the correct boundary,
+  // Django can't parse request.FILES, and DRF rejects video_file with
+  // "The submitted data was not a file. Check the encoding type on the form."
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
+
   return config;
 });
 
@@ -272,12 +284,11 @@ export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPos
 export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'viewsCount' | 'likesCount'>): Promise<CampusMediaPost> =>
   api.post('/media-posts/', post).then(r => r.data);
 
-// ✅ FIXED: File upload media post (multipart/form-data)
-// Do NOT manually set 'Content-Type': 'multipart/form-data'.
-// The browser/axios needs to generate the multipart boundary itself
-// (e.g. "multipart/form-data; boundary=----WebKitFormBoundary...").
-// Setting a plain string header without a boundary means Django's
-// multipart parser can fail to split the fields/file correctly.
+// ✅ File upload media post (multipart/form-data).
+// The request interceptor above now strips the instance's default
+// 'Content-Type: application/json' header whenever the body is a
+// FormData instance, so the browser/axios can generate the correct
+// 'multipart/form-data; boundary=...' header itself.
 export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => {
   return api.post('/media-posts/', formData).then(r => r.data);
 };
