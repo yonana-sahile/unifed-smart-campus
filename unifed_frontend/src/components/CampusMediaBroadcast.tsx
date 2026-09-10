@@ -156,13 +156,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   }, []);
 
   // ✅ FIXED: Authenticate admin with real JWT login only.
-  // The previous hardcoded fallback ("yonassahile" / "1234" / "password")
-  // let the UI unlock the upload form WITHOUT ever storing a JWT in
-  // localStorage. That meant every upload request went out with no
-  // Authorization header, and Django correctly rejected it with 401.
-  // This version only flips isMediaAdminAuth to true after a real,
-  // successful login against the backend, and only stores the token
-  // once we've confirmed the account actually has admin rights.
   const handleAdminVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError("");
@@ -196,10 +189,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         return;
       }
 
-      // ✅ Store the JWT token only after confirming admin role, so the
-      // axios interceptor in services/api.ts can attach it as
-      // "Authorization: Bearer <token>" on every subsequent request
-      // (including the multipart video upload).
       localStorage.setItem('access_token', data.access);
       localStorage.setItem('refresh_token', data.refresh);
 
@@ -215,8 +204,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // ✅ Log out of the admin session — also clears the stored token so
-  // a stale/expired JWT can't cause a confusing 401 later.
+  // ✅ Log out of the admin session
   const handleAdminLock = () => {
     setIsMediaAdminAuth(false);
     setVerifiedAdminName("");
@@ -229,13 +217,11 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
     if (!file.type.startsWith("video/")) {
       alert("Please select a valid video file (MP4, WebM, etc.)");
       return;
     }
 
-    // Validate file size (max 200MB)
     if (file.size > 200 * 1024 * 1024) {
       alert("File size exceeds 200MB limit. Please choose a smaller video.");
       return;
@@ -243,7 +229,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
     setSelectedFile(file);
     setSelectedFileName(file.name);
-    // Clear any URL that might have been entered
     setVideoUrl("");
   };
 
@@ -251,14 +236,26 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const handleClearFile = () => {
     setSelectedFile(null);
     setSelectedFileName("");
-    // Clear the file input value
     const fileInput = document.getElementById("videoFileInput") as HTMLInputElement;
     if (fileInput) fileInput.value = "";
   };
 
-  // Like handler
+  // ✅ FIXED: Like handler — skip the API call for client-only fallback/demo
+  // posts (id starts with "default_"). Those rows don't exist in the DB,
+  // so POST /media-posts/<id>/like/ would 404.
   const handleLike = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (id.startsWith("default_")) {
+      setPosts(prev =>
+        prev.map(p =>
+          p.id === id && !likedPosts[id] ? { ...p, likesCount: p.likesCount + 1 } : p
+        )
+      );
+      setLikedPosts(prev => ({ ...prev, [id]: true }));
+      return;
+    }
+
     try {
       const result = await CampusDatabase.toggleMediaLike(id);
       setPosts(prev =>
@@ -272,8 +269,14 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // Watch handler
+  // ✅ FIXED: Watch handler — skip incrementing views via API for
+  // client-only fallback/demo posts, same reasoning as above.
   const handleWatch = async (post: CampusMediaPost) => {
+    if (post.id.startsWith("default_")) {
+      setActiveVideo(post);
+      return;
+    }
+
     try {
       await CampusDatabase.incrementMediaViews(post.id);
       setActiveVideo(post);
@@ -292,9 +295,21 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  // Delete handler
+  // ✅ FIXED: Delete handler — skip the API call for client-only
+  // fallback/demo posts; just remove them from local state instead.
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (id.startsWith("default_")) {
+      if (confirm("Remove this sample broadcast from view?")) {
+        setPosts(prev => prev.filter(p => p.id !== id));
+        if (activeVideo?.id === id) {
+          setActiveVideo(null);
+        }
+      }
+      return;
+    }
+
     if (confirm("Are you sure you want to remove this official broadcast from the public campus screen?")) {
       try {
         await CampusDatabase.deleteMediaPost(id);
@@ -330,7 +345,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
     const finalThumb = thumbnailUrl.trim() || defaultThumbs[category] || defaultThumbs.CAMPUS_NEWS;
 
-    // Base post data (without videoUrl or file)
     const postData = {
       title: title.trim(),
       description: description.trim() || "Official Mekdela Amba University media broadcast and documentary stream.",
@@ -345,17 +359,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
     try {
       if (selectedFile) {
-        // 📤 Upload with file using multipart/form-data.
-        // NOTE: do not set a Content-Type header manually here — axios/the
-        // browser needs to add the multipart boundary itself. See
-        // services/api.ts -> uploadMediaPost for the fixed implementation.
-        //
-        // ✅ IMPORTANT: multipart/form-data requests are NOT auto-converted
-        // camelCase -> snake_case the way JSON requests are (if you're using
-        // djangorestframework-camel-case or similar). The DRF serializer's
-        // Meta.fields are snake_case (posted_by, author_role, thumbnail_url),
-        // so we must send exactly those keys here, or Django will reject
-        // required fields like posted_by / author_role as missing (400).
         const formData = new FormData();
         formData.append('title', postData.title);
         formData.append('description', postData.description);
@@ -365,15 +368,11 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         formData.append('author_role', postData.authorRole);
         formData.append('duration', postData.duration);
         formData.append('featured', String(postData.featured));
-        // JSONField over multipart: send as a JSON string; DRF will store it
-        // as-is on this Django/DRF version, so keep the backend's JSONField
-        // parsing in mind if tags come back as a string instead of a list.
         formData.append('tags', JSON.stringify(postData.tags));
         formData.append('video_file', selectedFile);
 
         await CampusDatabase.uploadMediaPost(formData);
       } else {
-        // 📎 Upload with URL only (JSON)
         await CampusDatabase.addMediaPost({
           ...postData,
           videoUrl: videoUrl.trim()
@@ -398,17 +397,10 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       }, 1200);
     } catch (err: any) {
       console.error("Failed to create post:", err);
-      // ✅ Log the actual field-level validation errors DRF sends back.
-      // This is what tells you WHICH field(s) failed — e.g.
-      // { posted_by: ["This field is required."], author_role: [...] }
-      // Stringified so it prints as plain readable text (a raw object logs
-      // as a collapsed "Object" that can't be copy-pasted from DevTools).
       console.error(
         "Server validation details:",
         JSON.stringify(err?.response?.data, null, 2)
       );
-      // ✅ Surface a clearer message when the session token was rejected,
-      // instead of a generic failure alert.
       if (err?.response?.status === 401) {
         alert("Your admin session has expired or is invalid. Please log in again.");
         handleAdminLock();
@@ -786,7 +778,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                           <p className="text-xs text-slate-300 max-w-md">
                             Simulated High-Definition University Optical Network Stream. Video stream configured for campus intranet.
                           </p>
-                          <a
+
                             href={activeVideo.videoUrl}
                             target="_blank"
                             rel="noreferrer"
@@ -904,13 +896,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       <p className="leading-relaxed text-slate-700 dark:text-slate-300">
                         በዩኒቨርሲቲው ይፋዊ ስክሪን ላይ ቪዲዮ ለመለጠፍ የአድሚን የይለፍ ቃል ማስገባት ያስፈልጋል።
                       </p>
-                      {/*
-                        ⚠️ SECURITY FIX: the previous version printed real
-                        admin credentials directly in this banner. Anyone
-                        opening the page (or viewing page source) could read
-                        them. Never display real credentials in the UI —
-                        removed entirely. Use "Forgot Password" below instead.
-                      */}
                     </div>
                   </div>
 
