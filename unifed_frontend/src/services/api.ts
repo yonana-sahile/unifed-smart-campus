@@ -65,9 +65,17 @@ api.interceptors.response.use(
   }
 );
 
+// ✅ Helper: DRF's PageNumberPagination (settings.py PAGE_SIZE=100) wraps
+// every list response in { count, next, previous, results }. Returning
+// the raw object makes the frontend's `data.length` / `data.map()`
+// checks fail silently and fall back to mock data. This helper unwraps
+// the envelope so every list-based screen sees a plain array.
+const unwrapList = <T>(raw: any): T[] =>
+  Array.isArray(raw) ? raw : (raw?.results ?? []);
+
 // ---------- USERS ----------
 export const getUsers = (): Promise<User[]> =>
-  api.get('/users/').then(r => r.data);
+  api.get('/users/').then(r => unwrapList<User>(r.data));
 export const saveUsers = (users: User[]): Promise<User[]> =>
   api.put('/users/', users).then(r => r.data);
 export const updateUser = (user: User): Promise<User> =>
@@ -75,109 +83,112 @@ export const updateUser = (user: User): Promise<User> =>
 
 // ---------- COURSES ----------
 export const getCourses = (): Promise<Course[]> =>
-  api.get('/courses/').then(r => r.data);
+  api.get('/courses/').then(r => unwrapList<Course>(r.data));
 export const saveCourses = (courses: Course[]): Promise<Course[]> =>
   api.put('/courses/', courses).then(r => r.data);
 
 // ---------- MATERIALS ----------
 export const getMaterials = (): Promise<CourseMaterial[]> =>
-  api.get('/materials/').then(r => r.data);
+  api.get('/materials/').then(r => unwrapList<CourseMaterial>(r.data));
 export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMaterial[]> =>
   api.put('/materials/', materials).then(r => r.data);
 
 // ---------- ANNOUNCEMENTS ----------
+// ✅ FIXED: unwrap DRF pagination envelope so the news components
+// (CampusNewsTopBar / CampusNewsAdminModal) receive a real array and
+// don't silently fall back to their mock DEFAULT_NEWS lists.
 export const getAnnouncements = (): Promise<Announcement[]> =>
-  api.get('/announcements/').then(r => r.data);
+  api.get('/announcements/').then(r => unwrapList<Announcement>(r.data));
 export const saveAnnouncements = (announcements: Announcement[]): Promise<Announcement[]> =>
   api.put('/announcements/', announcements).then(r => r.data);
 
 // ---------- ASSIGNMENTS ----------
 export const getAssignments = (): Promise<Assignment[]> =>
-  api.get('/assignments/').then(r => r.data);
+  api.get('/assignments/').then(r => unwrapList<Assignment>(r.data));
 export const saveAssignments = (assignments: Assignment[]): Promise<Assignment[]> =>
   api.put('/assignments/', assignments).then(r => r.data);
 
 // ---------- SUBMISSIONS ----------
 export const getSubmissions = (): Promise<Submission[]> =>
-  api.get('/submissions/').then(r => r.data);
+  api.get('/submissions/').then(r => unwrapList<Submission>(r.data));
 export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]> =>
   api.put('/submissions/', submissions).then(r => r.data);
 
 // ---------- EXAMS ----------
 export const getExams = (): Promise<Exam[]> =>
-  api.get('/exams/').then(r => r.data);
+  api.get('/exams/').then(r => unwrapList<Exam>(r.data));
 export const saveExams = (exams: Exam[]): Promise<Exam[]> =>
   api.put('/exams/', exams).then(r => r.data);
 
 // ---------- EXAM ATTEMPTS ----------
 export const getExamAttempts = (): Promise<ExamAttempt[]> =>
-  api.get('/exam-attempts/').then(r => r.data);
+  api.get('/exam-attempts/').then(r => unwrapList<ExamAttempt>(r.data));
 export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> =>
   api.put('/exam-attempts/', attempts).then(r => r.data);
 
 // ---------- GRADES ----------
 export const getGrades = (): Promise<Grade[]> =>
-  api.get('/grades/').then(r => r.data);
+  api.get('/grades/').then(r => unwrapList<Grade>(r.data));
 export const saveGrades = (grades: Grade[]): Promise<Grade[]> =>
   api.put('/grades/', grades).then(r => r.data);
 
 // ---------- TRANSCRIPTS ----------
 export const getTranscripts = (): Promise<Transcript[]> =>
-  api.get('/transcripts/').then(r => r.data);
+  api.get('/transcripts/').then(r => unwrapList<Transcript>(r.data));
 export const saveTranscripts = (transcripts: Transcript[]): Promise<Transcript[]> =>
   api.put('/transcripts/', transcripts).then(r => r.data);
 
 // ---------- ATTENDANCE ----------
 export const getAttendance = (): Promise<AttendanceRecord[]> =>
-  api.get('/attendance/').then(r => r.data);
+  api.get('/attendance/').then(r => unwrapList<AttendanceRecord>(r.data));
 export const saveAttendance = (records: AttendanceRecord[]): Promise<AttendanceRecord[]> =>
   api.put('/attendance/', records).then(r => r.data);
 
 // ---------- LIBRARY RESOURCES ----------
 export const getLibraryResources = (): Promise<LibraryResource[]> =>
-  api.get('/library-resources/').then(r => r.data);
+  api.get('/library-resources/').then(r => unwrapList<LibraryResource>(r.data));
 export const saveLibraryResources = (resources: LibraryResource[]): Promise<LibraryResource[]> =>
   api.put('/library-resources/', resources).then(r => r.data);
 
 // ---------- PAYMENTS ----------
 export const getPayments = (): Promise<PaymentTransaction[]> =>
-  api.get('/payments/').then(r => r.data);
+  api.get('/payments/').then(r => unwrapList<PaymentTransaction>(r.data));
 export const savePayments = (payments: PaymentTransaction[]): Promise<PaymentTransaction[]> =>
   api.put('/payments/', payments).then(r => r.data);
 
 // ---------- SCHOLARSHIPS ----------
 export const getScholarships = (): Promise<Scholarship[]> =>
-  api.get('/scholarships/').then(r => r.data);
+  api.get('/scholarships/').then(r => unwrapList<Scholarship>(r.data));
 export const saveScholarships = (scholarships: Scholarship[]): Promise<Scholarship[]> =>
   api.put('/scholarships/', scholarships).then(r => r.data);
 
 // ---------- COURSE OUTLINES ----------
 export const getCourseOutlines = (): Promise<CourseOutlineForm[]> =>
-  api.get('/course-outlines/').then(r => r.data);
+  api.get('/course-outlines/').then(r => unwrapList<CourseOutlineForm>(r.data));
 export const saveCourseOutlines = (outlines: CourseOutlineForm[]): Promise<CourseOutlineForm[]> =>
   api.put('/course-outlines/', outlines).then(r => r.data);
 
 // ---------- EVALUATIONS ----------
 export const getEvaluations = (): Promise<InstructorEvaluation[]> =>
-  api.get('/evaluations/').then(r => r.data);
+  api.get('/evaluations/').then(r => unwrapList<InstructorEvaluation>(r.data));
 export const saveEvaluations = (evaluations: InstructorEvaluation[]): Promise<InstructorEvaluation[]> =>
   api.put('/evaluations/', evaluations).then(r => r.data);
 
 // ---------- MOE ADMISSIONS ----------
 export const getMoEAdmissions = (): Promise<MoEAdmissionRecord[]> =>
-  api.get('/moe-admissions/').then(r => r.data);
+  api.get('/moe-admissions/').then(r => unwrapList<MoEAdmissionRecord>(r.data));
 export const saveMoEAdmissions = (admissions: MoEAdmissionRecord[]): Promise<MoEAdmissionRecord[]> =>
   api.put('/moe-admissions/', admissions).then(r => r.data);
 
 // ---------- CERTIFICATES ----------
 export const getCertificates = (): Promise<CertificateRecord[]> =>
-  api.get('/certificates/').then(r => r.data);
+  api.get('/certificates/').then(r => unwrapList<CertificateRecord>(r.data));
 export const saveCertificates = (certificates: CertificateRecord[]): Promise<CertificateRecord[]> =>
   api.put('/certificates/', certificates).then(r => r.data);
 
 // ---------- AUDIT LOGS ----------
 export const getAuditLogs = (): Promise<AuditLog[]> =>
-  api.get('/audit-logs/').then(r => r.data);
+  api.get('/audit-logs/').then(r => unwrapList<AuditLog>(r.data));
 export const saveAuditLogs = (logs: AuditLog[]): Promise<AuditLog[]> =>
   api.put('/audit-logs/', logs).then(r => r.data);
 
@@ -233,7 +244,7 @@ export const addAuditLog = (
 
 // ---------- CLEARANCES ----------
 export const getClearances = (): Promise<StudentClearance[]> =>
-  api.get('/clearances/').then(r => r.data);
+  api.get('/clearances/').then(r => unwrapList<StudentClearance>(r.data));
 export const saveClearances = (clearances: StudentClearance[]): Promise<StudentClearance[]> =>
   api.put('/clearances/', clearances).then(r => r.data);
 
@@ -253,7 +264,7 @@ export const updateClearanceStage = (
 
 // ---------- FACILITY BOOKINGS ----------
 export const getFacilityBookings = (): Promise<FacilityBooking[]> =>
-  api.get('/facility-bookings/').then(r => r.data);
+  api.get('/facility-bookings/').then(r => unwrapList<FacilityBooking>(r.data));
 export const saveFacilityBookings = (bookings: FacilityBooking[]): Promise<FacilityBooking[]> =>
   api.put('/facility-bookings/', bookings).then(r => r.data);
 
@@ -262,7 +273,7 @@ export const addFacilityBooking = (booking: Omit<FacilityBooking, 'id'>): Promis
 
 // ---------- CAMPUS ALERTS ----------
 export const getCampusAlerts = (): Promise<CampusAlert[]> =>
-  api.get('/campus-alerts/').then(r => r.data);
+  api.get('/campus-alerts/').then(r => unwrapList<CampusAlert>(r.data));
 export const saveCampusAlerts = (alerts: CampusAlert[]): Promise<CampusAlert[]> =>
   api.put('/campus-alerts/', alerts).then(r => r.data);
 
@@ -270,17 +281,9 @@ export const addCampusAlert = (alert: Omit<CampusAlert, 'id' | 'timestamp'>): Pr
   api.post('/campus-alerts/', alert).then(r => r.data);
 
 // ---------- CAMPUS MEDIA POSTS ----------
-// ✅ FIXED: DRF's PageNumberPagination (settings.py PAGE_SIZE=100) wraps
-// list responses in { count, next, previous, results }. The old code
-// returned the raw paginated object, so the component saw an object
-// instead of an array, its `data.length` check failed, and it silently
-// fell back to the 3 hardcoded mock videos — hiding every real upload.
-// Unwrapping `.results` here keeps the rest of the app pagination-agnostic.
+// ✅ DRF pagination unwrap — keeps the rest of the app pagination-agnostic.
 export const getMediaPosts = (): Promise<CampusMediaPost[]> =>
-  api.get('/media-posts/').then(r => {
-    const raw: any = r.data;
-    return Array.isArray(raw) ? raw : (raw?.results ?? []);
-  });
+  api.get('/media-posts/').then(r => unwrapList<CampusMediaPost>(r.data));
 
 export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPost[]> =>
   api.put('/media-posts/', posts).then(r => r.data);
