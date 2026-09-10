@@ -164,9 +164,17 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const loadPosts = async () => {
     try {
       setLoading(true);
-      const data = await CampusDatabase.getMediaPosts();
+      const raw: any = await CampusDatabase.getMediaPosts();
 
-      if (data && data.length > 0) {
+      // ✅ FIXED: Defensive unwrap of DRF pagination envelope in case a
+      // future response shape changes. The api layer already unwraps
+      // `.results`, but this guards against the object shape leaking
+      // through to the state setter and triggering the mock fallback.
+      const data: CampusMediaPost[] = Array.isArray(raw)
+        ? raw
+        : (Array.isArray(raw?.results) ? raw.results : []);
+
+      if (data.length > 0) {
         setPosts(data);
         localStorage.setItem("mau_media_posts_cache", JSON.stringify(data));
       } else {
@@ -789,9 +797,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   />
                 ) : (
                   <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
-                    {/* ✅ FIXED: play ANY direct video file, not just blob: URLs.
-                        Backend-uploaded videos land at /media/videos/... and
-                        are handled here so they actually play. */}
+                    {/* ✅ FIXED: play ANY direct video file, not just blob: URLs. */}
                     {isDirectVideoFile(activeVideo.videoUrl) ? (
                       <video
                         key={activeVideo.id}

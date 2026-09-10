@@ -46,9 +46,7 @@ api.interceptors.request.use((config) => {
   // into multipart/form-data (file upload) requests. Axios would normally
   // let the browser auto-set 'multipart/form-data; boundary=...' for a
   // FormData body, but an explicitly-set Content-Type header takes
-  // priority and blocks that from happening. Without the correct boundary,
-  // Django can't parse request.FILES, and DRF rejects video_file with
-  // "The submitted data was not a file. Check the encoding type on the form."
+  // priority and blocks that from happening.
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
   }
@@ -56,9 +54,6 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// ✅ Optional: auto-handle expired/invalid tokens globally.
-// If the backend ever returns 401, clear the stale token so the UI
-// doesn't keep sending a dead Authorization header.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -275,8 +270,17 @@ export const addCampusAlert = (alert: Omit<CampusAlert, 'id' | 'timestamp'>): Pr
   api.post('/campus-alerts/', alert).then(r => r.data);
 
 // ---------- CAMPUS MEDIA POSTS ----------
+// ✅ FIXED: DRF's PageNumberPagination (settings.py PAGE_SIZE=100) wraps
+// list responses in { count, next, previous, results }. The old code
+// returned the raw paginated object, so the component saw an object
+// instead of an array, its `data.length` check failed, and it silently
+// fell back to the 3 hardcoded mock videos — hiding every real upload.
+// Unwrapping `.results` here keeps the rest of the app pagination-agnostic.
 export const getMediaPosts = (): Promise<CampusMediaPost[]> =>
-  api.get('/media-posts/').then(r => r.data);
+  api.get('/media-posts/').then(r => {
+    const raw: any = r.data;
+    return Array.isArray(raw) ? raw : (raw?.results ?? []);
+  });
 
 export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPost[]> =>
   api.put('/media-posts/', posts).then(r => r.data);
@@ -285,7 +289,7 @@ export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'vi
   api.post('/media-posts/', post).then(r => r.data);
 
 // ✅ File upload media post (multipart/form-data).
-// The request interceptor above now strips the instance's default
+// The request interceptor above strips the instance's default
 // 'Content-Type: application/json' header whenever the body is a
 // FormData instance, so the browser/axios can generate the correct
 // 'multipart/form-data; boundary=...' header itself.
