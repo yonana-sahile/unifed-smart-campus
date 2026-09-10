@@ -84,8 +84,8 @@ const DEFAULT_MEDIA_POSTS: CampusMediaPost[] = [
   }
 ];
 
-// ✅ Helper: backend origin used to convert relative /media/... paths into
-// full URLs the browser can fetch directly from Django.
+// ✅ Helper: derive backend origin from the API base URL so we can turn
+// relative "/media/..." paths into full URLs the <video> tag can fetch.
 const BACKEND_ORIGIN = (() => {
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
   try {
@@ -95,8 +95,7 @@ const BACKEND_ORIGIN = (() => {
   }
 })();
 
-// ✅ Converts any video URL (relative or absolute) into something the
-// <video> tag can play.
+// ✅ Converts any video URL (relative or absolute) into a playable URL.
 const resolveVideoSrc = (url: string): string => {
   if (!url) return url;
   if (/^(https?:|blob:|data:)/i.test(url)) return url;
@@ -104,8 +103,8 @@ const resolveVideoSrc = (url: string): string => {
   return `${BACKEND_ORIGIN}/${url}`;
 };
 
-// ✅ Detects whether the URL points to a direct video file the browser
-// can play natively (vs a YouTube page or an arbitrary web URL).
+// ✅ Detects whether a URL points to a direct video file the browser can
+// play natively (vs a YouTube page, or some arbitrary web URL).
 const isDirectVideoFile = (url: string): boolean => {
   if (!url) return false;
   const clean = url.split('?')[0].split('#')[0].toLowerCase();
@@ -790,10 +789,9 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   />
                 ) : (
                   <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
-                    {/* ✅ FIXED: play ANY direct video file (blob:, .mp4, .webm,
-                        or /media/... paths) — not just blob: URLs. This is
-                        what makes backend-uploaded videos actually play
-                        instead of showing the "Simulated Stream" fallback. */}
+                    {/* ✅ FIXED: play ANY direct video file, not just blob: URLs.
+                        Backend-uploaded videos land at /media/videos/... and
+                        are handled here so they actually play. */}
                     {isDirectVideoFile(activeVideo.videoUrl) ? (
                       <video
                         key={activeVideo.id}
