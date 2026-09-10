@@ -136,10 +136,13 @@ export function CampusNewsAdminModal({
     () => currentUser?.role === "ADMIN"
   );
   const [activeTab, setActiveTab] = useState<"CREATE" | "MANAGE">("CREATE");
-  const [usernameInput, setUsernameInput] = useState("yonassahile");
+  // ✅ FIXED: default is empty — no hardcoded credential leak
+  const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
+  const [adminVerifying, setAdminVerifying] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [verifiedAdminName, setVerifiedAdminName] = useState("");
 
   // Form state
   const [title, setTitle] = useState("");
@@ -160,7 +163,15 @@ export function CampusNewsAdminModal({
   const loadNews = async () => {
     try {
       setLoading(true);
-      const announcements = await CampusDatabase.getAnnouncements();
+      const raw: any = await CampusDatabase.getAnnouncements();
+
+      // ✅ FIXED: defensively unwrap DRF pagination envelope in case the
+      // api layer hasn't already unwrapped it. Without this, .map() on a
+      // paginated object silently fails and news never renders here.
+      const announcements: Announcement[] = Array.isArray(raw)
+        ? raw
+        : (Array.isArray(raw?.results) ? raw.results : []);
+
       const mapped = announcements.map(mapAnnouncementToNewsItem);
       setNewsList(mapped);
     } catch (err) {
@@ -177,36 +188,64 @@ export function CampusNewsAdminModal({
     }
   }, [isOpen, isAdminAuthenticated]);
 
+  // ✅ FIXED: real JWT login against /auth/login/. Removed the hardcoded
+  // "yonassahile / 1234" fallback that let anyone in without a real
+  // backend session. Only ADMIN / superuser accounts may proceed, and
+  // the returned JWT is stored so the axios interceptor can attach it
+  // to subsequent POST /api/announcements/ requests (which the backend
+  // now requires to be authenticated).
   const handleAdminLogin = async (e: FormEvent) => {
     e.preventDefault();
     setAuthError("");
+    setAdminVerifying(true);
 
     const cleanUser = usernameInput.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
-
-    const isYonas =
-      (cleanUser === "yonassahile" || cleanUser === "yonas") &&
-      (cleanPass === "1234" || cleanPass === "password");
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
     try {
-      const users = await CampusDatabase.getUsers();
-      const foundAdmin = users.find(
-        (u) =>
-          u.role === "ADMIN" &&
-          (u.username.toLowerCase() === cleanUser || u.email.toLowerCase() === cleanUser) &&
-          (cleanPass === "1234" || cleanPass === "password")
-      );
+      const response = await fetch(`${API_BASE}/auth/login/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: cleanUser, password: cleanPass })
+      });
 
-      if (isYonas || foundAdmin) {
-        setIsAdminAuthenticated(true);
-        setAuthError("");
-        await loadNews();
-      } else {
-        setAuthError("የተሳሳተ የተጠቃሚ ስም ወይም የይለፍ ቃል! (ትክክለኛ፦ username: yonassahile / password: 1234)");
+      if (!response.ok) {
+        setAuthError("Invalid admin credentials. Please check your username and password.");
+        return;
       }
-    } catch {
+
+      const data = await response.json();
+      const user = data.user;
+
+      if (!user || !(user.role === 'ADMIN' || user.is_superuser)) {
+        setAuthError("This account does not have admin privileges.");
+        return;
+      }
+
+      localStorage.setItem('access_token', data.access);
+      localStorage.setItem('refresh_token', data.refresh);
+
+      setVerifiedAdminName(user.full_name || user.username || cleanUser);
+      setAuthor(user.full_name || user.username || "University Media Directorate");
+      setIsAdminAuthenticated(true);
+      setPasswordInput("");
+      await loadNews();
+    } catch (err) {
+      console.error("Failed to verify admin:", err);
       setAuthError("Unable to connect to server. Please try again.");
+    } finally {
+      setAdminVerifying(false);
     }
+  };
+
+  // ✅ Log out of the admin session — also clears stored tokens so a
+  // stale JWT can't linger after the user locks the session.
+  const handleAdminLock = () => {
+    setIsAdminAuthenticated(false);
+    setVerifiedAdminName("");
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
   };
 
   const handlePublishNews = async (e: FormEvent) => {
@@ -230,7 +269,7 @@ export function CampusNewsAdminModal({
         courseTitle: "Campus News & Announcements",
         title: title.trim(),
         content: fullContent.trim(),
-        postedBy: author.trim() || currentUser?.fullName || "University Admin",
+        postedBy: author.trim() || verifiedAdminName || currentUser?.fullName || "University Admin",
         postedAt: new Date().toISOString()
       };
 
@@ -339,12 +378,12 @@ export function CampusNewsAdminModal({
                   <p className="leading-relaxed text-slate-700 dark:text-slate-300">
                     ይህ ክፍል የተጠበቀ የዩኒቨርሲቲው የሚዲያ እና የህዝብ ግንኙነት አስተዳደር ክፍል ነው። እባክዎ የአድሚን መለያዎን ያስገቡ።
                   </p>
-                  <div className="pt-1 flex items-center space-x-2 text-[11px]">
-                    <span className="font-semibold text-slate-500">ይፋዊ የአድሚን መለያ፦</span>
-                    <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-amber-300 font-bold text-amber-800 dark:text-amber-300">
-                      User: yonassahile | Pass: 1234
-                    </span>
-                  </div>
+                  {/*
+                    ⚠️ SECURITY FIX: the previous version printed real admin
+                    credentials ("User: yonassahile | Pass: 1234") directly on
+                    this panel — visible to anyone opening the modal. Removed
+                    entirely. Real credentials must live only in the backend.
+                  */}
                 </div>
               </div>
 
@@ -365,7 +404,7 @@ export function CampusNewsAdminModal({
                     <input
                       type="text"
                       required
-                      placeholder="e.g. yonassahile or admin"
+                      placeholder="Enter your admin username"
                       className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
                       value={usernameInput}
                       onChange={(e) => setUsernameInput(e.target.value)}
@@ -392,7 +431,7 @@ export function CampusNewsAdminModal({
                     <input
                       type="password"
                       required
-                      placeholder="Enter Admin Password (1234)"
+                      placeholder="Enter your account password"
                       className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
                       value={passwordInput}
                       onChange={(e) => setPasswordInput(e.target.value)}
@@ -410,10 +449,11 @@ export function CampusNewsAdminModal({
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
+                    disabled={adminVerifying}
+                    className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <KeyRound className="w-4 h-4 text-amber-300" />
-                    <span>Verify & Access News Dashboard</span>
+                    <span>{adminVerifying ? "Verifying..." : "Verify & Access News Dashboard"}</span>
                   </button>
                 </div>
               </form>
@@ -426,12 +466,12 @@ export function CampusNewsAdminModal({
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                   <span className="font-bold text-emerald-900 dark:text-emerald-200">
-                    Authenticated as Admin ({currentUser?.fullName || "Yonas Sahile"} • Media Directorate)
+                    Authenticated as Admin ({verifiedAdminName || currentUser?.fullName || "Media Directorate"})
                   </span>
                 </div>
                 <button
                   type="button"
-                  onClick={() => setIsAdminAuthenticated(false)}
+                  onClick={handleAdminLock}
                   className="px-2.5 py-1 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-red-600 rounded-lg text-[11px] font-bold border border-slate-200 dark:border-slate-700 transition flex items-center space-x-1 cursor-pointer"
                 >
                   <LogOut className="w-3 h-3 text-red-500" />
@@ -725,7 +765,6 @@ export function CampusNewsAdminModal({
         onClose={() => setShowForgotModal(false)}
         onAutoFillLogin={(email) => {
           setUsernameInput(email);
-          setPasswordInput("1234");
         }}
       />
     </AnimatePresence>
