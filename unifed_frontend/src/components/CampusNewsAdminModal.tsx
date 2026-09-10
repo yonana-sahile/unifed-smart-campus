@@ -68,7 +68,7 @@ interface CampusNewsAdminModalProps {
 
 // Helper to map Announcement -> CampusNewsItem
 const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
-  const titleLower = ann.title.toLowerCase();
+  const titleLower = (ann.title || "").toLowerCase();
   let categoryLabel = "Academic";
   let categoryAmharic = "የአካዳሚክ";
   let badgeColor = "from-blue-600 to-indigo-600 border-blue-400/30 text-white";
@@ -101,7 +101,7 @@ const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
     highlightTag = "👥 COMMUNITY";
   }
 
-  const dateObj = new Date(ann.postedAt);
+  const dateObj = new Date(ann.postedAt || Date.now());
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const formattedDate = `${months[dateObj.getMonth()]} ${dateObj.getDate()}, ${dateObj.getFullYear()}`;
   const ethiopianDate = dateObj.toLocaleDateString("am-ET");
@@ -110,16 +110,16 @@ const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
     id: ann.id,
     title: ann.title,
     amharicTitle: ann.title,
-    summary: ann.content.slice(0, 150) + "...",
-    fullContent: ann.content,
+    summary: (ann.content || "").slice(0, 150) + "...",
+    fullContent: ann.content || "",
     category,
     categoryLabel,
     categoryAmharic,
     badgeColor,
     date: formattedDate,
     ethiopianDate,
-    author: ann.postedBy,
-    readTime: `${Math.ceil(ann.content.split(" ").length / 200)} min read`,
+    author: ann.postedBy || "University Media Directorate",
+    readTime: `${Math.ceil((ann.content || "").split(" ").length / 200)} min read`,
     highlightTag,
     isBreaking: false,
     imageUrl: undefined
@@ -136,7 +136,7 @@ export function CampusNewsAdminModal({
     () => currentUser?.role === "ADMIN"
   );
   const [activeTab, setActiveTab] = useState<"CREATE" | "MANAGE">("CREATE");
-  // ✅ FIXED: default is empty — no hardcoded credential leak
+  // ✅ default is empty — no hardcoded credential leak
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
@@ -165,9 +165,8 @@ export function CampusNewsAdminModal({
       setLoading(true);
       const raw: any = await CampusDatabase.getAnnouncements();
 
-      // ✅ FIXED: defensively unwrap DRF pagination envelope in case the
-      // api layer hasn't already unwrapped it. Without this, .map() on a
-      // paginated object silently fails and news never renders here.
+      // ✅ Defensively unwrap DRF pagination envelope in case the api
+      // layer hasn't already unwrapped it.
       const announcements: Announcement[] = Array.isArray(raw)
         ? raw
         : (Array.isArray(raw?.results) ? raw.results : []);
@@ -188,12 +187,7 @@ export function CampusNewsAdminModal({
     }
   }, [isOpen, isAdminAuthenticated]);
 
-  // ✅ FIXED: real JWT login against /auth/login/. Removed the hardcoded
-  // "yonassahile / 1234" fallback that let anyone in without a real
-  // backend session. Only ADMIN / superuser accounts may proceed, and
-  // the returned JWT is stored so the axios interceptor can attach it
-  // to subsequent POST /api/announcements/ requests (which the backend
-  // now requires to be authenticated).
+  // ✅ Real JWT login against /auth/login/.
   const handleAdminLogin = async (e: FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -239,8 +233,7 @@ export function CampusNewsAdminModal({
     }
   };
 
-  // ✅ Log out of the admin session — also clears stored tokens so a
-  // stale JWT can't linger after the user locks the session.
+  // ✅ Log out of the admin session — clears stored tokens too.
   const handleAdminLock = () => {
     setIsAdminAuthenticated(false);
     setVerifiedAdminName("");
@@ -248,6 +241,12 @@ export function CampusNewsAdminModal({
     localStorage.removeItem('refresh_token');
   };
 
+  // ✅ FIXED: POST a single announcement via CampusDatabase.createAnnouncement.
+  // The previous code did `PUT /api/announcements/` (bulk update) which DRF's
+  // ModelViewSet router does NOT allow — it returned 405 Method Not Allowed.
+  // DRF only exposes:
+  //   POST   /announcements/       → create one
+  //   DELETE /announcements/<id>/  → delete one
   const handlePublishNews = async (e: FormEvent) => {
     e.preventDefault();
     setFeedback(null);
@@ -261,10 +260,11 @@ export function CampusNewsAdminModal({
     }
 
     try {
-      const currentAnnouncements = await CampusDatabase.getAnnouncements();
-
       const newAnnouncement: Announcement = {
-        id: "AN_" + Date.now(),
+        // ✅ Let the backend auto-generate the id (Django BigInteger PK).
+        // Sending a manual "AN_..." string breaks the serializer since it
+        // expects a numeric id. Cast to any to satisfy the TS interface.
+        id: undefined as any,
         courseId: "CAMPUS_NEWS",
         courseTitle: "Campus News & Announcements",
         title: title.trim(),
@@ -273,18 +273,23 @@ export function CampusNewsAdminModal({
         postedAt: new Date().toISOString()
       };
 
-      const updated = [newAnnouncement, ...currentAnnouncements];
-      await CampusDatabase.saveAnnouncements(updated);
+      // ✅ POST single announcement (DRF ModelViewSet supports this).
+      await CampusDatabase.createAnnouncement(newAnnouncement);
 
-      await CampusDatabase.addAuditLog(
-        currentUser?.id || "ADMIN",
-        newAnnouncement.postedBy,
-        "ADMIN",
-        "Post Campus News",
-        "Announcement",
-        newAnnouncement.id,
-        `Published campus news: "${title.trim()}"`
-      );
+      // Best-effort audit log — don't fail the whole publish if it errors.
+      try {
+        await CampusDatabase.addAuditLog(
+          currentUser?.id || "ADMIN",
+          newAnnouncement.postedBy,
+          "ADMIN",
+          "Post Campus News",
+          "Announcement",
+          "new",
+          `Published campus news: "${title.trim()}"`
+        );
+      } catch (auditErr) {
+        console.warn("Audit log failed (non-fatal):", auditErr);
+      }
 
       await loadNews();
       onNewsUpdated?.();
@@ -300,18 +305,30 @@ export function CampusNewsAdminModal({
       setSummary("");
       setFullContent("");
       setIsBreaking(false);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to publish news:", err);
-      setFeedback({ type: "error", text: "Failed to publish. Please try again." });
+      console.error(
+        "Server validation details:",
+        JSON.stringify(err?.response?.data, null, 2)
+      );
+      if (err?.response?.status === 401) {
+        setFeedback({
+          type: "error",
+          text: "Admin session expired. Please log in again."
+        });
+        handleAdminLock();
+      } else {
+        setFeedback({ type: "error", text: "Failed to publish. Please try again." });
+      }
     }
   };
 
+  // ✅ FIXED: DELETE single announcement by id (was trying to PUT the whole
+  // list which DRF rejects with 405).
   const handleDeleteNews = async (id: string) => {
     if (confirm("እርግጠኛ ነዎት ይህን ዜና ማስወገድ ይፈልጋሉ?")) {
       try {
-        const current = await CampusDatabase.getAnnouncements();
-        const updated = current.filter((ann) => ann.id !== id);
-        await CampusDatabase.saveAnnouncements(updated);
+        await CampusDatabase.deleteAnnouncement(id);
         await loadNews();
         onNewsUpdated?.();
       } catch (err) {
@@ -378,12 +395,6 @@ export function CampusNewsAdminModal({
                   <p className="leading-relaxed text-slate-700 dark:text-slate-300">
                     ይህ ክፍል የተጠበቀ የዩኒቨርሲቲው የሚዲያ እና የህዝብ ግንኙነት አስተዳደር ክፍል ነው። እባክዎ የአድሚን መለያዎን ያስገቡ።
                   </p>
-                  {/*
-                    ⚠️ SECURITY FIX: the previous version printed real admin
-                    credentials ("User: yonassahile | Pass: 1234") directly on
-                    this panel — visible to anyone opening the modal. Removed
-                    entirely. Real credentials must live only in the backend.
-                  */}
                 </div>
               </div>
 
@@ -687,9 +698,12 @@ export function CampusNewsAdminModal({
                     <div className="p-4 text-center text-slate-400">No announcements yet.</div>
                   ) : (
                     <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                      {newsList.map((item) => (
+                      {/* ✅ FIXED: fallback key using index when item.id is
+                          empty/undefined, avoiding the "two children with
+                          the same key" React warning. */}
+                      {newsList.map((item, index) => (
                         <div
-                          key={item.id}
+                          key={item.id || `news_${index}`}
                           className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                         >
                           <div className="space-y-1 flex-1">
