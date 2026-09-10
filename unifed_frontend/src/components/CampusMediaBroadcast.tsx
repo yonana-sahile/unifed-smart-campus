@@ -120,6 +120,51 @@ const isDirectVideoFile = (url: string): boolean => {
   );
 };
 
+// ✅ Safely parse a tags value that may arrive as:
+//   - a real array (from JSON responses)
+//   - a JSON-encoded string (from multipart responses where DRF stringifies it)
+//   - undefined / null
+const safeParseTags = (raw: any): string[] => {
+  if (Array.isArray(raw)) return raw.filter((t) => typeof t === "string");
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.filter((t) => typeof t === "string");
+    } catch {
+      // Not JSON – treat as a single tag if non-empty
+      return raw.trim() ? [raw.trim()] : [];
+    }
+  }
+  return [];
+};
+
+// ✅ Normalizes a raw post from the Django backend (snake_case → camelCase).
+// ✅ FIX: Django's CampusMediaPost model has BOTH `video_url` (a URLField,
+// empty when a file is uploaded) and `video_file` (the actual uploaded
+// file). We must fall back to `video_file` when `video_url` is empty,
+// otherwise the frontend sees an empty string and never renders a
+// <video> tag — showing the "Simulated Stream" placeholder instead.
+const normalizeMediaPost = (raw: any): CampusMediaPost => ({
+  id: String(raw?.id ?? ""),
+  title: raw?.title ?? "",
+  description: raw?.description ?? "",
+  category: raw?.category ?? "CAMPUS_NEWS",
+  videoUrl:
+    raw?.videoUrl ||
+    raw?.video_url ||
+    raw?.video_file ||
+    "",
+  thumbnailUrl: raw?.thumbnailUrl ?? raw?.thumbnail_url ?? "",
+  postedBy: raw?.postedBy ?? raw?.posted_by ?? "University Media Directorate",
+  authorRole: raw?.authorRole ?? raw?.author_role ?? "ADMIN",
+  postedAt: raw?.postedAt ?? raw?.posted_at ?? new Date().toISOString(),
+  duration: raw?.duration ?? "00:00",
+  viewsCount: Number(raw?.viewsCount ?? raw?.views_count ?? 0) || 0,
+  likesCount: Number(raw?.likesCount ?? raw?.likes_count ?? 0) || 0,
+  featured: Boolean(raw?.featured ?? false),
+  tags: safeParseTags(raw?.tags),
+});
+
 interface CampusMediaBroadcastProps {
   onAdminPostClick?: () => void;
 }
@@ -160,19 +205,19 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string>("");
 
-  // ✅ Load posts from API with fallback
+  // ✅ Load posts from API with fallback + normalization
   const loadPosts = async () => {
     try {
       setLoading(true);
       const raw: any = await CampusDatabase.getMediaPosts();
 
-      // ✅ FIXED: Defensive unwrap of DRF pagination envelope in case a
-      // future response shape changes. The api layer already unwraps
-      // `.results`, but this guards against the object shape leaking
-      // through to the state setter and triggering the mock fallback.
-      const data: CampusMediaPost[] = Array.isArray(raw)
+      // ✅ Unwrap DRF pagination envelope if present
+      const arr: any[] = Array.isArray(raw)
         ? raw
         : (Array.isArray(raw?.results) ? raw.results : []);
+
+      // ✅ Normalize every post from snake_case → camelCase
+      const data: CampusMediaPost[] = arr.map(normalizeMediaPost);
 
       if (data.length > 0) {
         setPosts(data);
@@ -185,7 +230,10 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       console.error("Failed to load media posts:", err);
       const cached = localStorage.getItem("mau_media_posts_cache");
       if (cached) {
-        try { setPosts(JSON.parse(cached)); } catch { setPosts(DEFAULT_MEDIA_POSTS); }
+        try {
+          const parsed = JSON.parse(cached);
+          setPosts(Array.isArray(parsed) ? parsed.map(normalizeMediaPost) : DEFAULT_MEDIA_POSTS);
+        } catch { setPosts(DEFAULT_MEDIA_POSTS); }
       } else {
         setPosts(DEFAULT_MEDIA_POSTS);
       }
@@ -291,7 +339,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     if (id.startsWith("default_")) {
       setPosts(prev =>
         prev.map(p =>
-          p.id === id && !likedPosts[id] ? { ...p, likesCount: p.likesCount + 1 } : p
+          p.id === id && !likedPosts[id] ? { ...p, likesCount: (p.likesCount ?? 0) + 1 } : p
         )
       );
       setLikedPosts(prev => ({ ...prev, [id]: true }));
@@ -299,10 +347,12 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
 
     try {
-      const result = await CampusDatabase.toggleMediaLike(id);
+      const result: any = await CampusDatabase.toggleMediaLike(id);
+      // ✅ Normalize: backend returns { likes_count }, not { likesCount }
+      const newCount = Number(result?.likesCount ?? result?.likes_count ?? 0) || 0;
       setPosts(prev =>
         prev.map(p =>
-          p.id === id ? { ...p, likesCount: result.likesCount } : p
+          p.id === id ? { ...p, likesCount: newCount } : p
         )
       );
       setLikedPosts(prev => ({ ...prev, [id]: true }));
@@ -613,7 +663,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   </p>
 
                   <div className="flex flex-wrap gap-1.5 pt-1">
-                    {featuredPost.tags.map((t, idx) => (
+                    {(featuredPost.tags ?? []).map((t, idx) => (
                       <span key={idx} className="text-[10px] text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded font-mono">
                         #{t}
                       </span>
@@ -625,7 +675,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   <div className="flex items-center space-x-4 text-xs text-slate-400">
                     <span className="flex items-center space-x-1.5">
                       <Eye className="w-4 h-4 text-blue-400" />
-                      <span>{featuredPost.viewsCount.toLocaleString()} views</span>
+                      <span>{(featuredPost.viewsCount ?? 0).toLocaleString()} views</span>
                     </span>
                     <button
                       onClick={(e) => handleLike(featuredPost.id, e)}
@@ -634,7 +684,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       }`}
                     >
                       <Heart className={`w-4 h-4 ${likedPosts[featuredPost.id] ? "fill-rose-500" : ""}`} />
-                      <span>{featuredPost.likesCount + (likedPosts[featuredPost.id] ? 1 : 0)}</span>
+                      <span>{(featuredPost.likesCount ?? 0) + (likedPosts[featuredPost.id] ? 1 : 0)}</span>
                     </button>
                   </div>
 
@@ -719,7 +769,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       <div className="flex items-center space-x-3">
                         <span className="flex items-center space-x-1">
                           <Eye className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{post.viewsCount}</span>
+                          <span>{post.viewsCount ?? 0}</span>
                         </span>
                         <button
                           onClick={(e) => handleLike(post.id, e)}
@@ -728,7 +778,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                           }`}
                         >
                           <Heart className={`w-3.5 h-3.5 ${likedPosts[post.id] ? "fill-rose-500" : ""}`} />
-                          <span>{post.likesCount + (likedPosts[post.id] ? 1 : 0)}</span>
+                          <span>{(post.likesCount ?? 0) + (likedPosts[post.id] ? 1 : 0)}</span>
                         </button>
                       </div>
 
@@ -783,7 +833,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
               </div>
 
               <div className="relative aspect-video bg-black w-full">
-                {activeVideo.videoUrl.includes("youtube.com") || activeVideo.videoUrl.includes("youtu.be") ? (
+                {(activeVideo.videoUrl ?? "").includes("youtube.com") || (activeVideo.videoUrl ?? "").includes("youtu.be") ? (
                   <iframe
                     src={
                       activeVideo.videoUrl.includes("embed")
@@ -797,7 +847,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   />
                 ) : (
                   <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
-                    {/* ✅ FIXED: play ANY direct video file, not just blob: URLs. */}
                     {isDirectVideoFile(activeVideo.videoUrl) ? (
                       <video
                         key={activeVideo.id}
@@ -861,7 +910,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       }`}
                     >
                       <Heart className={`w-4 h-4 ${likedPosts[activeVideo.id] ? "fill-rose-500 text-rose-500" : ""}`} />
-                      <span>{activeVideo.likesCount + (likedPosts[activeVideo.id] ? 1 : 0)} Likes</span>
+                      <span>{(activeVideo.likesCount ?? 0) + (likedPosts[activeVideo.id] ? 1 : 0)} Likes</span>
                     </button>
                     <button
                       onClick={(e) => handleShare(activeVideo, e)}
@@ -881,7 +930,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-1.5 pt-2">
-                  {activeVideo.tags.map((t, idx) => (
+                  {(activeVideo.tags ?? []).map((t, idx) => (
                     <span key={idx} className="text-[11px] text-amber-400 bg-amber-950/40 border border-amber-800/40 px-2.5 py-0.5 rounded font-mono">
                       #{t}
                     </span>
@@ -903,7 +952,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden font-sans max-h-[92vh] flex flex-col"
             >
-              {/* Modal Header */}
               <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-primary to-slate-900 text-white flex items-center justify-between border-b border-amber-500/20">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
@@ -931,7 +979,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                 </button>
               </div>
 
-              {/* If NOT Authenticated */}
               {!isMediaAdminAuth ? (
                 <div className="p-6 sm:p-8 space-y-6">
                   <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-2xl flex items-start space-x-3">
@@ -1018,7 +1065,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   </form>
                 </div>
               ) : (
-                /* Authenticated Form Content */
                 <form onSubmit={handleCreatePost} className="p-6 sm:p-8 space-y-4 overflow-y-auto flex-1 text-slate-800 dark:text-slate-200">
                   <div className="flex items-center justify-between p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs">
                     <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
@@ -1049,7 +1095,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     </div>
                   ) : (
                     <>
-                      {/* Video Title */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Broadcast Title / የቪዲዮው ርዕስ *
@@ -1064,7 +1109,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         />
                       </div>
 
-                      {/* Category & Duration Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -1098,13 +1142,11 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Video URL / File Upload Section */}
                       <div className="space-y-3">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Video Source • የቪዲዮ ምንጭ <span className="text-red-500">*</span>
                         </label>
 
-                        {/* URL Input */}
                         <div className="relative">
                           <ExternalLink className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
                           <input
@@ -1117,7 +1159,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                           />
                         </div>
 
-                        {/* File Upload Area */}
                         <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40 transition hover:border-amber-400">
                           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                             <div className="flex items-center space-x-3 w-full sm:w-auto">
@@ -1163,7 +1204,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Thumbnail URL */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Custom Thumbnail Image URL (Optional)
@@ -1180,7 +1220,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </p>
                       </div>
 
-                      {/* Description */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Broadcast Description / ማብራሪያ
@@ -1194,7 +1233,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         />
                       </div>
 
-                      {/* Tags & Poster Name */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -1223,7 +1261,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Featured Checkbox */}
                       <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center space-x-3">
                         <input
                           type="checkbox"
@@ -1237,7 +1274,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </label>
                       </div>
 
-                      {/* Submit Button */}
                       <div className="pt-3 flex items-center justify-end space-x-3">
                         <button
                           type="button"
@@ -1263,7 +1299,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Forgot Password Modal */}
       <ForgotPasswordModal
         isOpen={showForgotModal}
         onClose={() => setShowForgotModal(false)}
