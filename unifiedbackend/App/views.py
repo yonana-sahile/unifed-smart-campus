@@ -8,6 +8,7 @@ from django.utils import timezone
 from .models import *
 from .serializers import *
 from .permissions import *
+import json
 import random
 import string
 
@@ -306,18 +307,52 @@ class CampusMediaPostViewSet(BaseViewSet):
         post.save()
         return Response({'likes_count': post.likes_count})
 
-    # ✅ Override create to handle file uploads (multipart/form-data)
+    # ✅ FIXED: Override create to handle file uploads (multipart/form-data)
+    # correctly, including JSONField ("tags") which arrives as a raw JSON
+    # string over multipart and must be parsed back into a real list before
+    # validation — otherwise it gets stored as a literal string.
     def create(self, request, *args, **kwargs):
-        # Copy request data to allow modification
-        data = request.data.copy()
-        # If a file is present, attach it to the data dict
+        # ⚠️ IMPORTANT: do NOT use request.data.copy() when a file is
+        # present. QueryDict.copy() performs a deepcopy() internally, and
+        # deep-copying an in-memory/temporary uploaded file object corrupts
+        # it — Django's FileField then rejects it with "The submitted data
+        # was not a file. Check the encoding type on the form." even though
+        # a real file was actually uploaded.
+        #
+        # QueryDict.dict() avoids this: it builds a plain dict using the
+        # SAME object references (no deep copy), so the file stays intact.
+        if hasattr(request.data, 'dict'):
+            data = request.data.dict()
+        else:
+            data = dict(request.data)
+
+        # Explicitly (re)attach the file from request.FILES to be safe
+        # regardless of how the multipart parser merged it into request.data.
         if request.FILES.get('video_file'):
             data['video_file'] = request.FILES['video_file']
-        # The serializer will validate that at least one source exists
+
+        # ✅ Parse "tags" back into a real list/dict if it arrived as a
+        # JSON-encoded string (always the case for multipart/form-data,
+        # since HTML forms can only send strings/files, never nested types).
+        raw_tags = data.get('tags')
+        if isinstance(raw_tags, str):
+            try:
+                data['tags'] = json.loads(raw_tags)
+            except (TypeError, ValueError):
+                # Fall back to a single-item list rather than failing the
+                # whole request over a malformed tags string.
+                data['tags'] = [raw_tags] if raw_tags else []
+
+        # The serializer will validate that at least one video source exists
         serializer = self.get_serializer(data=data)
         if serializer.is_valid():
             self.perform_create(serializer)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        # ✅ Log full validation errors server-side too, so you can see them
+        # in the Django console (runserver output) without needing the
+        # browser DevTools open.
+        print("CampusMediaPost create() validation errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 

@@ -101,10 +101,12 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
   // Admin Auth State
   const [isMediaAdminAuth, setIsMediaAdminAuth] = useState(false);
-  const [adminUsername, setAdminUsername] = useState("yonassahile");
+  const [adminUsername, setAdminUsername] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const [adminError, setAdminError] = useState("");
+  const [adminVerifying, setAdminVerifying] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
+  const [verifiedAdminName, setVerifiedAdminName] = useState("");
 
   // New Post Form State
   const [title, setTitle] = useState("");
@@ -115,7 +117,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const [duration, setDuration] = useState("08:30");
   const [tagsInput, setTagsInput] = useState("");
   const [isFeatured, setIsFeatured] = useState(false);
-  const [posterName, setPosterName] = useState("Yonas Sahile (Lead Admin)");
+  const [posterName, setPosterName] = useState("");
   const [formSuccess, setFormSuccess] = useState(false);
 
   // ✅ Local file upload state
@@ -153,17 +155,24 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     loadPosts();
   }, []);
 
-  // ✅ FIXED: Authenticate admin with real JWT login before video upload
+  // ✅ FIXED: Authenticate admin with real JWT login only.
+  // The previous hardcoded fallback ("yonassahile" / "1234" / "password")
+  // let the UI unlock the upload form WITHOUT ever storing a JWT in
+  // localStorage. That meant every upload request went out with no
+  // Authorization header, and Django correctly rejected it with 401.
+  // This version only flips isMediaAdminAuth to true after a real,
+  // successful login against the backend, and only stores the token
+  // once we've confirmed the account actually has admin rights.
   const handleAdminVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError("");
+    setAdminVerifying(true);
 
     const cleanUser = adminUsername.trim().toLowerCase();
     const cleanPass = adminPassword.trim();
     const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
     try {
-      // Step 1: Try real JWT login with Django credentials
       const response = await fetch(`${API_BASE}/auth/login/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -173,41 +182,46 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        // ✅ Store the JWT token so the API interceptor uses it
-        localStorage.setItem('access_token', data.access);
-        localStorage.setItem('refresh_token', data.refresh);
-
-        // ✅ Check if the logged-in user is an ADMIN or superuser
-        const user = data.user;
-        if (user && (user.role === 'ADMIN' || user.is_superuser)) {
-          setIsMediaAdminAuth(true);
-          setAdminError("");
-          return;
-        } else {
-          setAdminError("This account does not have admin privileges.");
-          localStorage.removeItem('access_token');
-          return;
-        }
-      }
-
-      // Step 2: Fallback — hardcoded Yonas admin check for demo
-      const isYonas =
-        (cleanUser === "yonassahile" || cleanUser === "yonas") &&
-        (cleanPass === "1234" || cleanPass === "password");
-
-      if (isYonas) {
-        setIsMediaAdminAuth(true);
-        setAdminError("");
+      if (!response.ok) {
+        setAdminError("Invalid admin credentials. Please check your username and password.");
         return;
       }
 
-      setAdminError("Invalid admin credentials. Please check your username and password.");
+      const data = await response.json();
+      const user = data.user;
+
+      // ✅ Only ADMIN / superuser accounts may proceed
+      if (!user || !(user.role === 'ADMIN' || user.is_superuser)) {
+        setAdminError("This account does not have admin privileges.");
+        return;
+      }
+
+      // ✅ Store the JWT token only after confirming admin role, so the
+      // axios interceptor in services/api.ts can attach it as
+      // "Authorization: Bearer <token>" on every subsequent request
+      // (including the multipart video upload).
+      localStorage.setItem('access_token', data.access);
+      localStorage.setItem('refresh_token', data.refresh);
+
+      setVerifiedAdminName(user.full_name || user.username || cleanUser);
+      setPosterName(user.full_name || user.username || "University Media Directorate");
+      setIsMediaAdminAuth(true);
+      setAdminPassword("");
     } catch (err) {
       console.error("Failed to verify admin:", err);
       setAdminError("Unable to connect to server. Please try again.");
+    } finally {
+      setAdminVerifying(false);
     }
+  };
+
+  // ✅ Log out of the admin session — also clears the stored token so
+  // a stale/expired JWT can't cause a confusing 401 later.
+  const handleAdminLock = () => {
+    setIsMediaAdminAuth(false);
+    setVerifiedAdminName("");
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
   };
 
   // ✅ Handle local file selection – no blob URL, just store file
@@ -295,7 +309,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // ✅ FIXED: Create post handler – use multipart when file selected, otherwise JSON
+  // ✅ Create post handler – use multipart when file selected, otherwise JSON
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || (!videoUrl.trim() && !selectedFile)) return;
@@ -322,7 +336,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       description: description.trim() || "Official Mekdela Amba University media broadcast and documentary stream.",
       category,
       thumbnailUrl: finalThumb,
-      postedBy: posterName.trim() || "University Media Directorate",
+      postedBy: posterName.trim() || verifiedAdminName || "University Media Directorate",
       authorRole: "ADMIN",
       duration: duration.trim() || "10:00",
       featured: isFeatured,
@@ -331,17 +345,30 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
     try {
       if (selectedFile) {
-        // 📤 Upload with file using multipart/form-data
+        // 📤 Upload with file using multipart/form-data.
+        // NOTE: do not set a Content-Type header manually here — axios/the
+        // browser needs to add the multipart boundary itself. See
+        // services/api.ts -> uploadMediaPost for the fixed implementation.
+        //
+        // ✅ IMPORTANT: multipart/form-data requests are NOT auto-converted
+        // camelCase -> snake_case the way JSON requests are (if you're using
+        // djangorestframework-camel-case or similar). The DRF serializer's
+        // Meta.fields are snake_case (posted_by, author_role, thumbnail_url),
+        // so we must send exactly those keys here, or Django will reject
+        // required fields like posted_by / author_role as missing (400).
         const formData = new FormData();
-        Object.entries(postData).forEach(([key, value]) => {
-          if (key === 'tags') {
-            formData.append('tags', JSON.stringify(value));
-          } else if (key === 'featured') {
-            formData.append('featured', String(value));
-          } else {
-            formData.append(key, value);
-          }
-        });
+        formData.append('title', postData.title);
+        formData.append('description', postData.description);
+        formData.append('category', postData.category);
+        formData.append('thumbnail_url', postData.thumbnailUrl);
+        formData.append('posted_by', postData.postedBy);
+        formData.append('author_role', postData.authorRole);
+        formData.append('duration', postData.duration);
+        formData.append('featured', String(postData.featured));
+        // JSONField over multipart: send as a JSON string; DRF will store it
+        // as-is on this Django/DRF version, so keep the backend's JSONField
+        // parsing in mind if tags come back as a string instead of a list.
+        formData.append('tags', JSON.stringify(postData.tags));
         formData.append('video_file', selectedFile);
 
         await CampusDatabase.uploadMediaPost(formData);
@@ -369,9 +396,25 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         const fileInput = document.getElementById("videoFileInput") as HTMLInputElement;
         if (fileInput) fileInput.value = "";
       }, 1200);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to create post:", err);
-      alert("Failed to publish video. Please try again.");
+      // ✅ Log the actual field-level validation errors DRF sends back.
+      // This is what tells you WHICH field(s) failed — e.g.
+      // { posted_by: ["This field is required."], author_role: [...] }
+      // Stringified so it prints as plain readable text (a raw object logs
+      // as a collapsed "Object" that can't be copy-pasted from DevTools).
+      console.error(
+        "Server validation details:",
+        JSON.stringify(err?.response?.data, null, 2)
+      );
+      // ✅ Surface a clearer message when the session token was rejected,
+      // instead of a generic failure alert.
+      if (err?.response?.status === 401) {
+        alert("Your admin session has expired or is invalid. Please log in again.");
+        handleAdminLock();
+      } else {
+        alert("Failed to publish video. Please try again.");
+      }
     }
   };
 
@@ -861,12 +904,13 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       <p className="leading-relaxed text-slate-700 dark:text-slate-300">
                         በዩኒቨርሲቲው ይፋዊ ስክሪን ላይ ቪዲዮ ለመለጠፍ የአድሚን የይለፍ ቃል ማስገባት ያስፈልጋል።
                       </p>
-                      <div className="pt-1 flex items-center space-x-2 text-[11px]">
-                        <span className="font-semibold text-slate-500">የአድሚን መለያ፦</span>
-                        <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-amber-300 font-bold text-amber-800 dark:text-amber-300">
-                          User: yonassahile | Pass: amyonas19
-                        </span>
-                      </div>
+                      {/*
+                        ⚠️ SECURITY FIX: the previous version printed real
+                        admin credentials directly in this banner. Anyone
+                        opening the page (or viewing page source) could read
+                        them. Never display real credentials in the UI —
+                        removed entirely. Use "Forgot Password" below instead.
+                      */}
                     </div>
                   </div>
 
@@ -887,7 +931,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         <input
                           type="text"
                           required
-                          placeholder="e.g. yonassahile"
+                          placeholder="Enter your admin username"
                           className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:outline-none"
                           value={adminUsername}
                           onChange={(e) => setAdminUsername(e.target.value)}
@@ -914,7 +958,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         <input
                           type="password"
                           required
-                          placeholder="Enter your actual superuser password"
+                          placeholder="Enter your account password"
                           className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:outline-none"
                           value={adminPassword}
                           onChange={(e) => setAdminPassword(e.target.value)}
@@ -932,10 +976,11 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       </button>
                       <button
                         type="submit"
-                        className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2 cursor-pointer"
+                        disabled={adminVerifying}
+                        className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         <KeyRound className="w-4 h-4 text-amber-300" />
-                        <span>Unlock & Proceed to Video Upload</span>
+                        <span>{adminVerifying ? "Verifying..." : "Unlock & Proceed to Video Upload"}</span>
                       </button>
                     </div>
                   </form>
@@ -946,11 +991,11 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   <div className="flex items-center justify-between p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs">
                     <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      <span>Verified: Yonas Sahile (Lead Media Administrator)</span>
+                      <span>Verified: {verifiedAdminName || "Media Administrator"}</span>
                     </span>
                     <button
                       type="button"
-                      onClick={() => setIsMediaAdminAuth(false)}
+                      onClick={handleAdminLock}
                       className="text-[11px] font-bold text-slate-500 hover:text-red-500 transition cursor-pointer flex items-center space-x-1"
                     >
                       <LogOut className="w-3 h-3" />
@@ -1140,7 +1185,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                             type="text"
                             value={posterName}
                             onChange={(e) => setPosterName(e.target.value)}
-                            placeholder="Yonas Sahile (Lead Admin)"
+                            placeholder="Name of posting administrator"
                             className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary dark:focus:ring-amber-400 text-slate-900 dark:text-white"
                           />
                         </div>
@@ -1192,7 +1237,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         onClose={() => setShowForgotModal(false)}
         onAutoFillLogin={(email) => {
           setAdminUsername(email);
-          setAdminPassword("1234");
         }}
       />
     </section>
