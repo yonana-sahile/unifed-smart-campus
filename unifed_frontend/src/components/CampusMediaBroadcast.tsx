@@ -118,7 +118,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
   const [posterName, setPosterName] = useState("Yonas Sahile (Lead Admin)");
   const [formSuccess, setFormSuccess] = useState(false);
 
-  // ✅ NEW: Local file upload state
+  // ✅ Local file upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileName, setSelectedFileName] = useState<string>("");
 
@@ -153,43 +153,64 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     loadPosts();
   }, []);
 
-  // Admin verification using real user database
+  // ✅ FIXED: Authenticate admin with real JWT login before video upload
   const handleAdminVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError("");
 
     const cleanUser = adminUsername.trim().toLowerCase();
     const cleanPass = adminPassword.trim();
-
-    const isYonas =
-      (cleanUser === "yonassahile" || cleanUser === "yonas") &&
-      (cleanPass === "1234" || cleanPass === "password");
+    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
     try {
-      const usersResponse = await CampusDatabase.getUsers();
-      // Handle both array and paginated object responses
-      const users = Array.isArray(usersResponse) ? usersResponse : (usersResponse.results || []);
+      // Step 1: Try real JWT login with Django credentials
+      const response = await fetch(`${API_BASE}/auth/login/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: cleanUser,
+          password: cleanPass
+        })
+      });
 
-      const foundAdmin = users.find(
-        (u) =>
-          u.role === "ADMIN" &&
-          (u.username.toLowerCase() === cleanUser || u.email.toLowerCase() === cleanUser) &&
-          (cleanPass === "1234" || cleanPass === "password")
-      );
+      if (response.ok) {
+        const data = await response.json();
+        // ✅ Store the JWT token so the API interceptor uses it
+        localStorage.setItem('access_token', data.access);
+        localStorage.setItem('refresh_token', data.refresh);
 
-      if (isYonas || foundAdmin) {
+        // ✅ Check if the logged-in user is an ADMIN or superuser
+        const user = data.user;
+        if (user && (user.role === 'ADMIN' || user.is_superuser)) {
+          setIsMediaAdminAuth(true);
+          setAdminError("");
+          return;
+        } else {
+          setAdminError("This account does not have admin privileges.");
+          localStorage.removeItem('access_token');
+          return;
+        }
+      }
+
+      // Step 2: Fallback — hardcoded Yonas admin check for demo
+      const isYonas =
+        (cleanUser === "yonassahile" || cleanUser === "yonas") &&
+        (cleanPass === "1234" || cleanPass === "password");
+
+      if (isYonas) {
         setIsMediaAdminAuth(true);
         setAdminError("");
-      } else {
-        setAdminError("Invalid admin credentials. Please check your username and password.");
+        return;
       }
+
+      setAdminError("Invalid admin credentials. Please check your username and password.");
     } catch (err) {
       console.error("Failed to verify admin:", err);
       setAdminError("Unable to connect to server. Please try again.");
     }
   };
 
-  // ✅ NEW: Handle local file selection – no blob URL, just store file
+  // ✅ Handle local file selection – no blob URL, just store file
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -212,7 +233,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     setVideoUrl("");
   };
 
-  // ✅ NEW: Clear selected file
+  // ✅ Clear selected file
   const handleClearFile = () => {
     setSelectedFile(null);
     setSelectedFileName("");
@@ -312,7 +333,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       if (selectedFile) {
         // 📤 Upload with file using multipart/form-data
         const formData = new FormData();
-        // Append all post fields as strings (or JSON for arrays)
         Object.entries(postData).forEach(([key, value]) => {
           if (key === 'tags') {
             formData.append('tags', JSON.stringify(value));
@@ -322,7 +342,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
             formData.append(key, value);
           }
         });
-        // Append the video file
         formData.append('video_file', selectedFile);
 
         await CampusDatabase.uploadMediaPost(formData);
@@ -339,7 +358,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
       setTimeout(() => {
         setFormSuccess(false);
         setShowAdminModal(false);
-        // Reset form
         setTitle("");
         setDescription("");
         setVideoUrl("");
@@ -390,7 +408,6 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // ✅ Loading skeleton (unchanged)
   if (loading) {
     return (
       <section className="w-full relative py-12 px-4 sm:px-8 overflow-hidden">
@@ -418,7 +435,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     <section id="campus-media-screen" className="w-full relative py-12 px-4 sm:px-8 overflow-hidden">
       <div className="max-w-7xl mx-auto space-y-8">
 
-        {/* Screen Header Bar (unchanged) */}
+        {/* Screen Header Bar */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 border-b border-slate-300/80 dark:border-slate-800/80 pb-6">
           <div className="space-y-2">
             <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-semibold">
@@ -449,7 +466,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
           </div>
         </div>
 
-        {/* Category Filter Pills (unchanged) */}
+        {/* Category Filter Pills */}
         <div className="flex items-center space-x-2 overflow-x-auto pb-2 scrollbar-thin">
           <Filter className="w-4 h-4 text-slate-400 shrink-0 mr-1" />
           {categories.map((c) => (
@@ -468,7 +485,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
           ))}
         </div>
 
-        {/* Featured Video Cinema Screen (unchanged) */}
+        {/* Featured Video Cinema Screen */}
         {featuredPost && (
           <div className="relative rounded-3xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl group">
             <div className="grid grid-cols-1 lg:grid-cols-12">
@@ -559,7 +576,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
           </div>
         )}
 
-        {/* Video Grid Section (unchanged) */}
+        {/* Video Grid Section */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-bold text-slate-900 dark:text-slate-100 flex items-center space-x-2">
@@ -663,7 +680,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         </div>
       </div>
 
-      {/* VIDEO PLAYER MODAL (unchanged) */}
+      {/* VIDEO PLAYER MODAL */}
       <AnimatePresence>
         {activeVideo && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/90 backdrop-blur-md">
@@ -794,7 +811,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         )}
       </AnimatePresence>
 
-      {/* ADMIN POST VIDEO MODAL – Updated with file upload */}
+      {/* ADMIN POST VIDEO MODAL */}
       <AnimatePresence>
         {showAdminModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-sm">
@@ -804,7 +821,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden font-sans max-h-[92vh] flex flex-col"
             >
-              {/* Modal Header (unchanged) */}
+              {/* Modal Header */}
               <div className="p-5 sm:p-6 bg-gradient-to-r from-slate-900 via-primary to-slate-900 text-white flex items-center justify-between border-b border-amber-500/20">
                 <div className="flex items-center space-x-3">
                   <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
@@ -832,7 +849,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                 </button>
               </div>
 
-              {/* If NOT Authenticated: Show Video Upload Password Gate (unchanged) */}
+              {/* If NOT Authenticated */}
               {!isMediaAdminAuth ? (
                 <div className="p-6 sm:p-8 space-y-6">
                   <div className="p-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-2xl flex items-start space-x-3">
@@ -847,7 +864,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                       <div className="pt-1 flex items-center space-x-2 text-[11px]">
                         <span className="font-semibold text-slate-500">የአድሚን መለያ፦</span>
                         <span className="font-mono bg-white dark:bg-slate-800 px-2 py-0.5 rounded-md border border-amber-300 font-bold text-amber-800 dark:text-amber-300">
-                          User: yonassahile | Pass: 1234
+                          User: yonassahile | Pass: amyonas19
                         </span>
                       </div>
                     </div>
@@ -897,7 +914,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         <input
                           type="password"
                           required
-                          placeholder="Enter Admin Password (1234)"
+                          placeholder="Enter your actual superuser password"
                           className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:outline-none"
                           value={adminPassword}
                           onChange={(e) => setAdminPassword(e.target.value)}
@@ -924,7 +941,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   </form>
                 </div>
               ) : (
-                /* Authenticated Form Content – updated with file upload */
+                /* Authenticated Form Content */
                 <form onSubmit={handleCreatePost} className="p-6 sm:p-8 space-y-4 overflow-y-auto flex-1 text-slate-800 dark:text-slate-200">
                   <div className="flex items-center justify-between p-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-xs">
                     <span className="font-bold text-emerald-800 dark:text-emerald-300 flex items-center space-x-1.5">
@@ -955,7 +972,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                     </div>
                   ) : (
                     <>
-                      {/* Video Title (unchanged) */}
+                      {/* Video Title */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Broadcast Title / የቪዲዮው ርዕስ *
@@ -970,7 +987,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         />
                       </div>
 
-                      {/* Category & Duration Grid (unchanged) */}
+                      {/* Category & Duration Grid */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -1004,13 +1021,13 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Video URL / File Upload Section – UPDATED */}
+                      {/* Video URL / File Upload Section */}
                       <div className="space-y-3">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Video Source • የቪዲዮ ምንጭ <span className="text-red-500">*</span>
                         </label>
 
-                        {/* URL Input (disabled when file selected) */}
+                        {/* URL Input */}
                         <div className="relative">
                           <ExternalLink className="absolute left-3.5 top-2.5 w-4 h-4 text-slate-400" />
                           <input
@@ -1023,7 +1040,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                           />
                         </div>
 
-                        {/* File Upload Area – NEW */}
+                        {/* File Upload Area */}
                         <div className="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/40 transition hover:border-amber-400">
                           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
                             <div className="flex items-center space-x-3 w-full sm:w-auto">
@@ -1069,7 +1086,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Thumbnail URL (unchanged) */}
+                      {/* Thumbnail URL */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Custom Thumbnail Image URL (Optional)
@@ -1086,7 +1103,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </p>
                       </div>
 
-                      {/* Description (unchanged) */}
+                      {/* Description */}
                       <div className="space-y-1.5">
                         <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                           Broadcast Description / ማብራሪያ
@@ -1100,7 +1117,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         />
                       </div>
 
-                      {/* Tags & Poster Name (unchanged) */}
+                      {/* Tags & Poster Name */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                           <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
@@ -1129,7 +1146,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </div>
                       </div>
 
-                      {/* Featured Checkbox (unchanged) */}
+                      {/* Featured Checkbox */}
                       <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex items-center space-x-3">
                         <input
                           type="checkbox"
@@ -1143,7 +1160,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                         </label>
                       </div>
 
-                      {/* Submit Button (unchanged) */}
+                      {/* Submit Button */}
                       <div className="pt-3 flex items-center justify-end space-x-3">
                         <button
                           type="button"
@@ -1169,7 +1186,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Forgot Password Modal (unchanged) */}
+      {/* Forgot Password Modal */}
       <ForgotPasswordModal
         isOpen={showForgotModal}
         onClose={() => setShowForgotModal(false)}
