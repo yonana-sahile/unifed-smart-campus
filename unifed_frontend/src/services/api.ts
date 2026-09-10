@@ -44,6 +44,20 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// ✅ Optional: auto-handle expired/invalid tokens globally.
+// If the backend ever returns 401, clear the stale token so the UI
+// doesn't keep sending a dead Authorization header.
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+    }
+    return Promise.reject(error);
+  }
+);
+
 // ---------- USERS ----------
 export const getUsers = (): Promise<User[]> =>
   api.get('/users/').then(r => r.data);
@@ -258,13 +272,14 @@ export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPos
 export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'viewsCount' | 'likesCount'>): Promise<CampusMediaPost> =>
   api.post('/media-posts/', post).then(r => r.data);
 
-// File upload media post (multipart/form-data)
+// ✅ FIXED: File upload media post (multipart/form-data)
+// Do NOT manually set 'Content-Type': 'multipart/form-data'.
+// The browser/axios needs to generate the multipart boundary itself
+// (e.g. "multipart/form-data; boundary=----WebKitFormBoundary...").
+// Setting a plain string header without a boundary means Django's
+// multipart parser can fail to split the fields/file correctly.
 export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => {
-  return api.post('/media-posts/', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  }).then(r => r.data);
+  return api.post('/media-posts/', formData).then(r => r.data);
 };
 
 export const deleteMediaPost = (id: string): Promise<{ success: boolean }> =>
