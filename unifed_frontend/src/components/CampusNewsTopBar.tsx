@@ -116,6 +116,13 @@ const DEFAULT_NEWS: CampusNewsItem[] = [
   }
 ];
 
+// ✅ Helper: safely format a date string, defaulting to "now" if invalid
+const safeDate = (raw: any): Date => {
+  if (!raw) return new Date();
+  const d = new Date(raw);
+  return isNaN(d.getTime()) ? new Date() : d;
+};
+
 interface CampusNewsTopBarProps {
   currentUser?: User | null;
 }
@@ -136,38 +143,39 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
       setLoading(true);
       const raw: any = await CampusDatabase.getAnnouncements();
 
-      // ✅ FIXED: defensively unwrap DRF pagination envelope.
-      // Django's PageNumberPagination (settings.py PAGE_SIZE=100) wraps
-      // every list response in { count, next, previous, results }.
-      // Without this unwrap, `announcements.length` is `undefined`, the
-      // `if (length > 0)` check fails, and the component silently falls
-      // back to DEFAULT_NEWS — hiding every real published announcement.
+      // ✅ Defensively unwrap DRF pagination envelope
       const announcements: Announcement[] = Array.isArray(raw)
         ? raw
         : (Array.isArray(raw?.results) ? raw.results : []);
 
       if (announcements.length > 0) {
-        const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement) => ({
-          id: ann.id,
-          title: ann.title,
-          amharicTitle: ann.title,
-          summary: ann.content.slice(0, 150) + "...",
-          fullContent: ann.content,
-          category: "ACADEMIC",
-          categoryLabel: "Academic",
-          categoryAmharic: "የአካዳሚክ",
-          badgeColor: "from-blue-600 to-indigo-600 border-blue-400/30 text-white",
-          date: new Date(ann.postedAt).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric"
-          }),
-          ethiopianDate: new Date(ann.postedAt).toLocaleDateString("am-ET"),
-          author: ann.postedBy,
-          readTime: `${Math.ceil(ann.content.split(" ").length / 200)} min read`,
-          highlightTag: "📢 ANNOUNCEMENT",
-          imageUrl: undefined
-        }));
+        const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement) => {
+          // ✅ Defensive: guard against missing fields so one bad row
+          // doesn't blow up the whole list.
+          const content = ann.content || "";
+          const dateObj = safeDate(ann.postedAt);
+          return {
+            id: ann.id || `news_${Math.random().toString(36).slice(2, 9)}`,
+            title: ann.title || "Untitled Announcement",
+            amharicTitle: ann.title || "",
+            summary: content.slice(0, 150) + (content.length > 150 ? "..." : ""),
+            fullContent: content,
+            category: "ACADEMIC",
+            categoryLabel: "Academic",
+            categoryAmharic: "የአካዳሚክ",
+            badgeColor: "from-blue-600 to-indigo-600 border-blue-400/30 text-white",
+            date: dateObj.toLocaleDateString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric"
+            }),
+            ethiopianDate: dateObj.toLocaleDateString("am-ET"),
+            author: ann.postedBy || "University Media Directorate",
+            readTime: `${Math.max(1, Math.ceil(content.split(" ").length / 200))} min read`,
+            highlightTag: "📢 ANNOUNCEMENT",
+            imageUrl: undefined
+          };
+        });
         setNews(mappedNews);
         localStorage.setItem("mau_campus_news_cache", JSON.stringify(mappedNews));
       } else {
@@ -267,7 +275,8 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
             <AnimatePresence mode="wait">
               {activeNews && (
                 <motion.div
-                  key={activeNews.id}
+                  // ✅ FIXED: fallback to a composite key when id is empty
+                  key={activeNews.id || `active_${currentIndex}`}
                   initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
                   animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
                   exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
@@ -484,9 +493,10 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
               </div>
               <div className="p-6 overflow-y-auto space-y-4 text-slate-800 dark:text-slate-200">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {news.map((item) => (
+                  {/* ✅ FIXED: index-fallback key prevents duplicate-key warning */}
+                  {news.map((item, index) => (
                     <div
-                      key={item.id}
+                      key={item.id || `news_card_${index}`}
                       onClick={() => {
                         setShowAllNewsModal(false);
                         setSelectedNews(item);
