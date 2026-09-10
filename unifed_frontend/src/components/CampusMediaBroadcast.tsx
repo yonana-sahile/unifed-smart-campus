@@ -84,6 +84,43 @@ const DEFAULT_MEDIA_POSTS: CampusMediaPost[] = [
   }
 ];
 
+// ✅ Helper: backend origin used to convert relative /media/... paths into
+// full URLs the browser can fetch directly from Django.
+const BACKEND_ORIGIN = (() => {
+  const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+  try {
+    return new URL(apiBase).origin; // e.g. "http://localhost:8000"
+  } catch {
+    return 'http://localhost:8000';
+  }
+})();
+
+// ✅ Converts any video URL (relative or absolute) into something the
+// <video> tag can play.
+const resolveVideoSrc = (url: string): string => {
+  if (!url) return url;
+  if (/^(https?:|blob:|data:)/i.test(url)) return url;
+  if (url.startsWith('/')) return `${BACKEND_ORIGIN}${url}`;
+  return `${BACKEND_ORIGIN}/${url}`;
+};
+
+// ✅ Detects whether the URL points to a direct video file the browser
+// can play natively (vs a YouTube page or an arbitrary web URL).
+const isDirectVideoFile = (url: string): boolean => {
+  if (!url) return false;
+  const clean = url.split('?')[0].split('#')[0].toLowerCase();
+  return (
+    url.startsWith("blob:") ||
+    clean.endsWith(".mp4") ||
+    clean.endsWith(".webm") ||
+    clean.endsWith(".ogg") ||
+    clean.endsWith(".ogv") ||
+    clean.endsWith(".mov") ||
+    clean.endsWith(".m4v") ||
+    clean.includes("/media/")
+  );
+};
+
 interface CampusMediaBroadcastProps {
   onAdminPostClick?: () => void;
 }
@@ -155,7 +192,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     loadPosts();
   }, []);
 
-  // ✅ FIXED: Authenticate admin with real JWT login only.
+  // ✅ Authenticate admin with real JWT login only.
   const handleAdminVerify = async (e: React.FormEvent) => {
     e.preventDefault();
     setAdminError("");
@@ -240,9 +277,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     if (fileInput) fileInput.value = "";
   };
 
-  // ✅ FIXED: Like handler — skip the API call for client-only fallback/demo
-  // posts (id starts with "default_"). Those rows don't exist in the DB,
-  // so POST /media-posts/<id>/like/ would 404.
+  // ✅ Like handler — skip API for client-only fallback posts
   const handleLike = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -269,8 +304,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // ✅ FIXED: Watch handler — skip incrementing views via API for
-  // client-only fallback/demo posts, same reasoning as above.
+  // ✅ Watch handler — skip views API for client-only fallback posts
   const handleWatch = async (post: CampusMediaPost) => {
     if (post.id.startsWith("default_")) {
       setActiveVideo(post);
@@ -280,7 +314,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     try {
       await CampusDatabase.incrementMediaViews(post.id);
       setActiveVideo(post);
-      loadPosts(); // Refresh view count
+      loadPosts();
     } catch (err) {
       console.error("Failed to increment views:", err);
       setActiveVideo(post);
@@ -295,8 +329,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     setTimeout(() => setCopiedId(null), 2500);
   };
 
-  // ✅ FIXED: Delete handler — skip the API call for client-only
-  // fallback/demo posts; just remove them from local state instead.
+  // ✅ Delete handler — skip API for client-only fallback posts
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
 
@@ -324,7 +357,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
     }
   };
 
-  // ✅ Create post handler – use multipart when file selected, otherwise JSON
+  // ✅ Create post handler – multipart when file selected, otherwise JSON
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || (!videoUrl.trim() && !selectedFile)) return;
@@ -757,13 +790,23 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                   />
                 ) : (
                   <div className="relative w-full h-full flex items-center justify-center bg-slate-950">
-                    {activeVideo.videoUrl.startsWith("blob:") ? (
+                    {/* ✅ FIXED: play ANY direct video file (blob:, .mp4, .webm,
+                        or /media/... paths) — not just blob: URLs. This is
+                        what makes backend-uploaded videos actually play
+                        instead of showing the "Simulated Stream" fallback. */}
+                    {isDirectVideoFile(activeVideo.videoUrl) ? (
                       <video
-                        src={activeVideo.videoUrl}
+                        key={activeVideo.id}
+                        src={resolveVideoSrc(activeVideo.videoUrl)}
+                        poster={activeVideo.thumbnailUrl}
                         controls
                         autoPlay
-                        className="w-full h-full object-contain"
-                      />
+                        playsInline
+                        preload="metadata"
+                        className="w-full h-full object-contain bg-black"
+                      >
+                        Your browser does not support the video tag.
+                      </video>
                     ) : (
                       <>
                         <img
@@ -779,7 +822,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
                             Simulated High-Definition University Optical Network Stream. Video stream configured for campus intranet.
                           </p>
                           <a
-                            href={activeVideo.videoUrl}
+                            href={resolveVideoSrc(activeVideo.videoUrl)}
                             target="_blank"
                             rel="noreferrer"
                             className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition flex items-center space-x-1.5"
