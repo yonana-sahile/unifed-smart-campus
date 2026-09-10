@@ -94,13 +94,26 @@ export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMateri
   api.put('/materials/', materials).then(r => r.data);
 
 // ---------- ANNOUNCEMENTS ----------
-// ✅ FIXED: unwrap DRF pagination envelope so the news components
-// (CampusNewsTopBar / CampusNewsAdminModal) receive a real array and
-// don't silently fall back to their mock DEFAULT_NEWS lists.
+// ✅ FIXED: DRF's ModelViewSet router does NOT expose bulk PUT on the
+// list endpoint (/announcements/) — it returns 405 Method Not Allowed.
+// The correct pattern is:
+//   - GET    /announcements/         → list
+//   - POST   /announcements/         → create one
+//   - PUT    /announcements/<id>/    → update one
+//   - DELETE /announcements/<id>/    → delete one
+// We now expose create + delete helpers, and keep getAnnouncements with
+// pagination unwrap so the news components see a real array.
 export const getAnnouncements = (): Promise<Announcement[]> =>
   api.get('/announcements/').then(r => unwrapList<Announcement>(r.data));
-export const saveAnnouncements = (announcements: Announcement[]): Promise<Announcement[]> =>
-  api.put('/announcements/', announcements).then(r => r.data);
+
+export const createAnnouncement = (announcement: Announcement): Promise<Announcement> =>
+  api.post('/announcements/', announcement).then(r => r.data);
+
+export const updateAnnouncement = (id: string, announcement: Announcement): Promise<Announcement> =>
+  api.put(`/announcements/${id}/`, announcement).then(r => r.data);
+
+export const deleteAnnouncement = (id: string): Promise<void> =>
+  api.delete(`/announcements/${id}/`).then(() => undefined);
 
 // ---------- ASSIGNMENTS ----------
 export const getAssignments = (): Promise<Assignment[]> =>
@@ -319,7 +332,9 @@ export const CampusDatabase = {
   getMaterials,
   saveMaterials,
   getAnnouncements,
-  saveAnnouncements,
+  createAnnouncement,
+  updateAnnouncement,
+  deleteAnnouncement,
   getAssignments,
   saveAssignments,
   getSubmissions,
