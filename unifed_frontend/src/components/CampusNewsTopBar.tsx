@@ -7,32 +7,18 @@ import {
   ChevronLeft,
   X,
   Calendar,
-  Tag,
-  ExternalLink,
-  Radio,
-  Sparkles,
   ArrowRight,
-  BookOpen,
-  GraduationCap,
   Building2,
   Share2,
   Check,
-  Bell,
-  Volume2,
-  TrendingUp,
   Clock,
-  Award,
   Zap,
-  Info,
   Plus,
-  ShieldCheck,
-  Lock
 } from "lucide-react";
 import { CampusDatabase } from "../services/api";
 import type { User } from "../types";
 import { CampusNewsAdminModal } from "./CampusNewsAdminModal";
 
-// ✅ LOCAL interfaces (no dependency on external types)
 interface Announcement {
   id: string;
   courseId: string;
@@ -61,14 +47,13 @@ export interface CampusNewsItem {
   imageUrl?: string;
 }
 
-// ✅ FALLBACK NEWS – shown when API has no data
 const DEFAULT_NEWS: CampusNewsItem[] = [
   {
     id: "default_1",
     title: "Welcome to Mekdela Amba University Smart Campus Portal",
     amharicTitle: "እንኳን ወደ መቅደላ አምባ ዩኒቨርሲቲ ስማርት ካምፓስ ፖርታል በደህና መጡ",
-    summary: "The Unified Smart Campus Management System is now live. Access courses, exams, grades, and more.",
-    fullContent: "The Unified Smart Campus Management System is now live. Access courses, exams, grades, and more.",
+    summary: "The Unified Smart Campus Management System is now live.",
+    fullContent: "The Unified Smart Campus Management System is now live.",
     category: "ACADEMIC",
     categoryLabel: "Academic",
     categoryAmharic: "የአካዳሚክ",
@@ -78,7 +63,6 @@ const DEFAULT_NEWS: CampusNewsItem[] = [
     author: "University ICT Directorate",
     readTime: "1 min read",
     highlightTag: "📢 WELCOME",
-    imageUrl: undefined
   },
   {
     id: "default_2",
@@ -95,14 +79,13 @@ const DEFAULT_NEWS: CampusNewsItem[] = [
     author: "Registrar's Office",
     readTime: "1 min read",
     highlightTag: "📅 REGISTRATION",
-    imageUrl: undefined
   },
   {
     id: "default_3",
     title: "AI-Powered Smart Campus Initiative Launched",
     amharicTitle: "በአርቲፊሻል ኢንተሊጀንስ የተጠናከረ ስማርት ካምፓስ ተጀመረ",
-    summary: "Mekdela Amba University unveils AI-driven learning analytics and student support systems.",
-    fullContent: "Mekdela Amba University unveils AI-driven learning analytics and student support systems.",
+    summary: "Mekdela Amba University unveils AI-driven learning analytics.",
+    fullContent: "Mekdela Amba University unveils AI-driven learning analytics.",
     category: "TECH_AI",
     categoryLabel: "Smart Campus & AI",
     categoryAmharic: "ዘመናዊ ቴክኖሎጂ እና ኤአይ",
@@ -112,11 +95,9 @@ const DEFAULT_NEWS: CampusNewsItem[] = [
     author: "MAU ICT Directorate",
     readTime: "2 min read",
     highlightTag: "🤖 AI & TECH",
-    imageUrl: undefined
   }
 ];
 
-// ✅ Helper: safely format a date string, defaulting to "now" if invalid
 const safeDate = (raw: any): Date => {
   if (!raw) return new Date();
   const d = new Date(raw);
@@ -137,25 +118,20 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔁 Load news from API, fallback to defaults
   const loadNews = useCallback(async () => {
     try {
       setLoading(true);
       const raw: any = await CampusDatabase.getAnnouncements();
-
-      // ✅ Defensively unwrap DRF pagination envelope
       const announcements: Announcement[] = Array.isArray(raw)
         ? raw
         : (Array.isArray(raw?.results) ? raw.results : []);
 
       if (announcements.length > 0) {
-        const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement) => {
-          // ✅ Defensive: guard against missing fields so one bad row
-          // doesn't blow up the whole list.
+        const mappedNews: CampusNewsItem[] = announcements.map((ann: Announcement, idx: number) => {
           const content = ann.content || "";
           const dateObj = safeDate(ann.postedAt);
           return {
-            id: ann.id || `news_${Math.random().toString(36).slice(2, 9)}`,
+            id: ann.id || `news_${idx}_${Date.now()}`,
             title: ann.title || "Untitled Announcement",
             amharicTitle: ann.title || "",
             summary: content.slice(0, 150) + (content.length > 150 ? "..." : ""),
@@ -203,7 +179,6 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
     loadNews();
   }, [loadNews]);
 
-  // Auto-rotation
   useEffect(() => {
     if (isPaused || selectedNews || showAllNewsModal || showAdminNewsModal || news.length === 0 || loading) return;
     const timer = setInterval(() => {
@@ -220,7 +195,6 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  // Loading skeleton
   if (loading) {
     return (
       <nav className="w-full relative z-40 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-slate-100 border-b border-amber-500/40 shadow-lg select-none font-sans overflow-hidden py-2.5 px-4">
@@ -237,7 +211,6 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
 
   return (
     <>
-      {/* ---- TICKER BAR ---- */}
       <nav
         aria-label="Campus Live News Bar"
         className="w-full relative z-40 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-slate-100 border-b border-amber-500/40 shadow-lg select-none font-sans overflow-hidden"
@@ -248,12 +221,10 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
         <div className="absolute top-0 right-1/4 w-96 h-full bg-red-500/10 blur-xl pointer-events-none" />
 
         <div className="max-w-7xl mx-auto px-3 sm:px-6 py-1.5 flex items-center justify-between gap-2.5 sm:gap-4 relative">
-          {/* LEFT */}
           <div className="flex items-center space-x-2 shrink-0">
             <button
               onClick={() => setShowAllNewsModal(true)}
               className="relative flex items-center space-x-1.5 px-3 py-1 rounded-full bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white font-black text-[10px] uppercase font-mono tracking-wider shadow-md hover:shadow-red-500/40 border border-white/30 cursor-pointer group transition-transform active:scale-95"
-              title="Click to view all university bulletins"
             >
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-yellow-300 opacity-80" />
@@ -261,7 +232,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
               </span>
               <Flame className="w-3.5 h-3.5 text-yellow-300 animate-bounce" />
               <span className="tracking-widest">CAMPUS LIVE</span>
-              <span className="ml-0.5 px-1.5 py-0.2 text-[9px] font-bold rounded-full bg-black/40 text-yellow-300 border border-yellow-400/30">
+              <span className="ml-0.5 px-1.5 text-[9px] font-bold rounded-full bg-black/40 text-yellow-300 border border-yellow-400/30">
                 {news.length}
               </span>
             </button>
@@ -270,12 +241,10 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
             </span>
           </div>
 
-          {/* CENTER */}
           <div className="flex-1 overflow-hidden relative h-7 flex items-center px-1 sm:px-2">
             <AnimatePresence mode="wait">
               {activeNews && (
                 <motion.div
-                  // ✅ FIXED: fallback to a composite key when id is empty
                   key={activeNews.id || `active_${currentIndex}`}
                   initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
                   animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
@@ -284,13 +253,11 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                   className="flex items-center space-x-2.5 truncate cursor-pointer group w-full"
                   onClick={() => setSelectedNews(activeNews)}
                 >
-                  <span
-                    className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold shadow-xs border bg-gradient-to-r ${activeNews.badgeColor} shrink-0`}
-                  >
+                  <span className={`hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold shadow-xs border bg-gradient-to-r ${activeNews.badgeColor} shrink-0`}>
                     <Zap className="w-2.5 h-2.5 mr-1" />
                     {activeNews.categoryLabel}
                   </span>
-                  <span className="text-xs sm:text-xs font-semibold text-slate-100 group-hover:text-amber-300 transition-colors truncate tracking-wide">
+                  <span className="text-xs font-semibold text-slate-100 group-hover:text-amber-300 transition-colors truncate tracking-wide">
                     {activeNews.title}
                   </span>
                   <span className="hidden lg:inline-flex items-center text-[10px] text-slate-400 font-mono shrink-0 space-x-1">
@@ -298,23 +265,17 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                     <Clock className="w-3 h-3 text-amber-400/80" />
                     <span>{activeNews.readTime}</span>
                   </span>
-                  <span className="hidden md:inline-flex items-center text-[10px] text-amber-400 font-bold group-hover:translate-x-1 transition-transform shrink-0 ml-auto bg-amber-500/15 hover:bg-amber-500/25 px-2 py-0.5 rounded-full border border-amber-400/30">
-                    <span>ዝርዝር ይመልከቱ</span>
-                    <ChevronRight className="w-3 h-3 ml-0.5" />
-                  </span>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
 
-          {/* RIGHT */}
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
             {news.length > 1 && (
               <div className="flex items-center space-x-0.5 bg-slate-800/90 rounded-lg p-0.5 border border-slate-700 shadow-xs">
                 <button
                   onClick={() => setCurrentIndex((prev) => (prev - 1 + news.length) % news.length)}
-                  className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer active:scale-90"
-                  title="Previous Headline"
+                  className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
                 >
                   <ChevronLeft className="w-3.5 h-3.5" />
                 </button>
@@ -323,8 +284,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                 </span>
                 <button
                   onClick={() => setCurrentIndex((prev) => (prev + 1) % news.length)}
-                  className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer active:scale-90"
-                  title="Next Headline"
+                  className="w-5 h-5 rounded hover:bg-slate-700 flex items-center justify-center text-slate-300 hover:text-white transition cursor-pointer"
                 >
                   <ChevronRight className="w-3.5 h-3.5" />
                 </button>
@@ -333,7 +293,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
 
             <button
               onClick={() => setShowAllNewsModal(true)}
-              className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500/25 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/30 text-amber-300 hover:text-amber-100 border border-amber-500/50 text-[10px] sm:text-xs font-bold transition shadow-xs cursor-pointer active:scale-95"
+              className="flex items-center space-x-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-gradient-to-r from-amber-500/25 to-yellow-500/20 hover:from-amber-500/40 hover:to-yellow-500/30 text-amber-300 hover:text-amber-100 border border-amber-500/50 text-[10px] sm:text-xs font-bold transition shadow-xs cursor-pointer"
             >
               <Newspaper className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">All Bulletins</span>
@@ -342,8 +302,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
 
             <button
               onClick={() => setShowAdminNewsModal(true)}
-              className="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-600/30 via-red-600/30 to-amber-600/30 hover:from-amber-600/50 hover:to-red-600/50 text-amber-200 hover:text-white border border-amber-400/40 text-[10px] sm:text-xs font-bold transition shadow-xs cursor-pointer active:scale-95 group"
-              title="Admin Authentication & News Dashboard"
+              className="flex items-center space-x-1 px-2 sm:px-2.5 py-1 rounded-lg bg-gradient-to-r from-amber-600/30 via-red-600/30 to-amber-600/30 hover:from-amber-600/50 hover:to-red-600/50 text-amber-200 hover:text-white border border-amber-400/40 text-[10px] sm:text-xs font-bold transition shadow-xs cursor-pointer group"
             >
               <Plus className="w-3.5 h-3.5 text-amber-300 group-hover:rotate-90 transition-transform" />
               <span className="hidden md:inline">+ Add News</span>
@@ -353,20 +312,18 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
         </div>
       </nav>
 
-      {/* ---- SINGLE ARTICLE MODAL ---- */}
       <AnimatePresence>
         {selectedNews && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.93, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.93, opacity: 0, y: 20 }}
               className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full max-h-[88vh] overflow-hidden flex flex-col shadow-2xl"
             >
-              <div className="p-5 bg-gradient-to-r from-slate-950 via-primary to-slate-950 text-white flex items-center justify-between border-b border-amber-500/30 relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-48 h-full bg-amber-500/10 blur-xl pointer-events-none" />
-                <div className="flex items-center space-x-3 relative z-10">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-amber-500/30 to-amber-600/10 border border-amber-400/50 flex items-center justify-center text-amber-300 shadow-inner">
+              <div className="p-5 bg-gradient-to-r from-slate-950 via-primary to-slate-950 text-white flex items-center justify-between border-b border-amber-500/30">
+                <div className="flex items-center space-x-3">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500/20 border border-amber-400/50 flex items-center justify-center text-amber-300">
                     <Newspaper className="w-6 h-6" />
                   </div>
                   <div>
@@ -374,21 +331,16 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-mono font-black border bg-gradient-to-r ${selectedNews.badgeColor} uppercase tracking-wider`}>
                         {selectedNews.categoryLabel}
                       </span>
-                      <span className="text-[10px] text-amber-300/90 font-mono">
-                        {selectedNews.categoryAmharic}
-                      </span>
                     </div>
                     <p className="text-xs text-slate-300 mt-1 font-mono flex items-center space-x-1.5">
                       <Calendar className="w-3 h-3 text-amber-400" />
                       <span>{selectedNews.date}</span>
-                      <span>•</span>
-                      <span className="text-amber-300">{selectedNews.ethiopianDate}</span>
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setSelectedNews(null)}
-                  className="w-9 h-9 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 hover:text-white transition cursor-pointer relative z-10"
+                  className="w-9 h-9 rounded-2xl bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-200 hover:text-white transition cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
@@ -402,14 +354,8 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                   <h2 className="text-lg sm:text-xl font-display font-bold text-slate-950 dark:text-white leading-snug">
                     {selectedNews.title}
                   </h2>
-                  <h3 className="text-xs sm:text-sm font-serif text-amber-700 dark:text-amber-400 mt-1.5 font-semibold leading-relaxed">
-                    {selectedNews.amharicTitle}
-                  </h3>
                 </div>
-                <div className="p-4 bg-gradient-to-r from-amber-50 to-yellow-50/50 dark:from-amber-950/30 dark:to-yellow-950/10 border-l-4 border-amber-500 rounded-r-2xl text-xs sm:text-sm text-amber-950 dark:text-amber-200 font-medium">
-                  {selectedNews.summary}
-                </div>
-                <div className="space-y-3 whitespace-pre-line text-xs sm:text-sm text-slate-700 dark:text-slate-300 font-sans leading-relaxed">
+                <div className="space-y-3 whitespace-pre-line text-xs sm:text-sm text-slate-700 dark:text-slate-300">
                   {selectedNews.fullContent}
                 </div>
                 <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
@@ -438,7 +384,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
               <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end">
                 <button
                   onClick={() => setSelectedNews(null)}
-                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold text-xs hover:shadow-lg hover:shadow-amber-500/30 transition cursor-pointer"
+                  className="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-bold text-xs hover:shadow-lg transition cursor-pointer"
                 >
                   Close Bulletin
                 </button>
@@ -448,10 +394,9 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
         )}
       </AnimatePresence>
 
-      {/* ---- ALL NEWS BULLETINS MODAL ---- */}
       <AnimatePresence>
         {showAllNewsModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
             <motion.div
               initial={{ scale: 0.93, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -464,8 +409,8 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                     <Newspaper className="w-6 h-6" />
                   </div>
                   <div>
-                    <h2 className="text-base sm:text-lg font-display font-bold text-white flex items-center space-x-2">
-                      <span>Mekdela Amba University News & Bulletins</span>
+                    <h2 className="text-base sm:text-lg font-display font-bold text-white">
+                      Mekdela Amba University News & Bulletins
                     </h2>
                     <p className="text-xs text-amber-300 font-mono">
                       የመቅደላ አምባ ዩኒቨርሲቲ ይፋዊ ዜናዎችና ማስታወቂያዎች ማዕከል
@@ -481,7 +426,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                     className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-400/40 text-xs font-bold transition flex items-center space-x-1.5 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>+ Publish Announcement (Admin)</span>
+                    <span>+ Publish (Admin)</span>
                   </button>
                   <button
                     onClick={() => setShowAllNewsModal(false)}
@@ -493,7 +438,6 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
               </div>
               <div className="p-6 overflow-y-auto space-y-4 text-slate-800 dark:text-slate-200">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* ✅ FIXED: index-fallback key prevents duplicate-key warning */}
                   {news.map((item, index) => (
                     <div
                       key={item.id || `news_card_${index}`}
@@ -501,16 +445,16 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                         setShowAllNewsModal(false);
                         setSelectedNews(item);
                       }}
-                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 hover:border-amber-500/50 hover:bg-amber-50/30 dark:hover:bg-slate-800 transition cursor-pointer flex flex-col justify-between space-y-3 shadow-xs group"
+                      className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 hover:border-amber-500/50 transition cursor-pointer flex flex-col justify-between space-y-3 shadow-xs group"
                     >
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold shadow-2xs border bg-gradient-to-r ${item.badgeColor}`}>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold border bg-gradient-to-r ${item.badgeColor}`}>
                             {item.categoryLabel}
                           </span>
                           <span className="text-[10px] text-slate-400 font-mono">{item.date}</span>
                         </div>
-                        <h4 className="font-display font-bold text-xs sm:text-sm text-slate-900 dark:text-white group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors leading-snug line-clamp-2">
+                        <h4 className="font-display font-bold text-xs sm:text-sm text-slate-900 dark:text-white group-hover:text-amber-600 transition-colors leading-snug line-clamp-2">
                           {item.title}
                         </h4>
                         <p className="text-[11px] text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
@@ -530,7 +474,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
               </div>
               <div className="p-4 bg-slate-50 dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-xs text-slate-500 font-mono">
-                  Showing {news.length} verified publications
+                  Showing {news.length} publications
                 </span>
                 <div className="flex items-center space-x-2">
                   <button
@@ -544,7 +488,7 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
                   </button>
                   <button
                     onClick={() => setShowAllNewsModal(false)}
-                    className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
+                    className="px-5 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs font-bold transition cursor-pointer"
                   >
                     Close
                   </button>
@@ -555,7 +499,6 @@ export function CampusNewsTopBar({ currentUser }: CampusNewsTopBarProps) {
         )}
       </AnimatePresence>
 
-      {/* ---- ADMIN MODAL ---- */}
       <CampusNewsAdminModal
         isOpen={showAdminNewsModal}
         onClose={() => setShowAdminNewsModal(false)}

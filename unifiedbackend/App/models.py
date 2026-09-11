@@ -95,8 +95,17 @@ class CourseMaterial(models.Model):
 
 # ---------- ANNOUNCEMENT ----------
 class Announcement(models.Model):
-    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='announcements')
-    course_title = models.CharField(max_length=200)
+    # ✅ FIX: campus-wide news has no course; allow null so
+    # POST /api/announcements/ with { "course": null } succeeds.
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.CASCADE,
+        related_name='announcements',
+        null=True,
+        blank=True,
+    )
+    # ✅ FIX: course_title optional for campus-wide bulletins
+    course_title = models.CharField(max_length=200, blank=True)
     title = models.CharField(max_length=200)
     content = models.TextField()
     posted_by = models.CharField(max_length=100)
@@ -643,7 +652,7 @@ class CampusMediaPost(models.Model):
     description = models.TextField()
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES)
 
-    # ✅ NEW: Support for both URL-based and file-based videos
+    # ✅ Support for both URL-based and file-based videos
     video_file = models.FileField(upload_to='videos/%Y/%m/%d/', blank=True, null=True)
     video_url = models.URLField(max_length=500, blank=True, null=True)
 

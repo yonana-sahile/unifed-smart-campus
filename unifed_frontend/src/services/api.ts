@@ -41,16 +41,9 @@ api.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-
-  // ✅ FIX: don't let the instance-level 'application/json' header leak
-  // into multipart/form-data (file upload) requests. Axios would normally
-  // let the browser auto-set 'multipart/form-data; boundary=...' for a
-  // FormData body, but an explicitly-set Content-Type header takes
-  // priority and blocks that from happening.
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
   }
-
   return config;
 });
 
@@ -65,11 +58,7 @@ api.interceptors.response.use(
   }
 );
 
-// ✅ Helper: DRF's PageNumberPagination (settings.py PAGE_SIZE=100) wraps
-// every list response in { count, next, previous, results }. Returning
-// the raw object makes the frontend's `data.length` / `data.map()`
-// checks fail silently and fall back to mock data. This helper unwraps
-// the envelope so every list-based screen sees a plain array.
+// ✅ Helper: unwrap DRF pagination envelope { count, next, previous, results }
 const unwrapList = <T>(raw: any): T[] =>
   Array.isArray(raw) ? raw : (raw?.results ?? []);
 
@@ -94,23 +83,54 @@ export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMateri
   api.put('/materials/', materials).then(r => r.data);
 
 // ---------- ANNOUNCEMENTS ----------
-// ✅ FIXED: DRF's ModelViewSet router does NOT expose bulk PUT on the
-// list endpoint (/announcements/) — it returns 405 Method Not Allowed.
-// The correct pattern is:
-//   - GET    /announcements/         → list
-//   - POST   /announcements/         → create one
-//   - PUT    /announcements/<id>/    → update one
-//   - DELETE /announcements/<id>/    → delete one
-// We now expose create + delete helpers, and keep getAnnouncements with
-// pagination unwrap so the news components see a real array.
+// ✅ DRF ModelViewSet pattern: GET list, POST create, DELETE /<id>/
+// ✅ createAnnouncement accepts camelCase OR snake_case input and always
+// sends the snake_case keys DRF's AnnouncementSerializer expects
+// (course, course_title, posted_by, posted_at).
 export const getAnnouncements = (): Promise<Announcement[]> =>
   api.get('/announcements/').then(r => unwrapList<Announcement>(r.data));
 
-export const createAnnouncement = (announcement: Announcement): Promise<Announcement> =>
-  api.post('/announcements/', announcement).then(r => r.data);
+export const createAnnouncement = (announcement: any): Promise<any> => {
+  const payload: any = {
+    course: announcement.course ?? null,
+    course_title:
+      announcement.courseTitle ??
+      announcement.course_title ??
+      "Campus News & Announcements",
+    title: announcement.title,
+    content: announcement.content,
+    posted_by:
+      announcement.postedBy ??
+      announcement.posted_by ??
+      "University Media Directorate",
+    posted_at:
+      announcement.postedAt ??
+      announcement.posted_at ??
+      new Date().toISOString(),
+  };
+  return api.post('/announcements/', payload).then(r => r.data);
+};
 
-export const updateAnnouncement = (id: string, announcement: Announcement): Promise<Announcement> =>
-  api.put(`/announcements/${id}/`, announcement).then(r => r.data);
+export const updateAnnouncement = (id: string, announcement: any): Promise<any> => {
+  const payload: any = {
+    course: announcement.course ?? null,
+    course_title:
+      announcement.courseTitle ??
+      announcement.course_title ??
+      "Campus News & Announcements",
+    title: announcement.title,
+    content: announcement.content,
+    posted_by:
+      announcement.postedBy ??
+      announcement.posted_by ??
+      "University Media Directorate",
+    posted_at:
+      announcement.postedAt ??
+      announcement.posted_at ??
+      new Date().toISOString(),
+  };
+  return api.put(`/announcements/${id}/`, payload).then(r => r.data);
+};
 
 export const deleteAnnouncement = (id: string): Promise<void> =>
   api.delete(`/announcements/${id}/`).then(() => undefined);
@@ -211,11 +231,10 @@ export const getSettings = (): Promise<SystemSettings> =>
 export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> =>
   api.put('/settings/', settings).then(r => r.data);
 
-// ---------- AI: RISK PREDICTION ----------
+// ---------- AI ----------
 export const predictStudentRisk = (studentId: string): Promise<AIRiskPrediction> =>
   api.post('/ai/predict-risk/', { studentId }).then(r => r.data);
 
-// ---------- AI: EXAM GENERATION ----------
 export const generateExamQuestions = (params: {
   courseId: string;
   topic: string;
@@ -224,7 +243,6 @@ export const generateExamQuestions = (params: {
 }): Promise<{ success: boolean; questions: any[]; error?: string }> =>
   api.post('/ai/generate-exam/', params).then(r => r.data);
 
-// ---------- AI: COURSE ADVISOR ----------
 export const getCourseAdvisor = (data: {
   studentId?: string;
   interests: string;
@@ -280,7 +298,6 @@ export const getFacilityBookings = (): Promise<FacilityBooking[]> =>
   api.get('/facility-bookings/').then(r => unwrapList<FacilityBooking>(r.data));
 export const saveFacilityBookings = (bookings: FacilityBooking[]): Promise<FacilityBooking[]> =>
   api.put('/facility-bookings/', bookings).then(r => r.data);
-
 export const addFacilityBooking = (booking: Omit<FacilityBooking, 'id'>): Promise<FacilityBooking> =>
   api.post('/facility-bookings/', booking).then(r => r.data);
 
@@ -289,36 +306,23 @@ export const getCampusAlerts = (): Promise<CampusAlert[]> =>
   api.get('/campus-alerts/').then(r => unwrapList<CampusAlert>(r.data));
 export const saveCampusAlerts = (alerts: CampusAlert[]): Promise<CampusAlert[]> =>
   api.put('/campus-alerts/', alerts).then(r => r.data);
-
 export const addCampusAlert = (alert: Omit<CampusAlert, 'id' | 'timestamp'>): Promise<CampusAlert> =>
   api.post('/campus-alerts/', alert).then(r => r.data);
 
 // ---------- CAMPUS MEDIA POSTS ----------
-// ✅ DRF pagination unwrap — keeps the rest of the app pagination-agnostic.
 export const getMediaPosts = (): Promise<CampusMediaPost[]> =>
   api.get('/media-posts/').then(r => unwrapList<CampusMediaPost>(r.data));
-
 export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPost[]> =>
   api.put('/media-posts/', posts).then(r => r.data);
-
 export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'viewsCount' | 'likesCount'>): Promise<CampusMediaPost> =>
   api.post('/media-posts/', post).then(r => r.data);
-
-// ✅ File upload media post (multipart/form-data).
-// The request interceptor above strips the instance's default
-// 'Content-Type: application/json' header whenever the body is a
-// FormData instance, so the browser/axios can generate the correct
-// 'multipart/form-data; boundary=...' header itself.
 export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => {
   return api.post('/media-posts/', formData).then(r => r.data);
 };
-
 export const deleteMediaPost = (id: string): Promise<{ success: boolean }> =>
   api.delete(`/media-posts/${id}/`).then(r => r.data);
-
 export const incrementMediaViews = (id: string): Promise<void> =>
   api.post(`/media-posts/${id}/view/`).then(r => r.data);
-
 export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
   api.post(`/media-posts/${id}/like/`).then(r => r.data);
 

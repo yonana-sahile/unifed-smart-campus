@@ -11,24 +11,15 @@ import {
   AlertCircle,
   Newspaper,
   Flame,
-  Tag,
-  Calendar,
-  Clock,
   Sparkles,
   UserCheck,
-  RotateCcw,
   LogOut,
   Building2,
-  Radio,
-  FileText,
-  Eye
 } from "lucide-react";
 import type { User } from "../types";
 import { CampusDatabase } from "../services/api";
-import { UniversitySeal, EthiopianFlag } from "./UniversityHeader";
 import { ForgotPasswordModal } from "./ForgotPasswordModal";
 
-// ✅ LOCAL Announcement interface (matches backend)
 interface Announcement {
   id: string;
   courseId: string;
@@ -39,7 +30,6 @@ interface Announcement {
   postedAt: string;
 }
 
-// ✅ LOCAL CampusNewsItem (matches the top bar)
 interface CampusNewsItem {
   id: string;
   title: string;
@@ -66,7 +56,6 @@ interface CampusNewsAdminModalProps {
   currentUser?: User | null;
 }
 
-// Helper to map Announcement -> CampusNewsItem
 const mapAnnouncementToNewsItem = (ann: Announcement): CampusNewsItem => {
   const titleLower = (ann.title || "").toLowerCase();
   let categoryLabel = "Academic";
@@ -136,7 +125,6 @@ export function CampusNewsAdminModal({
     () => currentUser?.role === "ADMIN"
   );
   const [activeTab, setActiveTab] = useState<"CREATE" | "MANAGE">("CREATE");
-  // ✅ default is empty — no hardcoded credential leak
   const [usernameInput, setUsernameInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
   const [authError, setAuthError] = useState("");
@@ -144,7 +132,6 @@ export function CampusNewsAdminModal({
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [verifiedAdminName, setVerifiedAdminName] = useState("");
 
-  // Form state
   const [title, setTitle] = useState("");
   const [amharicTitle, setAmharicTitle] = useState("");
   const [category, setCategory] = useState<string>("ACADEMIC");
@@ -156,7 +143,6 @@ export function CampusNewsAdminModal({
   const [readTime, setReadTime] = useState("2 min read");
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Existing news list
   const [newsList, setNewsList] = useState<CampusNewsItem[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -164,15 +150,10 @@ export function CampusNewsAdminModal({
     try {
       setLoading(true);
       const raw: any = await CampusDatabase.getAnnouncements();
-
-      // ✅ Defensively unwrap DRF pagination envelope in case the api
-      // layer hasn't already unwrapped it.
       const announcements: Announcement[] = Array.isArray(raw)
         ? raw
         : (Array.isArray(raw?.results) ? raw.results : []);
-
-      const mapped = announcements.map(mapAnnouncementToNewsItem);
-      setNewsList(mapped);
+      setNewsList(announcements.map(mapAnnouncementToNewsItem));
     } catch (err) {
       console.error("Failed to load announcements:", err);
       setFeedback({ type: "error", text: "Failed to load existing news." });
@@ -187,7 +168,6 @@ export function CampusNewsAdminModal({
     }
   }, [isOpen, isAdminAuthenticated]);
 
-  // ✅ Real JWT login against /auth/login/.
   const handleAdminLogin = async (e: FormEvent) => {
     e.preventDefault();
     setAuthError("");
@@ -233,7 +213,6 @@ export function CampusNewsAdminModal({
     }
   };
 
-  // ✅ Log out of the admin session — clears stored tokens too.
   const handleAdminLock = () => {
     setIsAdminAuthenticated(false);
     setVerifiedAdminName("");
@@ -241,12 +220,6 @@ export function CampusNewsAdminModal({
     localStorage.removeItem('refresh_token');
   };
 
-  // ✅ FIXED: POST a single announcement via CampusDatabase.createAnnouncement.
-  // The previous code did `PUT /api/announcements/` (bulk update) which DRF's
-  // ModelViewSet router does NOT allow — it returned 405 Method Not Allowed.
-  // DRF only exposes:
-  //   POST   /announcements/       → create one
-  //   DELETE /announcements/<id>/  → delete one
   const handlePublishNews = async (e: FormEvent) => {
     e.preventDefault();
     setFeedback(null);
@@ -260,23 +233,25 @@ export function CampusNewsAdminModal({
     }
 
     try {
-      const newAnnouncement: Announcement = {
-        // ✅ Let the backend auto-generate the id (Django BigInteger PK).
-        // Sending a manual "AN_..." string breaks the serializer since it
-        // expects a numeric id. Cast to any to satisfy the TS interface.
-        id: undefined as any,
-        courseId: "CAMPUS_NEWS",
+      // ✅ FIXED: send snake_case payload that DRF's AnnouncementSerializer
+      // expects (course, course_title, posted_by, posted_at). The API layer
+      // (createAnnouncement) handles camelCase → snake_case conversion and
+      // provides safe defaults for the FK `course` field.
+      const newAnnouncement = {
+        course: null,
         courseTitle: "Campus News & Announcements",
         title: title.trim(),
         content: fullContent.trim(),
-        postedBy: author.trim() || verifiedAdminName || currentUser?.fullName || "University Admin",
-        postedAt: new Date().toISOString()
+        postedBy:
+          author.trim() ||
+          verifiedAdminName ||
+          currentUser?.fullName ||
+          "University Admin",
+        postedAt: new Date().toISOString(),
       };
 
-      // ✅ POST single announcement (DRF ModelViewSet supports this).
       await CampusDatabase.createAnnouncement(newAnnouncement);
 
-      // Best-effort audit log — don't fail the whole publish if it errors.
       try {
         await CampusDatabase.addAuditLog(
           currentUser?.id || "ADMIN",
@@ -299,7 +274,6 @@ export function CampusNewsAdminModal({
         text: "አዲሱ የዩኒቨርሲቲ ዜና በተሳካ ሁኔታ ተለጥፏል!"
       });
 
-      // Reset form
       setTitle("");
       setAmharicTitle("");
       setSummary("");
@@ -318,13 +292,18 @@ export function CampusNewsAdminModal({
         });
         handleAdminLock();
       } else {
-        setFeedback({ type: "error", text: "Failed to publish. Please try again." });
+        const detail =
+          err?.response?.data
+            ? JSON.stringify(err.response.data)
+            : "";
+        setFeedback({
+          type: "error",
+          text: `Failed to publish. ${detail}`
+        });
       }
     }
   };
 
-  // ✅ FIXED: DELETE single announcement by id (was trying to PUT the whole
-  // list which DRF rejects with 405).
   const handleDeleteNews = async (id: string) => {
     if (confirm("እርግጠኛ ነዎት ይህን ዜና ማስወገድ ይፈልጋሉ?")) {
       try {
@@ -470,9 +449,7 @@ export function CampusNewsAdminModal({
               </form>
             </div>
           ) : (
-            /* Authenticated Admin Panel */
             <div className="p-5 sm:p-6 space-y-5 max-h-[80vh] overflow-y-auto">
-              {/* Admin bar */}
               <div className="flex flex-wrap items-center justify-between gap-2 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl text-xs">
                 <div className="flex items-center space-x-2">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -490,7 +467,6 @@ export function CampusNewsAdminModal({
                 </button>
               </div>
 
-              {/* Tabs */}
               <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-bold">
                 <button
                   type="button"
@@ -518,7 +494,6 @@ export function CampusNewsAdminModal({
                 </button>
               </div>
 
-              {/* Tab content */}
               {activeTab === "CREATE" && (
                 <form onSubmit={handlePublishNews} className="space-y-4">
                   {feedback && (
@@ -534,7 +509,7 @@ export function CampusNewsAdminModal({
                       ) : (
                         <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
                       )}
-                      <span>{feedback.text}</span>
+                      <span className="break-words">{feedback.text}</span>
                     </div>
                   )}
 
@@ -651,7 +626,6 @@ export function CampusNewsAdminModal({
                     />
                   </div>
 
-                  {/* Breaking toggle (UI only) */}
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Flame className="w-4 h-4 text-amber-500" />
@@ -698,9 +672,6 @@ export function CampusNewsAdminModal({
                     <div className="p-4 text-center text-slate-400">No announcements yet.</div>
                   ) : (
                     <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
-                      {/* ✅ FIXED: fallback key using index when item.id is
-                          empty/undefined, avoiding the "two children with
-                          the same key" React warning. */}
                       {newsList.map((item, index) => (
                         <div
                           key={item.id || `news_${index}`}
@@ -761,7 +732,6 @@ export function CampusNewsAdminModal({
             </div>
           )}
 
-          {/* Footer */}
           <div className="p-4 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
             <span className="flex items-center space-x-1">
               <Building2 className="w-3.5 h-3.5 text-amber-500" />

@@ -47,10 +47,20 @@ class CourseMaterialSerializer(serializers.ModelSerializer):
 
 
 # ---------- ANNOUNCEMENT ----------
+# ✅ FIXED: allow campus-wide announcements (no course FK) and blank
+# course_title. Also mark posted_at as read-only since it's auto_now_add
+# on the model — otherwise DRF expects it in the POST payload and returns
+# 400 "This field is required".
 class AnnouncementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Announcement
         fields = '__all__'
+        extra_kwargs = {
+            'course': {'required': False, 'allow_null': True},
+            'course_title': {'required': False, 'allow_blank': True},
+            'posted_by': {'required': True, 'allow_blank': False},
+            'posted_at': {'required': False, 'read_only': True},
+        }
 
 
 # ---------- ASSIGNMENT ----------
@@ -197,7 +207,7 @@ class CampusAlertSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# ---------- CAMPUS MEDIA POST (UPDATED) ----------
+# ---------- CAMPUS MEDIA POST ----------
 class CampusMediaPostSerializer(serializers.ModelSerializer):
     video_source = serializers.SerializerMethodField(read_only=True)
 
