@@ -395,7 +395,48 @@ export interface CampusMediaPost {
   featured?: boolean;
   tags: string[];
 }
+export interface ZoomAttendee {
+  id: string;
+  name: string;
+  avatarUrl?: string;
+  role: "INSTRUCTOR" | "STUDENT";
+  joinedAt: string;
+  isMuted: boolean;
+  isVideoOn: boolean;
+  isHandRaised?: boolean;
+}
 
+export interface ZoomChatMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: "INSTRUCTOR" | "STUDENT";
+  message: string;
+  timestamp: string;
+}
+
+export interface ZoomClassSession {
+  id: string;
+  courseId: string | null;
+  courseCode: string;
+  courseTitle: string;
+  title: string;
+  topic: string;
+  instructorId: string;
+  instructorName: string;
+  startTime: string;
+  durationMinutes: number;
+  meetingId: string;
+  passcode: string;
+  joinUrl: string;
+  hostUrl?: string;
+  status: "UPCOMING" | "LIVE" | "COMPLETED" | "CANCELLED";
+  lectureNotes?: string;
+  recordingUrl?: string;
+  recordingDuration?: string;
+  activeAttendees: ZoomAttendee[];
+  chatMessages: ZoomChatMessage[];
+}
 export interface AIChatMessage {
   id: string;
   sender: "user" | "ai";

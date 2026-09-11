@@ -354,7 +354,29 @@ class CampusMediaPostViewSet(BaseViewSet):
         # browser DevTools open.
         print("CampusMediaPost create() validation errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class ZoomClassSessionViewSet(BaseViewSet):
+    queryset = ZoomClassSession.objects.all().order_by('-start_time')
+    serializer_class = ZoomClassSessionSerializer
 
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def start(self, request, pk=None):
+        session = self.get_object()
+        session.status = 'LIVE'
+        session.save()
+        return Response(self.get_serializer(session).data)
+
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def end(self, request, pk=None):
+        session = self.get_object()
+        session.status = 'COMPLETED'
+        recording_url = request.data.get('recording_url', '')
+        recording_duration = request.data.get('recording_duration', '')
+        if recording_url:
+            session.recording_url = recording_url
+        if recording_duration:
+            session.recording_duration = recording_duration
+        session.save()
+        return Response(self.get_serializer(session).data)
 
 # ---------- AI ----------
 class AIViewSet(viewsets.GenericViewSet):
