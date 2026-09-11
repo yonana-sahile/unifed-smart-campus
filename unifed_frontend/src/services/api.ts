@@ -83,10 +83,6 @@ export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMateri
   api.put('/materials/', materials).then(r => r.data);
 
 // ---------- ANNOUNCEMENTS ----------
-// ✅ DRF ModelViewSet pattern: GET list, POST create, DELETE /<id>/
-// ✅ createAnnouncement accepts camelCase OR snake_case input and always
-// sends the snake_case keys DRF's AnnouncementSerializer expects
-// (course, course_title, posted_by, posted_at).
 export const getAnnouncements = (): Promise<Announcement[]> =>
   api.get('/announcements/').then(r => unwrapList<Announcement>(r.data));
 
@@ -326,6 +322,81 @@ export const incrementMediaViews = (id: string): Promise<void> =>
 export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
   api.post(`/media-posts/${id}/like/`).then(r => r.data);
 
+// ---------- ZOOM CLASS SESSIONS ----------
+// ✅ MOVED ABOVE the CampusDatabase export so the functions exist at
+// object-creation time. Previously they were declared AFTER the export,
+// which left `CampusDatabase.getZoomSessions` as `undefined`.
+//
+// Convert camelCase → snake_case for DRF. Only includes keys that are
+// actually present in `data`, so PATCH partial updates work correctly.
+const toZoomSnakeCase = (data: any): any => {
+  const keyMap: Record<string, string> = {
+    courseId: 'course', course: 'course',
+    courseCode: 'course_code', course_code: 'course_code',
+    courseTitle: 'course_title', course_title: 'course_title',
+    title: 'title',
+    topic: 'topic',
+    instructorId: 'instructor', instructor: 'instructor',
+    instructorName: 'instructor_name', instructor_name: 'instructor_name',
+    startTime: 'start_time', start_time: 'start_time',
+    durationMinutes: 'duration_minutes', duration_minutes: 'duration_minutes',
+    meetingId: 'meeting_id', meeting_id: 'meeting_id',
+    passcode: 'passcode',
+    joinUrl: 'join_url', join_url: 'join_url',
+    hostUrl: 'host_url', host_url: 'host_url',
+    status: 'status',
+    lectureNotes: 'lecture_notes', lecture_notes: 'lecture_notes',
+    recordingUrl: 'recording_url', recording_url: 'recording_url',
+    recordingDuration: 'recording_duration', recording_duration: 'recording_duration',
+    activeAttendees: 'active_attendees', active_attendees: 'active_attendees',
+    chatMessages: 'chat_messages', chat_messages: 'chat_messages',
+  };
+  const result: any = {};
+  for (const [k, v] of Object.entries(data)) {
+    const snake = keyMap[k];
+    if (snake) result[snake] = v;
+  }
+  return result;
+};
+
+// Convert snake_case → camelCase for the frontend components.
+const fromZoomSnakeCase = (raw: any) => ({
+  id: String(raw?.id ?? ""),
+  courseId: raw?.course ?? raw?.courseId ?? null,
+  courseCode: raw?.course_code ?? raw?.courseCode ?? "",
+  courseTitle: raw?.course_title ?? raw?.courseTitle ?? "",
+  title: raw?.title ?? "",
+  topic: raw?.topic ?? "",
+  instructorId: String(raw?.instructor ?? raw?.instructorId ?? ""),
+  instructorName: raw?.instructor_name ?? raw?.instructorName ?? "",
+  startTime: raw?.start_time ?? raw?.startTime ?? new Date().toISOString(),
+  durationMinutes: raw?.duration_minutes ?? raw?.durationMinutes ?? 60,
+  meetingId: raw?.meeting_id ?? raw?.meetingId ?? "",
+  passcode: raw?.passcode ?? "",
+  joinUrl: raw?.join_url ?? raw?.joinUrl ?? "",
+  hostUrl: raw?.host_url ?? raw?.hostUrl ?? "",
+  status: raw?.status ?? "UPCOMING",
+  lectureNotes: raw?.lecture_notes ?? raw?.lectureNotes ?? "",
+  recordingUrl: raw?.recording_url ?? raw?.recordingUrl ?? "",
+  recordingDuration: raw?.recording_duration ?? raw?.recordingDuration ?? "",
+  activeAttendees: raw?.active_attendees ?? raw?.activeAttendees ?? [],
+  chatMessages: raw?.chat_messages ?? raw?.chatMessages ?? [],
+});
+
+export const getZoomSessions = (): Promise<any[]> =>
+  api.get('/zoom-sessions/').then(r =>
+    unwrapList<any>(r.data).map(fromZoomSnakeCase)
+  );
+
+export const addZoomSession = (data: any): Promise<any> =>
+  api.post('/zoom-sessions/', toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
+
+export const updateZoomSession = (id: string, data: any): Promise<any> =>
+  api.patch(`/zoom-sessions/${id}/`, toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
+
+export const deleteZoomSession = (id: string): Promise<void> =>
+  api.delete(`/zoom-sessions/${id}/`).then(() => undefined);
+
 // ---------- EXPORT ----------
 export const CampusDatabase = {
   getUsers,
@@ -391,4 +462,8 @@ export const CampusDatabase = {
   deleteMediaPost,
   incrementMediaViews,
   toggleMediaLike,
+  getZoomSessions,
+  addZoomSession,
+  updateZoomSession,
+  deleteZoomSession,
 };

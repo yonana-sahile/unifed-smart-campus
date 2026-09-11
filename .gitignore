@@ -1,0 +1,27 @@
+# Django uploaded files (large videos, etc.)
+unifiedbackend/media/
+media/
+**/media/videos/
+**/media/uploads/
+
+# Large binaries
+*.mp4
+*.mkv
+*.mov
+*.avi
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+db.sqlite3
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Env
+.env
+.env.local
