@@ -40,17 +40,27 @@ class CourseSerializer(serializers.ModelSerializer):
 
 
 # ---------- COURSE MATERIAL ----------
+# ✅ UPDATED: allow PDF/DOCX file attachment metadata as optional so the
+# instructor's upload form (with .pdf/.docx attachments and chapter tags)
+# can POST successfully. Without extra_kwargs, DRF would reject these
+# fields as required when they arrive empty over JSON.
 class CourseMaterialSerializer(serializers.ModelSerializer):
     class Meta:
         model = CourseMaterial
         fields = '__all__'
+        read_only_fields = ['id', 'uploaded_at']
+        extra_kwargs = {
+            'file_url': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'file_name': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'file_size': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'file_data': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'chapter_week': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'instructor_name': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'description': {'required': False, 'allow_blank': True},
+        }
 
 
 # ---------- ANNOUNCEMENT ----------
-# ✅ FIXED: allow campus-wide announcements (no course FK) and blank
-# course_title. Also mark posted_at as read-only since it's auto_now_add
-# on the model — otherwise DRF expects it in the POST payload and returns
-# 400 "This field is required".
 class AnnouncementSerializer(serializers.ModelSerializer):
     class Meta:
         model = Announcement
@@ -85,12 +95,23 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 # ---------- EXAM ----------
+# ✅ UPDATED: allow the new push-portal fields (is_pushed, pushed_at,
+# created_by, category) to be sent from the frontend, and mark auto-set
+# fields as read-only so DRF doesn't demand them on POST.
 class ExamSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
 
     class Meta:
         model = Exam
         fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at', 'pushed_at']
+        extra_kwargs = {
+            'is_pushed': {'required': False},
+            'pushed_at': {'required': False, 'read_only': True},
+            'created_by': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'category': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'status': {'required': False},
+        }
 
 
 # ---------- EXAM ATTEMPT ----------
@@ -98,6 +119,7 @@ class ExamAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamAttempt
         fields = '__all__'
+        read_only_fields = ['id', 'started_at']
 
 
 # ---------- GRADE ----------
@@ -232,6 +254,9 @@ class CampusMediaPostSerializer(serializers.ModelSerializer):
         if obj.video_file:
             return obj.video_file.url
         return obj.video_url
+
+
+# ---------- ZOOM CLASS SESSION ----------
 class ZoomClassSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ZoomClassSession
