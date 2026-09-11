@@ -675,3 +675,57 @@ class CampusMediaPost(models.Model):
         if self.video_file:
             return self.video_file.url
         return self.video_url
+class ZoomClassSession(models.Model):
+    STATUS_CHOICES = (
+        ('UPCOMING', 'Upcoming'),
+        ('LIVE', 'Live'),
+        ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
+    )
+
+    course = models.ForeignKey(
+        Course,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='zoom_sessions',
+    )
+    course_code = models.CharField(max_length=20)
+    course_title = models.CharField(max_length=200)
+    title = models.CharField(max_length=200)
+    topic = models.TextField(blank=True, null=True)
+
+    instructor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='zoom_sessions_taught',
+        limit_choices_to={'role__in': ['INSTRUCTOR', 'DEPARTMENT_HEAD']},
+    )
+    instructor_name = models.CharField(max_length=100)
+
+    start_time = models.DateTimeField()
+    duration_minutes = models.IntegerField(default=60)
+
+    meeting_id = models.CharField(max_length=50)
+    passcode = models.CharField(max_length=50, blank=True, null=True)
+    join_url = models.URLField(max_length=500)
+    host_url = models.URLField(max_length=500, blank=True, null=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='UPCOMING')
+
+    lecture_notes = models.TextField(blank=True, null=True)
+    recording_url = models.URLField(max_length=500, blank=True, null=True)
+    recording_duration = models.CharField(max_length=20, blank=True, null=True)
+
+    # JSON fields for ephemeral state — avoids creating separate tables
+    active_attendees = models.JSONField(default=list, blank=True)
+    chat_messages = models.JSONField(default=list, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-start_time']
+
+    def __str__(self):
+        return f"{self.course_code} - {self.title}"
