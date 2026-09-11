@@ -4,7 +4,7 @@ import { CampusDatabase } from "../services/api";
 import {
   Mic, MicOff, Video, VideoOff, MonitorUp, Users, MessageSquare, Hand, X, Copy,
   Check, ExternalLink, ShieldCheck, CircleDot, Send, ChevronLeft, ChevronRight,
-  FileText, PhoneOff, LayoutGrid, Presentation, BookOpen
+  PhoneOff, BookOpen
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -34,26 +34,40 @@ export function ZoomClassroomModal({
   const [chatInput, setChatInput] = useState("");
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
-  const [copiedLink, setCopiedLink] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
 
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const sampleSlides = [
-    { title: "1. Microservices Architectural Principles", subtitle: "Decoupling monolithic domains into resilient, independently deployable services",
+    {
+      title: "1. Microservices Architectural Principles",
+      subtitle: "Decoupling monolithic domains into resilient, independently deployable services",
       diagram: "API Gateway -> [Auth Service] [Course Catalog] [SIS Engine] [Kafka Bus]",
-      points: ["Single Responsibility Principle applied at application boundary",
+      points: [
+        "Single Responsibility Principle applied at application boundary",
         "Polyglot persistence: Relational SQL for SIS, NoSQL for Document logs",
-        "Resilience engineering via Resilience4j & Circuit Breaker patterns"] },
-    { title: "2. API Gateway & Reverse Proxy Ingress Routing", subtitle: "Centralizing SSL termination, JWT Token Verification & Rate Limiting",
+        "Resilience engineering via Resilience4j & Circuit Breaker patterns"
+      ]
+    },
+    {
+      title: "2. API Gateway & Reverse Proxy Ingress Routing",
+      subtitle: "Centralizing SSL termination, JWT Token Verification & Rate Limiting",
       diagram: "Client Request -> [Kong / Spring Cloud Gateway] -> Internal Private VPC",
-      points: ["Uniform Authentication header injection",
+      points: [
+        "Uniform Authentication header injection",
         "Cross-Cutting Concerns: Logging, Metrics, Dynamic Rate Limiting",
-        "Path-based routing: /api/v1/courses -> Course Service Cluster"] },
-    { title: "3. Asynchronous Messaging via Apache Kafka", subtitle: "Event-driven distributed state synchronization without tight coupling",
+        "Path-based routing: /api/v1/courses -> Course Service Cluster"
+      ]
+    },
+    {
+      title: "3. Asynchronous Messaging via Apache Kafka",
+      subtitle: "Event-driven distributed state synchronization without tight coupling",
       diagram: "[Producer: Grade Service] ===> [Kafka Topic: grade-published] ===> [Consumer: Student Notifier]",
-      points: ["Zero data loss via distributed commit-log replication",
+      points: [
+        "Zero data loss via distributed commit-log replication",
         "Consumer Group scaling across high-load semester registration periods",
-        "Outbox pattern preventing distributed two-phase commit overhead"] },
+        "Outbox pattern preventing distributed two-phase commit overhead"
+      ]
+    },
   ];
 
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -66,7 +80,9 @@ export function ZoomClassroomModal({
     const hrs = Math.floor(totalSec / 3600);
     const mins = Math.floor((totalSec % 3600) / 60);
     const secs = totalSec % 60;
-    if (hrs > 0) return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    if (hrs > 0) {
+      return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    }
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
@@ -143,10 +159,13 @@ export function ZoomClassroomModal({
     setSession(updated);
     try {
       const res = await CampusDatabase.updateZoomSession(String(session.id), {
-        activeAttendees: updatedAttendees, chatMessages: updatedMessages
+        activeAttendees: updatedAttendees,
+        chatMessages: updatedMessages
       });
       if (onSessionUpdated) onSessionUpdated(res);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleLowerAllHands = async () => {
@@ -156,7 +175,9 @@ export function ZoomClassroomModal({
     try {
       const res = await CampusDatabase.updateZoomSession(String(session.id), { activeAttendees: updatedAttendees });
       if (onSessionUpdated) onSessionUpdated(res);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleMuteAll = async () => {
@@ -168,7 +189,9 @@ export function ZoomClassroomModal({
     try {
       const res = await CampusDatabase.updateZoomSession(String(session.id), { activeAttendees: updatedAttendees });
       if (onSessionUpdated) onSessionUpdated(res);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const handleEndSessionForEveryone = async () => {
@@ -189,7 +212,9 @@ export function ZoomClassroomModal({
         lectureNotes: updated.lectureNotes
       });
       if (onSessionUpdated) onSessionUpdated(res);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error(err);
+    }
     onClose();
   };
 
@@ -206,9 +231,12 @@ export function ZoomClassroomModal({
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/85 backdrop-blur-md">
         <motion.div
-          initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.96 }}
           className="w-full max-w-7xl h-[92vh] max-h-[900px] flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100"
         >
+          {/* Top Bar */}
           <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-slate-800 shrink-0">
             <div className="flex items-center space-x-3">
               <div className="flex items-center space-x-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-lg text-xs font-mono font-bold tracking-wider">
@@ -226,7 +254,8 @@ export function ZoomClassroomModal({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 truncate max-w-[300px] sm:max-w-lg">
-                  Instructor: <span className="text-slate-200 font-medium">{session.instructorName}</span> • Meeting ID: <span className="font-mono text-slate-300">{session.meetingId}</span>
+                  Instructor: <span className="text-slate-200 font-medium">{session.instructorName}</span> • Meeting ID:{" "}
+                  <span className="font-mono text-slate-300">{session.meetingId}</span>
                 </p>
               </div>
             </div>
@@ -235,23 +264,35 @@ export function ZoomClassroomModal({
                 <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
                 <span className="font-bold">{formatTimer(elapsedSeconds)}</span>
               </div>
-              <button type="button" onClick={handleCopyMeetingDetails}
-                className="hidden sm:flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition">
+              <button
+                type="button"
+                onClick={handleCopyMeetingDetails}
+                className="hidden sm:flex items-center space-x-1 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg border border-slate-700 transition"
+              >
                 {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
               </button>
-              <a href={session.joinUrl} target="_blank" rel="noreferrer"
-                className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-medium rounded-lg">
+              <a
+                href={session.joinUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40 text-xs font-medium rounded-lg"
+              >
                 <span>Open in Zoom</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
-              <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
+          {/* Main Content */}
           <div className="flex-1 flex overflow-hidden relative">
             <div className="flex-1 flex flex-col bg-slate-900/50 p-2 sm:p-4 overflow-y-auto">
+              {/* Speaker View */}
               {viewMode === "speaker" && (
                 <div className="flex-1 flex flex-col h-full space-y-3">
                   <div className="flex-1 relative rounded-xl bg-slate-950 border border-slate-800 flex flex-col overflow-hidden">
@@ -261,35 +302,55 @@ export function ZoomClassroomModal({
                         <span className="font-semibold text-slate-200">
                           {isInstructor ? "You are sharing: Slides" : `${session.instructorName}'s Screen`}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono">({currentSlideIndex + 1}/{sampleSlides.length})</span>
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          ({currentSlideIndex + 1}/{sampleSlides.length})
+                        </span>
                       </div>
                       <div className="flex items-center space-x-1">
-                        <button onClick={() => setCurrentSlideIndex((p) => Math.max(0, p - 1))} disabled={currentSlideIndex === 0}
-                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"><ChevronLeft className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => setCurrentSlideIndex((p) => Math.min(sampleSlides.length - 1, p + 1))} disabled={currentSlideIndex === sampleSlides.length - 1}
-                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"><ChevronRight className="w-3.5 h-3.5" /></button>
+                        <button
+                          onClick={() => setCurrentSlideIndex((p) => Math.max(0, p - 1))}
+                          disabled={currentSlideIndex === 0}
+                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => setCurrentSlideIndex((p) => Math.min(sampleSlides.length - 1, p + 1))}
+                          disabled={currentSlideIndex === sampleSlides.length - 1}
+                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                     <div className="flex-1 p-6 flex flex-col justify-center items-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
                       <div className="max-w-2xl w-full bg-slate-900/90 border border-slate-800/80 rounded-xl p-6 shadow-2xl">
                         <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-3">
-                          <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">MAU Computer Science & Engineering</span>
+                          <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
+                            MAU Computer Science & Engineering
+                          </span>
                           <span className="text-xs text-slate-400">Week 7 • Lecture 14</span>
                         </div>
-                        <h2 className="text-xl font-bold text-white mb-1">{sampleSlides[currentSlideIndex].title}</h2>
-                        <p className="text-xs text-slate-300 mb-4">{sampleSlides[currentSlideIndex].subtitle}</p>
+                        <h2 className="text-xl font-bold text-white mb-1">
+                          {sampleSlides[currentSlideIndex].title}
+                        </h2>
+                        <p className="text-xs text-slate-300 mb-4">
+                          {sampleSlides[currentSlideIndex].subtitle}
+                        </p>
                         <div className="p-3.5 rounded-lg bg-slate-950/80 border border-blue-500/30 text-blue-300 font-mono text-xs my-3 text-center">
                           {sampleSlides[currentSlideIndex].diagram}
                         </div>
                         <div className="space-y-2 mt-4">
                           {sampleSlides[currentSlideIndex].points.map((pt, idx) => (
                             <div key={idx} className="flex items-start space-x-2 text-xs text-slate-300">
-                              <span className="text-blue-400 mt-0.5">•</span><span>{pt}</span>
+                              <span className="text-blue-400 mt-0.5">•</span>
+                              <span>{pt}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     </div>
+                    {/* Instructor PIP */}
                     <div className="absolute top-12 right-4 w-44 sm:w-56 h-32 sm:h-40 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500/80 bg-slate-900">
                       <div className="flex-1 h-full relative flex items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950">
                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xl">
@@ -302,6 +363,8 @@ export function ZoomClassroomModal({
                       </div>
                     </div>
                   </div>
+
+                  {/* Horizontal attendees */}
                   <div className="h-28 flex items-center space-x-2.5 overflow-x-auto pb-1 shrink-0">
                     <div className="w-36 h-24 rounded-xl bg-slate-950 border border-slate-700/80 p-1 flex flex-col justify-between shrink-0">
                       <div className="flex-1 flex items-center justify-center">
@@ -321,26 +384,32 @@ export function ZoomClassroomModal({
                         {isMuted ? <MicOff className="w-3 h-3 text-red-400" /> : <Mic className="w-3 h-3 text-emerald-400" />}
                       </div>
                     </div>
-                    {(session.activeAttendees || []).filter((a) => String(a.id) !== String(currentUser.id) && a.role === "STUDENT").map((att) => (
-                      <div key={att.id} className="w-36 h-24 rounded-xl bg-slate-950 border border-slate-800 p-1 flex flex-col justify-between shrink-0">
-                        <div className="flex-1 flex items-center justify-center">
-                          <div className="relative">
-                            <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-200">
-                              {att.name.charAt(0)}
+                    {(session.activeAttendees || [])
+                      .filter((a) => String(a.id) !== String(currentUser.id) && a.role === "STUDENT")
+                      .map((att) => (
+                        <div
+                          key={att.id}
+                          className="w-36 h-24 rounded-xl bg-slate-950 border border-slate-800 p-1 flex flex-col justify-between shrink-0"
+                        >
+                          <div className="flex-1 flex items-center justify-center">
+                            <div className="relative">
+                              <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-200">
+                                {att.name.charAt(0)}
+                              </div>
+                              {att.isHandRaised && <span className="absolute -top-1 -right-2 text-sm">✋</span>}
                             </div>
-                            {att.isHandRaised && <span className="absolute -top-1 -right-2 text-sm">✋</span>}
+                          </div>
+                          <div className="flex items-center justify-between px-1.5 py-0.5 bg-slate-900/90 rounded text-[10px]">
+                            <span className="truncate max-w-[80px] text-slate-300">{att.name}</span>
+                            {att.isMuted ? <MicOff className="w-3 h-3 text-slate-500" /> : <Mic className="w-3 h-3 text-emerald-400" />}
                           </div>
                         </div>
-                        <div className="flex items-center justify-between px-1.5 py-0.5 bg-slate-900/90 rounded text-[10px]">
-                          <span className="truncate max-w-[80px] text-slate-300">{att.name}</span>
-                          {att.isMuted ? <MicOff className="w-3 h-3 text-slate-500" /> : <Mic className="w-3 h-3 text-emerald-400" />}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
                   </div>
                 </div>
               )}
 
+              {/* Gallery View */}
               {viewMode === "gallery" && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 h-full overflow-y-auto">
                   <div className="aspect-video rounded-xl bg-slate-950 border-2 border-blue-500/60 p-2 flex flex-col justify-between">
@@ -367,23 +436,26 @@ export function ZoomClassroomModal({
                       {isMuted ? <MicOff className="w-3.5 h-3.5 text-red-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
                     </div>
                   </div>
-                  {(session.activeAttendees || []).filter((a) => String(a.id) !== String(currentUser.id) && a.role === "STUDENT").map((att) => (
-                    <div key={att.id} className="aspect-video rounded-xl bg-slate-950 border border-slate-800 p-2 flex flex-col justify-between">
-                      <div className="flex-1 flex flex-col items-center justify-center">
-                        <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200 font-bold text-lg">
-                          {att.name.charAt(0)}
+                  {(session.activeAttendees || [])
+                    .filter((a) => String(a.id) !== String(currentUser.id) && a.role === "STUDENT")
+                    .map((att) => (
+                      <div key={att.id} className="aspect-video rounded-xl bg-slate-950 border border-slate-800 p-2 flex flex-col justify-between">
+                        <div className="flex-1 flex flex-col items-center justify-center">
+                          <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200 font-bold text-lg">
+                            {att.name.charAt(0)}
+                          </div>
+                          {att.isHandRaised && <span className="text-base">✋</span>}
                         </div>
-                        {att.isHandRaised && <span className="text-base">✋</span>}
+                        <div className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded text-xs">
+                          <span className="text-slate-300 truncate">{att.name}</span>
+                          {att.isMuted ? <MicOff className="w-3.5 h-3.5 text-slate-500" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded text-xs">
-                        <span className="text-slate-300 truncate">{att.name}</span>
-                        {att.isMuted ? <MicOff className="w-3.5 h-3.5 text-slate-500" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
 
+              {/* Whiteboard View */}
               {viewMode === "whiteboard" && (
                 <div className="flex-1 flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-4 overflow-y-auto">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-800">
@@ -419,10 +491,13 @@ export function ZoomClassroomModal({
               )}
             </div>
 
+            {/* Right drawer: chat / participants */}
             <AnimatePresence>
               {activeDrawer && (
                 <motion.div
-                  initial={{ width: 0, opacity: 0 }} animate={{ width: 340, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: 340, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
                   className="h-full bg-slate-900 border-l border-slate-800 flex flex-col shrink-0 overflow-hidden shadow-2xl"
                 >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/90">
@@ -433,7 +508,10 @@ export function ZoomClassroomModal({
                         {activeDrawer === "chat" ? "Meeting Chat" : `Participants (${(session.activeAttendees || []).length})`}
                       </span>
                     </div>
-                    <button onClick={() => setActiveDrawer(null)} className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800">
+                    <button
+                      onClick={() => setActiveDrawer(null)}
+                      className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
+                    >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -452,20 +530,32 @@ export function ZoomClassroomModal({
                                 <span className="text-[9px] text-slate-500 font-mono">{msg.timestamp}</span>
                               </div>
                               <div className={`px-3 py-2 rounded-xl text-xs max-w-[90%] ${
-                                isMe ? "bg-blue-600 text-white rounded-tr-none"
-                                     : msg.senderId === "system" ? "bg-amber-950/40 text-amber-300 border border-amber-500/30"
-                                     : "bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700/60"
-                              }`}>{msg.message}</div>
+                                isMe
+                                  ? "bg-blue-600 text-white rounded-tr-none"
+                                  : msg.senderId === "system"
+                                  ? "bg-amber-950/40 text-amber-300 border border-amber-500/30"
+                                  : "bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700/60"
+                              }`}>
+                                {msg.message}
+                              </div>
                             </div>
                           );
                         })}
                         <div ref={chatBottomRef} />
                       </div>
                       <form onSubmit={handleSendMessage} className="p-2.5 border-t border-slate-800 bg-slate-950 flex items-center space-x-2">
-                        <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Type a message..." className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-blue-500" />
-                        <button type="submit" disabled={!chatInput.trim()}
-                          className="p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg">
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Type a message..."
+                          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
+                        />
+                        <button
+                          type="submit"
+                          disabled={!chatInput.trim()}
+                          className="p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg"
+                        >
                           <Send className="w-3.5 h-3.5" />
                         </button>
                       </form>
@@ -476,17 +566,26 @@ export function ZoomClassroomModal({
                     <div className="flex-1 flex flex-col h-full overflow-hidden">
                       {isInstructor && (
                         <div className="p-3 border-b border-slate-800 bg-slate-950 flex items-center space-x-2">
-                          <button onClick={handleMuteAll} className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700">
+                          <button
+                            onClick={handleMuteAll}
+                            className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700"
+                          >
                             Mute All
                           </button>
-                          <button onClick={handleLowerAllHands} className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700">
+                          <button
+                            onClick={handleLowerAllHands}
+                            className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700"
+                          >
                             Lower All Hands
                           </button>
                         </div>
                       )}
                       <div className="flex-1 p-3 space-y-2 overflow-y-auto">
                         {(session.activeAttendees || []).map((att) => (
-                          <div key={att.id} className="flex items-center justify-between p-2 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs">
+                          <div
+                            key={att.id}
+                            className="flex items-center justify-between p-2 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs"
+                          >
                             <div className="flex items-center space-x-2.5 truncate">
                               <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center font-bold text-slate-200 text-xs shrink-0">
                                 {att.name.charAt(0)}
@@ -512,19 +611,24 @@ export function ZoomClassroomModal({
             </AnimatePresence>
           </div>
 
+          {/* Bottom Toolbar */}
           <div className="h-18 px-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between shrink-0">
             <div className="flex items-center space-x-2 sm:space-x-3">
-              <button onClick={() => setIsMuted(!isMuted)}
+              <button
+                onClick={() => setIsMuted(!isMuted)}
                 className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl border transition ${
                   isMuted ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-slate-800 border-slate-700 text-emerald-400"
-                }`}>
+                }`}
+              >
                 {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
                 <span className="text-[10px] font-medium mt-0.5">{isMuted ? "Unmute" : "Mute"}</span>
               </button>
-              <button onClick={() => setIsVideoOn(!isVideoOn)}
+              <button
+                onClick={() => setIsVideoOn(!isVideoOn)}
                 className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl border transition ${
                   !isVideoOn ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-slate-800 border-slate-700 text-slate-200"
-                }`}>
+                }`}
+              >
                 {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
                 <span className="text-[10px] font-medium mt-0.5">{isVideoOn ? "Stop" : "Start"}</span>
               </button>
@@ -532,37 +636,45 @@ export function ZoomClassroomModal({
 
             <div className="flex items-center space-x-1 sm:space-x-2">
               {isInstructor && (
-                <button onClick={() => setIsScreenSharing(!isScreenSharing)}
+                <button
+                  onClick={() => setIsScreenSharing(!isScreenSharing)}
                   className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
                     isScreenSharing ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-800 border-slate-700 text-slate-300"
-                  }`}>
+                  }`}
+                >
                   <MonitorUp className="w-5 h-5" />
                   <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">{isScreenSharing ? "Sharing" : "Share"}</span>
                 </button>
               )}
               {!isInstructor && (
-                <button onClick={handleToggleHandRaise}
+                <button
+                  onClick={handleToggleHandRaise}
                   className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
                     isHandRaised ? "bg-amber-500/20 border-amber-500/40 text-amber-400 animate-pulse" : "bg-slate-800 border-slate-700 text-slate-300"
-                  }`}>
+                  }`}
+                >
                   <Hand className="w-5 h-5" />
                   <span className="text-[10px] font-medium mt-0.5">{isHandRaised ? "Lower" : "Raise"}</span>
                 </button>
               )}
-              <button onClick={() => setActiveDrawer(activeDrawer === "participants" ? null : "participants")}
+              <button
+                onClick={() => setActiveDrawer(activeDrawer === "participants" ? null : "participants")}
                 className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition relative ${
                   activeDrawer === "participants" ? "bg-blue-600/20 border-blue-500/40 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-300"
-                }`}>
+                }`}
+              >
                 <Users className="w-5 h-5" />
                 <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">People</span>
                 <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
                   {(session.activeAttendees || []).length}
                 </span>
               </button>
-              <button onClick={() => setActiveDrawer(activeDrawer === "chat" ? null : "chat")}
+              <button
+                onClick={() => setActiveDrawer(activeDrawer === "chat" ? null : "chat")}
                 className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition relative ${
                   activeDrawer === "chat" ? "bg-blue-600/20 border-blue-500/40 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-300"
-                }`}>
+                }`}
+              >
                 <MessageSquare className="w-5 h-5" />
                 <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">Chat</span>
                 <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
@@ -570,10 +682,12 @@ export function ZoomClassroomModal({
                 </span>
               </button>
               {isInstructor && (
-                <button onClick={() => setIsRecording(!isRecording)}
+                <button
+                  onClick={() => setIsRecording(!isRecording)}
                   className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
                     isRecording ? "bg-red-500/20 border-red-500/40 text-red-400" : "bg-slate-800 border-slate-700 text-slate-400"
-                  }`}>
+                  }`}
+                >
                   <CircleDot className={`w-5 h-5 ${isRecording ? "animate-pulse" : ""}`} />
                   <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">{isRecording ? "REC" : "Record"}</span>
                 </button>
@@ -582,14 +696,18 @@ export function ZoomClassroomModal({
 
             <div className="flex items-center space-x-2">
               {isInstructor ? (
-                <button onClick={handleEndSessionForEveryone}
-                  className="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold">
+                <button
+                  onClick={handleEndSessionForEveryone}
+                  className="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold"
+                >
                   <PhoneOff className="w-4 h-4" />
                   <span>End Class</span>
                 </button>
               ) : (
-                <button onClick={onClose}
-                  className="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl text-xs font-semibold">
+                <button
+                  onClick={onClose}
+                  className="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl text-xs font-semibold"
+                >
                   <PhoneOff className="w-4 h-4" />
                   <span>Leave</span>
                 </button>
@@ -601,3 +719,5 @@ export function ZoomClassroomModal({
     </AnimatePresence>
   );
 }
+
+export default ZoomClassroomModal;
