@@ -124,36 +124,36 @@ export function DigitalClock({ className = "" }: { className?: string }) {
       onClick={() => setIs24Hour(!is24Hour)}
       title="Click to toggle 12h / 24h • Ethiopian Standard Time (EAT • UTC+3)"
       id="university_digital_clock"
-      className={`group cursor-pointer select-none flex items-center space-x-2.5 bg-slate-900/90 dark:bg-slate-950/90 hover:bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl shadow-xs transition-all duration-200 ${className}`}
+      className={`group cursor-pointer select-none flex items-center space-x-2 bg-slate-900/90 dark:bg-slate-950/90 hover:bg-slate-900 border border-slate-700/80 hover:border-amber-400/60 px-2.5 py-1 sm:py-1.5 rounded-lg shadow-xs transition-all duration-200 ${className}`}
     >
-      <div className="relative flex items-center justify-center">
-        <Clock className="w-4 h-4 text-amber-400 group-hover:rotate-45 transition-transform duration-300" />
-        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
+      <div className="relative flex items-center justify-center shrink-0">
+        <Clock className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-45 transition-transform duration-300" />
+        <span className="absolute -top-0.5 -right-0.5 w-1 h-1 bg-emerald-400 rounded-full animate-ping" />
       </div>
 
       <div className="flex flex-col text-left leading-tight">
         <div className="flex items-baseline space-x-0.5 font-mono">
-          <span className="text-xs sm:text-sm font-extrabold text-amber-300 tracking-wide">
+          <span className="text-[11px] sm:text-xs font-bold text-amber-300 tracking-tight">
             {hours}
           </span>
-          <span className="text-amber-400 font-bold animate-pulse text-xs sm:text-sm">:</span>
-          <span className="text-xs sm:text-sm font-extrabold text-amber-300 tracking-wide">
+          <span className="text-amber-400 font-bold animate-pulse text-[11px] sm:text-xs">:</span>
+          <span className="text-[11px] sm:text-xs font-bold text-amber-300 tracking-tight">
             {minutes}
           </span>
-          <span className="text-amber-400 font-bold animate-pulse text-xs sm:text-sm">:</span>
-          <span className="text-[11px] sm:text-xs font-bold text-amber-400/90 tracking-wider">
+          <span className="text-amber-400 font-bold animate-pulse text-[11px] sm:text-xs">:</span>
+          <span className="text-[10px] font-semibold text-amber-400/90 tracking-tight">
             {seconds}
           </span>
           {!is24Hour && (
-            <span className="text-[9px] font-bold text-amber-200/90 bg-amber-500/25 px-1.5 py-0.5 rounded ml-1">
+            <span className="text-[8px] font-bold text-amber-200/90 bg-amber-500/25 px-1 py-0.2 rounded ml-1">
               {ampm}
             </span>
           )}
         </div>
-        <div className="flex items-center space-x-1 text-[9px] sm:text-[10px] font-mono text-slate-400 mt-0.5">
+        <div className="flex items-center space-x-1 text-[8px] sm:text-[9px] font-mono text-slate-400">
           <span className="hidden sm:inline">{dateStr}</span>
           <span className="hidden sm:inline">•</span>
-          <span className="text-emerald-400 font-semibold">EAT (UTC+3)</span>
+          <span className="text-emerald-400 font-semibold">EAT</span>
         </div>
       </div>
     </div>
@@ -170,7 +170,7 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
       id="theme_toggle_button"
       aria-label={`Switch to ${theme === "light" ? "dark" : "light"} mode`}
       title={`Switch to ${theme === "light" ? "Dark Mode (ጨለማ ገጽ)" : "Light Mode (የብርሃን ገጽታ)"}`}
-      className={`relative inline-flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 rounded-xl transition-all duration-300 border shadow-xs ${
+      className={`relative inline-flex items-center gap-1 px-2.5 py-1 sm:py-1.5 rounded-lg transition-all duration-300 border shadow-xs cursor-pointer ${
         theme === "dark"
           ? "bg-slate-900/90 hover:bg-slate-800 text-amber-300 border-amber-500/30 ring-1 ring-amber-500/20"
           : "bg-white/90 hover:bg-white text-slate-800 border-slate-300/90 ring-1 ring-slate-200/50 shadow-xs"
@@ -182,17 +182,17 @@ export function ThemeToggle({ className = "" }: { className?: string }) {
         animate={{ rotate: 0, scale: 1, opacity: 1 }}
         exit={{ rotate: 90, scale: 0.7, opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="flex items-center space-x-1.5"
+        className="flex items-center space-x-1"
       >
         {theme === "dark" ? (
           <>
-            <Moon className="w-4 h-4 text-amber-400 fill-amber-400/20" />
-            <span className="text-[11px] sm:text-xs font-mono font-bold tracking-tight text-amber-300">Dark</span>
+            <Moon className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
+            <span className="text-[10px] sm:text-[11px] font-mono font-bold tracking-tight text-amber-300">Dark</span>
           </>
         ) : (
           <>
-            <Sun className="w-4 h-4 text-amber-600 fill-amber-500/20" />
-            <span className="text-[11px] sm:text-xs font-mono font-bold tracking-tight text-slate-800">Light</span>
+            <Sun className="w-3.5 h-3.5 text-amber-600 fill-amber-500/20" />
+            <span className="text-[10px] sm:text-[11px] font-mono font-bold tracking-tight text-slate-800">Light</span>
           </>
         )}
       </motion.div>
@@ -662,15 +662,15 @@ export function UniversityTopBar({
                       src={currentUser.avatarUrl}
                       alt={currentUser.fullName}
                       referrerPolicy="no-referrer"
-                      className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl border border-amber-500/60 object-cover shadow-md group-hover:border-amber-400 transition"
+                      className="w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-lg border border-amber-500/60 object-cover shadow-xs group-hover:border-amber-400 transition"
                     />
                   ) : (
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-display font-bold text-sm shadow-md group-hover:border-amber-400 transition">
+                    <div className="w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-display font-bold text-xs shadow-xs group-hover:border-amber-400 transition">
                       {currentUser.fullName.charAt(0)}
                     </div>
                   )}
                   <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 p-0.5 rounded-md shadow-xs opacity-80 group-hover:opacity-100 transition-opacity">
-                    <Camera className="w-2.5 h-2.5" />
+                    <Camera className="w-2 h-2" />
                   </div>
                 </div>
               </button>
@@ -679,21 +679,21 @@ export function UniversityTopBar({
               <button
                 type="button"
                 onClick={() => setIsProfileModalOpen(true)}
-                className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-xs font-semibold transition cursor-pointer"
+                className="hidden xl:flex items-center space-x-1 px-2 py-1 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-[11px] font-semibold transition cursor-pointer"
                 title="Update Profile, Name, Password & Avatar"
               >
-                <UserCog className="w-3.5 h-3.5" />
+                <UserCog className="w-3 h-3" />
                 <span>Edit Profile</span>
               </button>
             </div>
 
-            <div className="h-6 w-px bg-slate-700/80 hidden sm:block" />
+            <div className="h-5 w-px bg-slate-700/80 hidden sm:block" />
 
             {/* Logout Button */}
             <button
               type="button"
               onClick={onLogout}
-              className="px-3 py-1.5 sm:py-2 bg-slate-800/90 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/50 text-slate-200 hover:text-red-200 rounded-xl text-xs font-semibold transition duration-150 shadow-md cursor-pointer shrink-0"
+              className="px-2.5 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/50 text-slate-200 hover:text-red-200 rounded-lg text-xs font-semibold transition duration-150 shadow-xs cursor-pointer shrink-0"
             >
               Sign Out
             </button>
