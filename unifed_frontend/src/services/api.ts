@@ -75,7 +75,7 @@ export const getCourses = (): Promise<Course[]> =>
   api.get('/courses/').then(r => unwrapList<Course>(r.data));
 export const saveCourses = (courses: Course[]): Promise<Course[]> =>
   api.put('/courses/', courses).then(r => r.data);
-// NEW: per-item update (DRF-405 safe)
+// per-item update (DRF-405 safe)
 export const updateCourse = (id: string, course: any): Promise<Course> =>
   api.patch(`/courses/${id}/`, course).then(r => r.data);
 
@@ -161,7 +161,6 @@ export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]
   api.put('/submissions/', submissions).then(r => r.data);
 export const addSubmission = (submission: any): Promise<Submission> =>
   api.post('/submissions/', submission).then(r => r.data);
-// NEW: per-item update (used for grading)
 export const updateSubmission = (id: string, submission: any): Promise<Submission> =>
   api.patch(`/submissions/${id}/`, submission).then(r => r.data);
 
@@ -169,14 +168,12 @@ export const updateSubmission = (id: string, submission: any): Promise<Submissio
 export const getExams = (): Promise<Exam[]> =>
   api.get('/exams/').then(r => unwrapList<Exam>(r.data));
 
-// create one exam via POST with nested questions + push metadata.
 export const createExam = (exam: any): Promise<Exam> =>
   api.post('/exams/', exam).then(r => r.data);
 
 export const updateExam = (id: string, exam: any): Promise<Exam> =>
   api.patch(`/exams/${id}/`, exam).then(r => r.data);
 
-// toggle the "pushed to students" flag via the dedicated action.
 export const pushExam = (examId: string, isPushed: boolean): Promise<Exam> =>
   api.post(`/exams/${examId}/push/`, { is_pushed: isPushed }).then(r => r.data);
 
@@ -184,7 +181,6 @@ export const deleteExam = (id: string): Promise<void> =>
   api.delete(`/exams/${id}/`).then(() => undefined);
 
 // Legacy compatibility — DRF disallows bulk PUT on /exams/ (405).
-// Kept so older components don't crash at import time.
 export const saveExams = (exams: Exam[]): Promise<Exam[]> =>
   api.put('/exams/', exams).then(r => r.data);
 
@@ -202,7 +198,6 @@ export const getGrades = (): Promise<Grade[]> =>
   api.get('/grades/').then(r => unwrapList<Grade>(r.data));
 export const saveGrades = (grades: Grade[]): Promise<Grade[]> =>
   api.put('/grades/', grades).then(r => r.data);
-// NEW: per-item update (used for CA score + final grade submission)
 export const updateGrade = (id: string, grade: any): Promise<Grade> =>
   api.patch(`/grades/${id}/`, grade).then(r => r.data);
 
@@ -305,8 +300,11 @@ export const getCourseAdvisor = (data: {
 }): Promise<{ summary: string; recommendations: any[] }> =>
   api.post('/ai/course-advisor/', data).then(r => r.data);
 
-// ---------- AUDIT LOG HELPER ----------
-export const addAuditLog = (
+// ---------- AUDIT LOG HELPER (non-fatal) ----------
+// Sends snake_case keys to match Django's AuditLog model fields.
+// Wrapped in try/catch so a failed audit write never breaks the
+// calling action (announcement post, material upload, exam push, etc.).
+export const addAuditLog = async (
   userId: string,
   userName: string,
   userRole: string,
@@ -314,17 +312,30 @@ export const addAuditLog = (
   entityType: string,
   entityId: string,
   description: string
-): Promise<AuditLog> =>
-  api.post('/audit-logs/', {
-    userId,
-    userName,
-    userRole,
-    action,
-    entityType,
-    entityId,
-    description,
-    ipAddress: 'unknown',
-  }).then(r => r.data);
+): Promise<AuditLog | null> => {
+  try {
+    const res = await api.post('/audit-logs/', {
+      user_id: userId,
+      user_name: userName,
+      user_role: userRole,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
+      description,
+      ip_address: 'unknown',
+    });
+    return res.data;
+  } catch (err: any) {
+    // Log to console for debugging, but don't throw — audit logging
+    // must never block the primary user action.
+    console.warn(
+      '[audit-log] write failed (non-fatal):',
+      err?.response?.status,
+      err?.response?.data || err?.message
+    );
+    return null;
+  }
+};
 
 // ---------- CLEARANCES ----------
 export const getClearances = (): Promise<StudentClearance[]> =>
@@ -454,7 +465,7 @@ export const CampusDatabase = {
   updateUser,
   getCourses,
   saveCourses,
-  updateCourse,        // NEW
+  updateCourse,
   getMaterials,
   saveMaterials,
   addMaterial,
@@ -471,7 +482,7 @@ export const CampusDatabase = {
   getSubmissions,
   saveSubmissions,
   addSubmission,
-  updateSubmission,    // NEW
+  updateSubmission,
   getExams,
   createExam,
   updateExam,
@@ -483,7 +494,7 @@ export const CampusDatabase = {
   createExamAttempt,
   getGrades,
   saveGrades,
-  updateGrade,         // NEW
+  updateGrade,
   getTranscripts,
   saveTranscripts,
   getAttendance,
