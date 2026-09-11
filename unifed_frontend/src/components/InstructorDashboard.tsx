@@ -20,9 +20,11 @@ import {
   Trash,
   Layout,
   Check,
-  Shield
+  Shield,
+  Video
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { InstructorZoomManager } from "./InstructorZoomManager";
 
 interface InstructorDashboardProps {
   user: User;
@@ -30,7 +32,7 @@ interface InstructorDashboardProps {
 }
 
 export default function InstructorDashboard({ user, onLogout }: InstructorDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "materials" | "assignments" | "exams" | "grades" | "attendance" | "analytics">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "materials" | "assignments" | "exams" | "grades" | "attendance" | "analytics" | "zoom">("dashboard");
   const [courses, setCourses] = useState<Course[]>([]);
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -81,7 +83,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     loadData();
   }, []);
 
-  // ✅ FIXED: Async data loading with proper error handling
   const loadData = async () => {
     try {
       const [
@@ -102,7 +103,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         CampusDatabase.getGrades(),
       ]);
 
-      // Filter courses for this instructor
       const filteredCourses = Array.isArray(coursesData)
         ? coursesData.filter((c) => c.instructorId === user.id)
         : [];
@@ -130,7 +130,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     return courses.find((c) => c.id === selectedCourseId) || courses[0];
   };
 
-  // ✅ FIXED: Async handlers with await
   const handlePostAnnouncement = async () => {
     if (!newAnnounceTitle || !newAnnounceContent) return;
     const activeCourse = getActiveCourse();
@@ -249,7 +248,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     await CampusDatabase.saveSubmissions(updatedSubmissions);
     setSubmissions(updatedSubmissions);
 
-    // Update continuous assessment score in grade object
     const currentGrades = await CampusDatabase.getGrades();
     const studentGrade = currentGrades.find(
       (g) => g.studentId === selectedSubmission.studentId && g.courseId === selectedSubmission.courseId
@@ -506,6 +504,24 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
             >
               <BrainCircuit className="w-4 h-4 text-amber-400" />
               <span>AI Student Analytics</span>
+            </button>
+            {/* ✅ NEW: Zoom Live Teaching tab */}
+            <button
+              onClick={() => setActiveTab("zoom")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "zoom"
+                  ? "bg-primary text-white border border-blue-400/30 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <Video className="w-4 h-4 text-blue-400" />
+                <span>Zoom Live Teaching</span>
+              </div>
+              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-400/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>LIVE</span>
+              </span>
             </button>
           </nav>
 
@@ -1221,6 +1237,22 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     )}
                   </div>
                 </div>
+              </motion.div>
+            )}
+
+            {/* ✅ TAB: ZOOM LIVE TEACHING */}
+            {activeTab === "zoom" && (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                key="instructor-zoom-tab"
+              >
+                <InstructorZoomManager
+                  instructor={user}
+                  courses={courses}
+                  selectedCourseId={selectedCourseId}
+                />
               </motion.div>
             )}
           </AnimatePresence>
