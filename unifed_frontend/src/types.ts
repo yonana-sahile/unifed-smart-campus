@@ -52,12 +52,21 @@ export interface Course {
   prerequisites: string[];
 }
 
+// ✅ UPDATED: added optional file attachment metadata for PDF/DOCX uploads
+// (file_name, file_size, file_data, chapter_week, instructor_name) so the
+// instructor's material upload form and the student's preview modal can
+// display and download the attached file.
 export interface CourseMaterial {
   id: string;
   courseId: string;
   title: string;
   fileType: "PDF" | "Video" | "Document" | "Slide";
   fileUrl?: string;
+  fileName?: string;
+  fileSize?: string;
+  fileData?: string; // base64 Data URL for download
+  chapterWeek?: string;
+  instructorName?: string;
   uploadedAt: string;
   description: string;
 }
@@ -104,6 +113,8 @@ export interface Question {
   marks: number;
 }
 
+// ✅ UPDATED: added isPushed, pushedAt, createdBy, category fields so the
+// instructor's push portal and student's live exam portal work end-to-end.
 export interface Exam {
   id: string;
   courseId: string;
@@ -115,6 +126,11 @@ export interface Exam {
   instructions: string;
   questions: Question[];
   status: "DRAFT" | "SCHEDULED" | "ACTIVE" | "CLOSED" | "GRADED" | "ARCHIVED";
+  // Push portal fields
+  isPushed?: boolean;
+  pushedAt?: string;
+  createdBy?: string;
+  category?: "MID_EXAM" | "FINAL_EXAM" | "QUIZ" | "PRACTICE" | "TEST" | "EXAM" | string;
 }
 
 export interface ExamAttempt {
@@ -395,6 +411,7 @@ export interface CampusMediaPost {
   featured?: boolean;
   tags: string[];
 }
+
 export interface ZoomAttendee {
   id: string;
   name: string;
@@ -437,6 +454,7 @@ export interface ZoomClassSession {
   activeAttendees: ZoomAttendee[];
   chatMessages: ZoomChatMessage[];
 }
+
 export interface AIChatMessage {
   id: string;
   sender: "user" | "ai";
