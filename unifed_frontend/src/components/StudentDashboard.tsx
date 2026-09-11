@@ -6,6 +6,7 @@ import { SmartAICopilot } from "./SmartAICopilot";
 import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusFacilities } from "./SmartCampusFacilities";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
+import { ExamResultsModal } from "./ExamResultsModal";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
   Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video
@@ -34,23 +35,22 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<any>(null);
 
-  // Active exam state
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
-  const examTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const examTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Interactive feedback/evaluation
+  // NEW: results modal state
+  const [viewingAttempt, setViewingAttempt] = useState<ExamAttempt | null>(null);
+
   const [evaluatorInstructorId, setEvaluatorInstructorId] = useState<string | null>(null);
   const [evaluationFeedback, setEvaluationFeedback] = useState("");
   const [evaluationRating, setEvaluationRating] = useState(5);
 
-  // Payment portal state
   const [payAmount, setPayAmount] = useState<number>(0);
   const [cardNumber, setCardNumber] = useState("");
   const [showPayModal, setShowPayModal] = useState(false);
 
-  // Drag and drop assignment upload
   const [draggingAssignmentId, setDraggingAssignmentId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<{ [assignmentId: string]: string }>({});
 
@@ -58,7 +58,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     loadData();
   }, []);
 
-  // ✅ FIXED: async with Promise.all + array guards
   const loadData = async () => {
     try {
       const [
@@ -106,7 +105,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  // Exam timer
   useEffect(() => {
     if (currentExam && examTimeRemaining > 0) {
       examTimerRef.current = setInterval(() => {
@@ -125,7 +123,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     };
   }, [currentExam, examTimeRemaining]);
 
-  // ✅ FIXED: async + await
   const handleEnroll = async (course: Course) => {
     if (course.prerequisites && course.prerequisites.length > 0) {
       const missingPrereqs: string[] = [];
@@ -153,19 +150,27 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       return;
     }
 
-    const updatedCourses = courses.map((c) =>
-      c.id === course.id ? { ...c, enrolledStudentsCount: c.enrolledStudentsCount + 1 } : c
-    );
+    try {
+      const updated: any = await CampusDatabase.updateCourse(course.id, {
+        enrolled_students_count: course.enrolledStudentsCount + 1,
+      });
+      const normalized: Course = {
+        ...course,
+        enrolledStudentsCount:
+          updated?.enrolled_students_count ?? updated?.enrolledStudentsCount ?? course.enrolledStudentsCount + 1,
+      };
+      setCourses((prev) => prev.map((c) => (c.id === course.id ? normalized : c)));
 
-    await CampusDatabase.saveCourses(updatedCourses);
-    setCourses(updatedCourses);
+      await CampusDatabase.addAuditLog(
+        user.id, user.fullName, "STUDENT", "Enroll Course", "Course", course.id,
+        `Student registered for course: ${course.courseCode} - ${course.courseTitle}`
+      );
 
-    await CampusDatabase.addAuditLog(
-      user.id, user.fullName, "STUDENT", "Enroll Course", "Course", course.id,
-      `Student registered for course: ${course.courseCode} - ${course.courseTitle}`
-    );
-
-    alert(`Successfully registered for ${course.courseCode}!`);
+      alert(`Successfully registered for ${course.courseCode}!`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Enrollment failed: " + (err?.message || "Unknown error"));
+    }
   };
 
   const handleDragOver = (e: DragEvent, assignmentId: string) => {
@@ -193,7 +198,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  // ✅ FIXED: async + await
   const triggerAssignmentSubmit = async (assignmentId: string, fileName: string) => {
     const newSubmission: Submission = {
       id: "SUB_" + Date.now(),
@@ -207,17 +211,31 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       status: "PENDING"
     };
 
-    const currentSubmissions = await CampusDatabase.getSubmissions();
-    const updatedSubmissions = [newSubmission, ...currentSubmissions];
-    await CampusDatabase.saveSubmissions(updatedSubmissions);
-    setSubmissions(updatedSubmissions);
+    try {
+      const created: any = await CampusDatabase.addSubmission({
+        assignment: assignmentId,
+        student: user.id,
+        student_name: user.fullName,
+        submitted_at: newSubmission.submittedAt,
+        file_name: fileName,
+        status: "PENDING",
+      });
+      const normalized: Submission = {
+        ...newSubmission,
+        id: String(created?.id ?? newSubmission.id),
+      };
+      setSubmissions((prev) => [normalized, ...prev]);
 
-    await CampusDatabase.addAuditLog(
-      user.id, user.fullName, "STUDENT", "Submit Assignment", "Submission", newSubmission.id,
-      `Submitted assignment file: ${fileName}`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id, user.fullName, "STUDENT", "Submit Assignment", "Submission", normalized.id,
+        `Submitted assignment file: ${fileName}`
+      );
 
-    alert(`Successfully uploaded and submitted ${fileName}!`);
+      alert(`Successfully uploaded and submitted ${fileName}!`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Submission failed: " + (err?.message || "Unknown error"));
+    }
   };
 
   const startExam = async (exam: Exam) => {
@@ -245,17 +263,15 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     completeExamSubmission();
   };
 
-  // ✅ FIXED: async + await
   const completeExamSubmission = async () => {
     if (!currentExam) return;
 
     let calculatedScore = 0;
     currentExam.questions.forEach((q, idx) => {
       const studentAns = examAnswers[idx];
-      if (q.questionType !== "short_answer" && studentAns === q.correctAnswer) {
+      // Auto-grade MCQ / TF questions only (marks worth full if correct)
+      if (studentAns && studentAns === q.correctAnswer) {
         calculatedScore += q.marks;
-      } else if (q.questionType === "short_answer") {
-        calculatedScore += Math.floor(q.marks * 0.7);
       }
     });
 
@@ -272,30 +288,58 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       submittedAt: new Date().toISOString()
     };
 
-    const currentAttempts = await CampusDatabase.getExamAttempts();
-    await CampusDatabase.saveExamAttempts([...currentAttempts, newAttempt]);
-    setExamAttempts([...currentAttempts, newAttempt]);
+    try {
+      const created: any = await CampusDatabase.createExamAttempt({
+        exam: currentExam.id,
+        student: user.id,
+        student_name: user.fullName,
+        answers: examAnswers,
+        score: calculatedScore,
+        status: "SUBMITTED",
+        started_at: newAttempt.startedAt,
+        submitted_at: newAttempt.submittedAt,
+      });
+      const normalizedAttempt: ExamAttempt = {
+        ...newAttempt,
+        id: String(created?.id ?? newAttempt.id),
+      };
+      setExamAttempts((prev) => [...prev, normalizedAttempt]);
 
-    const currentGrades = await CampusDatabase.getGrades();
-    const existingGrade = currentGrades.find(
-      (g) => g.studentId === user.id && g.courseId === currentExam.courseId
-    );
+      // Sync grade sheet if a matching grade row exists
+      const allGrades = await CampusDatabase.getGrades();
+      const gradeList = Array.isArray(allGrades) ? allGrades : [];
+      const existingGrade = gradeList.find(
+        (g) => g.studentId === user.id && g.courseId === currentExam.courseId
+      );
 
-    if (existingGrade) {
-      existingGrade.midExamScore = calculatedScore;
-      existingGrade.totalGrade =
-        existingGrade.continuousAssessmentScore + existingGrade.midExamScore + existingGrade.finalExamScore;
-      await CampusDatabase.saveGrades(currentGrades);
-      setGrades(currentGrades);
+      if (existingGrade) {
+        const updatedGrade: any = await CampusDatabase.updateGrade(existingGrade.id, {
+          mid_exam_score: calculatedScore,
+        });
+        const normalizedGrade: Grade = {
+          ...existingGrade,
+          midExamScore: updatedGrade?.mid_exam_score ?? calculatedScore,
+          totalGrade:
+            updatedGrade?.total_grade ??
+            (existingGrade.continuousAssessmentScore +
+              calculatedScore +
+              existingGrade.finalExamScore),
+        };
+        setGrades((prev) => prev.map((g) => (g.id === normalizedGrade.id ? normalizedGrade : g)));
+      }
+
+      await CampusDatabase.addAuditLog(
+        user.id, user.fullName, "STUDENT", "Submit Exam", "ExamAttempt", normalizedAttempt.id,
+        `Submitted attempt for ${currentExam.examTitle}. Scored ${calculatedScore}/${currentExam.totalMarks}`
+      );
+
+      // Open the detailed results modal instead of just alerting
+      setViewingAttempt(normalizedAttempt);
+      setCurrentExam(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Exam submission failed: " + (err?.message || "Unknown error"));
     }
-
-    await CampusDatabase.addAuditLog(
-      user.id, user.fullName, "STUDENT", "Submit Exam", "ExamAttempt", newAttempt.id,
-      `Submitted attempt for ${currentExam.examTitle}. Scored ${calculatedScore}/${currentExam.totalMarks}`
-    );
-
-    setCurrentExam(null);
-    alert(`Exam submitted successfully! Your preliminary score: ${calculatedScore}/${currentExam.totalMarks}`);
   };
 
   const submitInstructorEvaluation = () => {
@@ -307,33 +351,34 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setEvaluationFeedback("");
   };
 
-  // ✅ FIXED: async + await
   const handlePayment = async () => {
     if (!cardNumber || payAmount <= 0) {
       alert("Please enter a valid amount and credit card number.");
       return;
     }
 
-    const users = await CampusDatabase.getUsers();
-    const updatedUsers = users.map((u) =>
-      u.id === user.id
-        ? { ...u, outstandingFees: Math.max(0, (u.outstandingFees || 0) - payAmount) }
-        : u
-    );
+    try {
+      const updatedUser: any = await CampusDatabase.updateUser({
+        ...user,
+        outstandingFees: Math.max(0, (user.outstandingFees || 0) - payAmount),
+      } as any);
+      user.outstandingFees =
+        updatedUser?.outstandingFees ?? Math.max(0, (user.outstandingFees || 0) - payAmount);
 
-    await CampusDatabase.saveUsers(updatedUsers);
-    user.outstandingFees = Math.max(0, (user.outstandingFees || 0) - payAmount);
+      await CampusDatabase.addAuditLog(
+        user.id, user.fullName, "STUDENT", "Pay Fees", "User", user.id,
+        `Paid ${payAmount} ETB online. Card digits: ****${cardNumber.slice(-4)}`
+      );
 
-    await CampusDatabase.addAuditLog(
-      user.id, user.fullName, "STUDENT", "Pay Fees", "User", user.id,
-      `Paid ${payAmount} ETB online. Card digits: ****${cardNumber.slice(-4)}`
-    );
-
-    alert(`Successfully processed payment of ${payAmount} ETB! Balance updated.`);
-    setPayAmount(0);
-    setCardNumber("");
-    setShowPayModal(false);
-    await loadData();
+      alert(`Successfully processed payment of ${payAmount} ETB! Balance updated.`);
+      setPayAmount(0);
+      setCardNumber("");
+      setShowPayModal(false);
+      await loadData();
+    } catch (err: any) {
+      console.error(err);
+      alert("Payment failed: " + (err?.message || "Unknown error"));
+    }
   };
 
   const getMyGrades = () => grades.filter((g) => g.studentId === user.id);
@@ -355,7 +400,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         badgeType="student"
       />
 
-      {/* ACTIVE EXAM OVERLAY */}
       {currentExam && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
@@ -446,7 +490,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       )}
 
       <div className="flex-1 flex" id="student_workspace_inner">
-        {/* SIDEBAR */}
         <aside className="w-64 bg-[#071526] text-slate-300 flex flex-col border-r border-slate-800/80">
           <nav className="p-3.5 flex-1 space-y-1">
             {[
@@ -486,7 +529,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </button>
             ))}
 
-            {/* SMART CAMPUS HUB */}
             <div className="pt-3 pb-1 px-2">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                 Smart Campus Hub
@@ -561,7 +603,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           </div>
         </aside>
 
-        {/* CONTENT */}
         <main className="flex-1 p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
@@ -873,7 +914,19 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               {m.fileType}
                             </span>
                             <button
-                              onClick={() => alert(`Simulating file download of: ${m.title}`)}
+                              onClick={() => {
+                                // Client-side download from base64 data URL or a stub fallback
+                                if (m.fileData) {
+                                  const a = document.createElement("a");
+                                  a.href = m.fileData;
+                                  a.download = m.fileName || m.title;
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                } else {
+                                  alert(`No file data attached to "${m.title}". Contact your instructor.`);
+                                }
+                              }}
                               className="bg-primary hover:bg-primary-600 text-white p-2.5 rounded-lg flex items-center justify-center transition shadow-sm"
                             >
                               <Download className="w-4 h-4" />
@@ -906,11 +959,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {exams
-                    .filter((e) => e.status !== "DRAFT")
+                    .filter((e) => e.status !== "DRAFT" && (e.isPushed || e.status === "ACTIVE" || e.status === "SCHEDULED"))
                     .map((exam) => {
-                      const isAttempted = examAttempts.some(
+                      const attempt = examAttempts.find(
                         (att) => att.examId === exam.id && att.studentId === user.id
                       );
+                      const isAttempted = !!attempt;
                       return (
                         <div key={exam.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
                           <div className="p-6 space-y-4">
@@ -918,9 +972,17 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               <span className="text-xs font-mono font-bold bg-amber-50 text-warning px-2.5 py-1 rounded">
                                 {exam.courseTitle}
                               </span>
-                              <div className="flex items-center space-x-1.5 text-xs text-slate-500 font-mono">
-                                <Clock className="w-3.5 h-3.5" />
-                                <span>{exam.durationMinutes} Mins</span>
+                              <div className="flex items-center space-x-1.5">
+                                {exam.isPushed && (
+                                  <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    <span>🔥 LIVE PUSHED</span>
+                                  </span>
+                                )}
+                                <div className="flex items-center space-x-1.5 text-xs text-slate-500 font-mono">
+                                  <Clock className="w-3.5 h-3.5" />
+                                  <span>{exam.durationMinutes} Mins</span>
+                                </div>
                               </div>
                             </div>
                             <h3 className="font-display font-bold text-lg text-slate-800">{exam.examTitle}</h3>
@@ -936,10 +998,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               Total Marks: {exam.totalMarks}
                             </span>
                             {isAttempted ? (
-                              <span className="text-xs font-mono font-bold text-success flex items-center space-x-1">
+                              <button
+                                onClick={() => setViewingAttempt(attempt)}
+                                className="text-xs font-mono font-bold text-primary hover:underline flex items-center space-x-1"
+                              >
                                 <CheckCircle2 className="w-4 h-4" />
-                                <span>Exam Completed</span>
-                              </span>
+                                <span>View Results ({attempt?.score}/{exam.totalMarks})</span>
+                              </button>
                             ) : (
                               <button
                                 onClick={() => startExam(exam)}
@@ -1505,6 +1570,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Exam Results Modal — opened after submission or when student clicks "View Results" */}
+      <ExamResultsModal
+        exam={exams.find((e) => e.id === viewingAttempt?.examId) ?? null}
+        attempt={viewingAttempt}
+        onClose={() => setViewingAttempt(null)}
+      />
 
       <AcademicFooter />
     </div>

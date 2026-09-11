@@ -58,7 +58,7 @@ api.interceptors.response.use(
   }
 );
 
-// ✅ Helper: unwrap DRF pagination envelope { count, next, previous, results }
+// Helper: unwrap DRF pagination envelope { count, next, previous, results }
 const unwrapList = <T>(raw: any): T[] =>
   Array.isArray(raw) ? raw : (raw?.results ?? []);
 
@@ -75,6 +75,9 @@ export const getCourses = (): Promise<Course[]> =>
   api.get('/courses/').then(r => unwrapList<Course>(r.data));
 export const saveCourses = (courses: Course[]): Promise<Course[]> =>
   api.put('/courses/', courses).then(r => r.data);
+// NEW: per-item update (DRF-405 safe)
+export const updateCourse = (id: string, course: any): Promise<Course> =>
+  api.patch(`/courses/${id}/`, course).then(r => r.data);
 
 // ---------- MATERIALS ----------
 export const getMaterials = (): Promise<CourseMaterial[]> =>
@@ -82,9 +85,7 @@ export const getMaterials = (): Promise<CourseMaterial[]> =>
 export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMaterial[]> =>
   api.put('/materials/', materials).then(r => r.data);
 
-// ✅ NEW: create one material via POST (matches DRF ModelViewSet).
-// Needed for PDF/DOCX file attachments + chapter tagging since bulk PUT
-// on the list endpoint is not supported.
+// create one material via POST (matches DRF ModelViewSet)
 export const addMaterial = (material: any): Promise<CourseMaterial> =>
   api.post('/materials/', material).then(r => r.data);
 
@@ -160,22 +161,22 @@ export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]
   api.put('/submissions/', submissions).then(r => r.data);
 export const addSubmission = (submission: any): Promise<Submission> =>
   api.post('/submissions/', submission).then(r => r.data);
+// NEW: per-item update (used for grading)
+export const updateSubmission = (id: string, submission: any): Promise<Submission> =>
+  api.patch(`/submissions/${id}/`, submission).then(r => r.data);
 
 // ---------- EXAMS ----------
 export const getExams = (): Promise<Exam[]> =>
   api.get('/exams/').then(r => unwrapList<Exam>(r.data));
 
-// ✅ NEW: create one exam via POST with nested questions + push metadata.
-// DRF's ModelViewSet doesn't allow PUT on the list endpoint, so we use
-// POST for creations and a dedicated /push/ action for the push toggle.
+// create one exam via POST with nested questions + push metadata.
 export const createExam = (exam: any): Promise<Exam> =>
   api.post('/exams/', exam).then(r => r.data);
 
 export const updateExam = (id: string, exam: any): Promise<Exam> =>
   api.patch(`/exams/${id}/`, exam).then(r => r.data);
 
-// ✅ NEW: toggle the "pushed to students" flag via the dedicated action.
-// Flipping status between DRAFT and ACTIVE + recording pushed_at.
+// toggle the "pushed to students" flag via the dedicated action.
 export const pushExam = (examId: string, isPushed: boolean): Promise<Exam> =>
   api.post(`/exams/${examId}/push/`, { is_pushed: isPushed }).then(r => r.data);
 
@@ -193,7 +194,6 @@ export const getExamAttempts = (): Promise<ExamAttempt[]> =>
 export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> =>
   api.put('/exam-attempts/', attempts).then(r => r.data);
 
-// ✅ NEW: student submits one attempt via POST
 export const createExamAttempt = (attempt: any): Promise<ExamAttempt> =>
   api.post('/exam-attempts/', attempt).then(r => r.data);
 
@@ -202,6 +202,9 @@ export const getGrades = (): Promise<Grade[]> =>
   api.get('/grades/').then(r => unwrapList<Grade>(r.data));
 export const saveGrades = (grades: Grade[]): Promise<Grade[]> =>
   api.put('/grades/', grades).then(r => r.data);
+// NEW: per-item update (used for CA score + final grade submission)
+export const updateGrade = (id: string, grade: any): Promise<Grade> =>
+  api.patch(`/grades/${id}/`, grade).then(r => r.data);
 
 // ---------- TRANSCRIPTS ----------
 export const getTranscripts = (): Promise<Transcript[]> =>
@@ -270,8 +273,20 @@ export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> 
   api.put('/settings/', settings).then(r => r.data);
 
 // ---------- AI ----------
-export const predictStudentRisk = (studentId: string): Promise<AIRiskPrediction> =>
-  api.post('/ai/predict-risk/', { studentId }).then(r => r.data);
+// Backend returns snake_case; remap to camelCase for the dashboards.
+export const predictStudentRisk = async (studentId: string): Promise<AIRiskPrediction> => {
+  const raw: any = await api.post('/ai/predict-risk/', { studentId }).then(r => r.data);
+  return {
+    classification: raw.classification,
+    dropoutProbability: raw.dropout_probability ?? raw.dropoutProbability ?? 0,
+    attendancePercentage: raw.attendance_percentage ?? raw.attendancePercentage ?? 0,
+    continuousAssessmentAvg:
+      raw.continuous_assessment_avg ?? raw.continuousAssessmentAvg ?? 0,
+    cgpa: raw.cgpa ?? 0,
+    keyRiskFactors: raw.key_risk_factors ?? raw.keyRiskFactors ?? [],
+    recommendedAction: raw.recommended_action ?? raw.recommendedAction ?? '',
+  } as any;
+};
 
 export const generateExamQuestions = (params: {
   courseId: string;
@@ -439,6 +454,7 @@ export const CampusDatabase = {
   updateUser,
   getCourses,
   saveCourses,
+  updateCourse,        // NEW
   getMaterials,
   saveMaterials,
   addMaterial,
@@ -455,6 +471,7 @@ export const CampusDatabase = {
   getSubmissions,
   saveSubmissions,
   addSubmission,
+  updateSubmission,    // NEW
   getExams,
   createExam,
   updateExam,
@@ -466,6 +483,7 @@ export const CampusDatabase = {
   createExamAttempt,
   getGrades,
   saveGrades,
+  updateGrade,         // NEW
   getTranscripts,
   saveTranscripts,
   getAttendance,

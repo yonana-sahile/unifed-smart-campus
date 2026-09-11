@@ -32,10 +32,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const [grades, setGrades] = useState<Grade[]>([]);
   const [examAttempts, setExamAttempts] = useState<ExamAttempt[]>([]);
 
-  // Selected course context (defaults to SOFT401)
   const [selectedCourseId, setSelectedCourseId] = useState<string>("C_SOFT401");
 
-  // Material Creation State (Enhanced with PDF/DOCX file attachments)
   const [newMaterialTitle, setNewMaterialTitle] = useState("");
   const [newMaterialType, setNewMaterialType] = useState<"PDF" | "Video" | "Document" | "Slide">("PDF");
   const [newMaterialDesc, setNewMaterialDesc] = useState("");
@@ -46,16 +44,13 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const [previewMaterial, setPreviewMaterial] = useState<CourseMaterial | null>(null);
   const [materialFilterFormat, setMaterialFilterFormat] = useState<string>("ALL");
 
-  // Announcement State
   const [newAnnounceTitle, setNewAnnounceTitle] = useState("");
   const [newAnnounceContent, setNewAnnounceContent] = useState("");
 
-  // Assignment State
   const [newAssignTitle, setNewAssignTitle] = useState("");
   const [newAssignDueDate, setNewAssignDueDate] = useState("2026-07-15T23:59");
   const [newAssignDesc, setNewAssignDesc] = useState("");
 
-  // Exam Authoring & Push Center State
   const [examSubTab, setExamSubTab] = useState<"author" | "manage" | "ai">("author");
   const [authorExamTitle, setAuthorExamTitle] = useState("");
   const [authorExamCategory, setAuthorExamCategory] = useState<"MID_EXAM" | "FINAL_EXAM" | "QUIZ" | "PRACTICE">("MID_EXAM");
@@ -108,19 +103,16 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   ]);
   const [selectedExamForSubmissions, setSelectedExamForSubmissions] = useState<Exam | null>(null);
 
-  // Manual Exam Creation State (legacy fallback)
   const [newExamTitle, setNewExamTitle] = useState("");
   const [newExamDuration, setNewExamDuration] = useState(45);
   const [newExamInstructions, setNewExamInstructions] = useState("");
 
-  // Smart Exam Generator State
   const [smartTopic, setSmartTopic] = useState("");
   const [smartQty, setSmartQty] = useState(4);
   const [smartDifficulty, setSmartDifficulty] = useState("Medium");
   const [generatingExam, setGeneratingExam] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([]);
 
-  // Attendance Ledger
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [attendanceMap, setAttendanceMap] = useState<{ [studentId: string]: boolean }>({
     "U_ST01": true,
@@ -128,12 +120,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     "U_ST03": false
   });
 
-  // Assignment Grading state
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [gradingScore, setGradingScore] = useState<number>(0);
   const [gradingFeedback, setGradingFeedback] = useState("");
 
-  // Student AI Analytics & Dropout Predictor state
   const [analyzingStudentId, setAnalyzingStudentId] = useState<string>("U_ST03");
   const [analyticsResult, setAnalyticsResult] = useState<any>(null);
   const [calculatingPredictor, setCalculatingPredictor] = useState(false);
@@ -198,25 +188,30 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     return courses.find((c) => c.id === selectedCourseId) || courses[0];
   };
 
-  // Add Announcement
   const handlePostAnnouncement = async () => {
     if (!newAnnounceTitle || !newAnnounceContent) return;
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
 
-    const newAnn: Announcement = {
-      id: "AN_" + Date.now(),
-      courseId: activeCourse.id,
+    const created: any = await CampusDatabase.createAnnouncement({
+      course: activeCourse.id,
       courseTitle: activeCourse.courseTitle,
       title: newAnnounceTitle,
       content: newAnnounceContent,
       postedBy: user.fullName,
-      postedAt: new Date().toISOString()
-    };
+      postedAt: new Date().toISOString(),
+    });
 
-    const updatedAnn = [newAnn, ...announcements];
-    await CampusDatabase.saveAnnouncements(updatedAnn);
-    setAnnouncements(updatedAnn);
+    const normalized: Announcement = {
+      id: String(created?.id ?? "AN_" + Date.now()),
+      courseId: created?.course ?? activeCourse.id,
+      courseTitle: created?.course_title ?? activeCourse.courseTitle,
+      title: created?.title ?? newAnnounceTitle,
+      content: created?.content ?? newAnnounceContent,
+      postedBy: created?.posted_by ?? user.fullName,
+      postedAt: created?.posted_at ?? new Date().toISOString(),
+    };
+    setAnnouncements((prev) => [normalized, ...prev]);
 
     await CampusDatabase.addAuditLog(
       user.id,
@@ -224,7 +219,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       "INSTRUCTOR",
       "Post Announcement",
       "Announcement",
-      newAnn.id,
+      normalized.id,
       `Posted bulletin in ${activeCourse.courseCode}: ${newAnnounceTitle}`
     );
 
@@ -233,7 +228,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("Announcement broadcasted successfully!");
   };
 
-  // File selection for course materials
   const handleMaterialFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -283,7 +277,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     setNewMaterialDesc("Microsoft Word (.docx) laboratory study manual covering saga patterns, two-phase commits, idempotency tokens, and Kafka message brokers.");
   };
 
-  // Add Materials
   const handleAddMaterial = async () => {
     if (!newMaterialTitle.trim()) {
       alert("Please provide a material title.");
@@ -309,29 +302,50 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       description: newMaterialDesc || `Official instructional material for ${activeCourse.courseTitle}. Review prior to scheduled assessments.`
     };
 
-    const updatedMats = await CampusDatabase.addMaterial(newMat);
-    setMaterials(Array.isArray(updatedMats) ? updatedMats : [newMat, ...materials]);
+    try {
+      const created: any = await CampusDatabase.addMaterial({
+        ...newMat,
+        course: activeCourse.id,
+      });
+      // DRF returns a single object; normalize to CourseMaterial shape
+      const normalized: CourseMaterial = {
+        id: String(created?.id ?? newMat.id),
+        courseId: created?.course ?? activeCourse.id,
+        title: created?.title ?? newMat.title,
+        fileType: created?.file_type ?? created?.fileType ?? newMat.fileType,
+        fileName: created?.file_name ?? created?.fileName ?? newMat.fileName,
+        fileSize: created?.file_size ?? created?.fileSize ?? newMat.fileSize,
+        fileData: created?.file_data ?? created?.fileData ?? newMat.fileData,
+        chapterWeek: created?.chapter_week ?? created?.chapterWeek ?? newMat.chapterWeek,
+        instructorName: created?.instructor_name ?? created?.instructorName ?? newMat.instructorName,
+        uploadedAt: created?.uploaded_at ?? created?.uploadedAt ?? newMat.uploadedAt,
+        description: created?.description ?? newMat.description,
+      };
+      setMaterials((prev) => [normalized, ...prev]);
 
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Upload Material",
-      "CourseMaterial",
-      newMat.id,
-      `Uploaded course handout (${newMaterialType}): ${newMaterialTitle}`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        "Upload Material",
+        "CourseMaterial",
+        normalized.id,
+        `Uploaded course handout (${newMaterialType}): ${newMaterialTitle}`
+      );
 
-    setNewMaterialTitle("");
-    setNewMaterialDesc("");
-    setNewMaterialFileName("");
-    setNewMaterialFileSize("");
-    setNewMaterialFileData("");
-    setNewMaterialChapter("");
-    alert(`Resource "${newMat.title}" (${newMat.fileType}) uploaded successfully! Students can now download or preview this file.`);
+      setNewMaterialTitle("");
+      setNewMaterialDesc("");
+      setNewMaterialFileName("");
+      setNewMaterialFileSize("");
+      setNewMaterialFileData("");
+      setNewMaterialChapter("");
+      alert(`Resource "${normalized.title}" (${normalized.fileType}) uploaded successfully! Students can now download or preview this file.`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to upload material: " + (err?.message || "Unknown error"));
+    }
   };
 
-  // Exam Authoring Helpers
   const handleAddQuestion = () => {
     const newQ: Question = {
       questionText: "",
@@ -440,45 +454,88 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       category: authorExamCategory
     };
 
-    const currentExams = await CampusDatabase.getExams();
-    const updated = [newExam, ...(Array.isArray(currentExams) ? currentExams : [])];
-    await CampusDatabase.saveExams(updated);
-    setExams(updated);
+    try {
+      const created: any = await CampusDatabase.createExam({
+        course: activeCourse.id,
+        course_title: activeCourse.courseTitle,
+        exam_title: authorExamTitle,
+        exam_date: newExam.examDate,
+        duration_minutes: authorExamDuration,
+        total_marks: totalMarks,
+        instructions: authorExamInstructions,
+        questions: authorQuestions,
+        status: newExam.status,
+        is_pushed: publishImmediately,
+        created_by: user.fullName,
+        category: authorExamCategory,
+      });
+      const normalized: Exam = {
+        id: String(created?.id ?? newExam.id),
+        courseId: created?.course ?? activeCourse.id,
+        courseTitle: created?.course_title ?? activeCourse.courseTitle,
+        examTitle: created?.exam_title ?? authorExamTitle,
+        examDate: created?.exam_date ?? newExam.examDate,
+        durationMinutes: created?.duration_minutes ?? authorExamDuration,
+        totalMarks: created?.total_marks ?? totalMarks,
+        instructions: created?.instructions ?? authorExamInstructions,
+        questions: created?.questions ?? authorQuestions,
+        status: created?.status ?? newExam.status,
+        isPushed: created?.is_pushed ?? publishImmediately,
+        pushedAt: created?.pushed_at ?? newExam.pushedAt,
+        createdBy: created?.created_by ?? user.fullName,
+        category: created?.category ?? authorExamCategory,
+      };
+      setExams((prev) => [normalized, ...prev]);
 
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      publishImmediately ? "Push Exam" : "Create Exam Draft",
-      "Exam",
-      newExam.id,
-      `${publishImmediately ? "Pushed live exam to students" : "Saved draft exam"}: ${authorExamTitle} (${authorExamDuration} mins) in ${activeCourse.courseCode}`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        publishImmediately ? "Push Exam" : "Create Exam Draft",
+        "Exam",
+        normalized.id,
+        `${publishImmediately ? "Pushed live exam to students" : "Saved draft exam"}: ${authorExamTitle} (${authorExamDuration} mins) in ${activeCourse.courseCode}`
+      );
 
-    alert(
-      publishImmediately
-        ? `🚀 Exam "${authorExamTitle}" has been pushed LIVE to students!\nDuration: ${authorExamDuration} ደቂቃ (Minutes).\nStudents can now take it immediately in their Online Examination portal!`
-        : `Exam draft saved successfully!`
-    );
+      alert(
+        publishImmediately
+          ? `🚀 Exam "${authorExamTitle}" has been pushed LIVE to students!\nDuration: ${authorExamDuration} ደቂቃ (Minutes).\nStudents can now take it immediately in their Online Examination portal!`
+          : `Exam draft saved successfully!`
+      );
 
-    setAuthorExamTitle("");
-    setExamSubTab("manage");
+      setAuthorExamTitle("");
+      setExamSubTab("manage");
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to save exam: " + (err?.message || "Unknown error"));
+    }
   };
 
   const handleTogglePush = async (exam: Exam) => {
     const nextPushed = !exam.isPushed;
-    const updated = await CampusDatabase.pushExam(exam.id, nextPushed);
-    setExams(Array.isArray(updated) ? updated : exams);
+    try {
+      const updated: any = await CampusDatabase.pushExam(exam.id, nextPushed);
+      const normalized: Exam = {
+        ...exam,
+        isPushed: updated?.is_pushed ?? nextPushed,
+        pushedAt: updated?.pushed_at ?? (nextPushed ? new Date().toISOString() : undefined),
+        status: updated?.status ?? (nextPushed ? "ACTIVE" : "DRAFT"),
+      };
+      setExams((prev) => prev.map((e) => (e.id === exam.id ? normalized : e)));
 
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      nextPushed ? "Push Exam" : "Unpublish Exam",
-      "Exam",
-      exam.id,
-      `${nextPushed ? "Pushed" : "Unpublished"} exam: ${exam.examTitle}`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        nextPushed ? "Push Exam" : "Unpublish Exam",
+        "Exam",
+        exam.id,
+        `${nextPushed ? "Pushed" : "Unpublished"} exam: ${exam.examTitle}`
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to toggle push state: " + (err?.message || "Unknown error"));
+    }
   };
 
   const handleCopyAiQuestionsToBuilder = () => {
@@ -489,7 +546,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("AI questions loaded into Exam Builder! You can now adjust the duration in minutes (ደቂቃ), review questions, and click 'Push Live to Students'.");
   };
 
-  // Add Assignment
   const handleAddAssignment = async () => {
     if (!newAssignTitle || !newAssignDesc) return;
     const activeCourse = getActiveCourse();
@@ -504,75 +560,103 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       description: newAssignDesc
     };
 
-    const updatedAs = [newAs, ...assignments];
-    await CampusDatabase.saveAssignments(updatedAs);
-    setAssignments(updatedAs);
+    try {
+      const created: any = await CampusDatabase.addAssignment({
+        course: activeCourse.id,
+        title: newAssignTitle,
+        due_date: newAs.dueDate,
+        max_score: 100,
+        description: newAssignDesc,
+      });
+      const normalized: Assignment = {
+        id: String(created?.id ?? newAs.id),
+        courseId: created?.course ?? activeCourse.id,
+        title: created?.title ?? newAssignTitle,
+        dueDate: created?.due_date ?? newAs.dueDate,
+        maxScore: created?.max_score ?? 100,
+        description: created?.description ?? newAssignDesc,
+      };
+      setAssignments((prev) => [normalized, ...prev]);
 
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Create Assignment",
-      "Assignment",
-      newAs.id,
-      `Created assignment outline in ${activeCourse.courseCode}: ${newAssignTitle}`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        "Create Assignment",
+        "Assignment",
+        normalized.id,
+        `Created assignment outline in ${activeCourse.courseCode}: ${newAssignTitle}`
+      );
 
-    setNewAssignTitle("");
-    setNewAssignDesc("");
-    alert("Assignment publication complete!");
+      setNewAssignTitle("");
+      setNewAssignDesc("");
+      alert("Assignment publication complete!");
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to create assignment: " + (err?.message || "Unknown error"));
+    }
   };
 
-  // Grade Submission
   const handleGradeSubmission = async () => {
     if (!selectedSubmission) return;
 
-    const updatedSubmissions = submissions.map((s) => {
-      if (s.id === selectedSubmission.id) {
-        return {
-          ...s,
-          score: gradingScore,
-          feedback: gradingFeedback,
-          status: "GRADED" as const
+    try {
+      const updatedSub: any = await CampusDatabase.updateSubmission(selectedSubmission.id, {
+        score: gradingScore,
+        feedback: gradingFeedback,
+        status: "GRADED",
+      });
+      const normalizedSub: Submission = {
+        ...selectedSubmission,
+        score: updatedSub?.score ?? gradingScore,
+        feedback: updatedSub?.feedback ?? gradingFeedback,
+        status: updatedSub?.status ?? "GRADED",
+      };
+      setSubmissions((prev) => prev.map((s) => (s.id === normalizedSub.id ? normalizedSub : s)));
+
+      // Update continuous assessment score in grade object
+      const currentGrades = await CampusDatabase.getGrades();
+      const gradeList = Array.isArray(currentGrades) ? currentGrades : [];
+      const studentGrade = gradeList.find(
+        (g) => g.studentId === selectedSubmission.studentId && g.courseId === selectedSubmission.courseId
+      );
+
+      if (studentGrade) {
+        const nextCAScore = parseFloat(((gradingScore / 100) * 50).toFixed(1));
+        const updatedGrade: any = await CampusDatabase.updateGrade(studentGrade.id, {
+          continuous_assessment_score: nextCAScore,
+        });
+        const normalizedGrade: Grade = {
+          ...studentGrade,
+          continuousAssessmentScore: updatedGrade?.continuous_assessment_score ?? nextCAScore,
+          totalGrade:
+            updatedGrade?.total_grade ??
+            (nextCAScore + studentGrade.midExamScore + studentGrade.finalExamScore),
         };
+        setGrades((prev) => prev.map((g) => (g.id === normalizedGrade.id ? normalizedGrade : g)));
       }
-      return s;
-    });
 
-    await CampusDatabase.saveSubmissions(updatedSubmissions);
-    setSubmissions(updatedSubmissions);
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        "Grade Assessment",
+        "Submission",
+        selectedSubmission.id,
+        `Graded student submission for ${selectedSubmission.studentName}. Score: ${gradingScore}/100`
+      );
 
-    const currentGrades = await CampusDatabase.getGrades();
-    const gradeList = Array.isArray(currentGrades) ? currentGrades : [];
-    const studentGrade = gradeList.find(
-      (g) => g.studentId === selectedSubmission.studentId && g.courseId === selectedSubmission.courseId
-    );
-
-    if (studentGrade) {
-      studentGrade.continuousAssessmentScore = parseFloat(((gradingScore / 100) * 50).toFixed(1));
-      studentGrade.totalGrade = studentGrade.continuousAssessmentScore + studentGrade.midExamScore + studentGrade.finalExamScore;
-      await CampusDatabase.saveGrades(gradeList);
-      setGrades(gradeList);
+      alert(`Successfully graded ${selectedSubmission.studentName}'s assignment!`);
+      setSelectedSubmission(null);
+      setGradingFeedback("");
+      setGradingScore(0);
+      await loadData();
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to grade submission: " + (err?.message || "Unknown error"));
     }
-
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Grade Assessment",
-      "Submission",
-      selectedSubmission.id,
-      `Graded student submission for ${selectedSubmission.studentName}. Score: ${gradingScore}/100`
-    );
-
-    alert(`Successfully graded ${selectedSubmission.studentName}'s assignment!`);
-    setSelectedSubmission(null);
-    setGradingFeedback("");
-    setGradingScore(0);
-    await loadData();
   };
 
-  // Submit Final Grade
   const handleSubmitFinalGrade = async (gradeId: string) => {
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
@@ -587,30 +671,28 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       if (!confirmProceed) return;
     }
 
-    const updatedGrades = grades.map((g) => {
-      if (g.id === gradeId) {
-        return { ...g, status: "SUBMITTED" as const };
-      }
-      return g;
-    });
+    try {
+      const updated: any = await CampusDatabase.updateGrade(gradeId, { status: "SUBMITTED" });
+      const normalized: Grade = { ...gradeObj, status: updated?.status ?? "SUBMITTED" };
+      setGrades((prev) => prev.map((g) => (g.id === gradeId ? normalized : g)));
 
-    await CampusDatabase.saveGrades(updatedGrades);
-    setGrades(updatedGrades);
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        "Submit Final Grade",
+        "Grade",
+        gradeId,
+        `Submitted final calculated grade for student ${gradeObj.studentName} to Registrar.`
+      );
 
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Submit Final Grade",
-      "Grade",
-      gradeId,
-      `Submitted final calculated grade for student ${gradeObj.studentName} to Registrar.`
-    );
-
-    alert("Final grade submitted to Registrar directory successfully!");
+      alert("Final grade submitted to Registrar directory successfully!");
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to submit final grade: " + (err?.message || "Unknown error"));
+    }
   };
 
-  // Smart Exam Generator via real API
   const handleGenerateSmartExam = async () => {
     if (!smartTopic) {
       alert("Please provide a topic for smart question generation.");
@@ -643,7 +725,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
-  // Save the generated exam
   const handleSaveGeneratedExam = async () => {
     if (generatedQuestions.length === 0) return;
     const activeCourse = getActiveCourse();
@@ -664,28 +745,45 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       questions: generatedQuestions
     };
 
-    const currentExams = await CampusDatabase.getExams();
-    const updated = [newExam, ...(Array.isArray(currentExams) ? currentExams : [])];
-    await CampusDatabase.saveExams(updated);
-    setExams(updated);
+    try {
+      const created: any = await CampusDatabase.createExam({
+        course: activeCourse.id,
+        course_title: activeCourse.courseTitle,
+        exam_title: newExam.examTitle,
+        exam_date: newExam.examDate,
+        duration_minutes: 60,
+        total_marks: totalMarks,
+        instructions: newExam.instructions,
+        questions: generatedQuestions,
+        status: "SCHEDULED",
+      });
+      const normalized: Exam = {
+        ...newExam,
+        id: String(created?.id ?? newExam.id),
+        examTitle: created?.exam_title ?? newExam.examTitle,
+      };
+      setExams((prev) => [normalized, ...prev]);
 
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Publish AI Exam",
-      "Exam",
-      newExam.id,
-      `Published AI-generated exam on ${smartTopic} inside ${activeCourse.courseCode}`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        "Publish AI Exam",
+        "Exam",
+        normalized.id,
+        `Published AI-generated exam on ${smartTopic} inside ${activeCourse.courseCode}`
+      );
 
-    alert(`AI-generated exam published successfully! Total questions: ${generatedQuestions.length}.`);
-    setGeneratedQuestions([]);
-    setSmartTopic("");
-    setActiveTab("exams");
+      alert(`AI-generated exam published successfully! Total questions: ${generatedQuestions.length}.`);
+      setGeneratedQuestions([]);
+      setSmartTopic("");
+      setActiveTab("exams");
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to publish AI exam: " + (err?.message || "Unknown error"));
+    }
   };
 
-  // Run AI Dropout Risk Predictor via real API
   const handlePredictDropoutRisk = async () => {
     setCalculatingPredictor(true);
     setAnalyticsResult(null);
@@ -1219,9 +1317,12 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                   type="button"
                                   onClick={async () => {
                                     if (window.confirm(`Are you sure you want to remove "${m.title}"?`)) {
-                                      const updated = materials.filter((x) => x.id !== m.id);
-                                      await CampusDatabase.saveMaterials(updated);
-                                      setMaterials(updated);
+                                      try {
+                                        await CampusDatabase.deleteMaterial(m.id);
+                                      } catch (err) {
+                                        console.error(err);
+                                      }
+                                      setMaterials((prev) => prev.filter((x) => x.id !== m.id));
                                     }
                                   }}
                                   className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition cursor-pointer"
@@ -1529,9 +1630,12 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                     type="button"
                                     onClick={async () => {
                                       if (window.confirm(`Delete exam "${ex.examTitle}"?`)) {
-                                        const updated = exams.filter((x) => x.id !== ex.id);
-                                        await CampusDatabase.saveExams(updated);
-                                        setExams(updated);
+                                        try {
+                                          await CampusDatabase.deleteExam(ex.id);
+                                        } catch (err) {
+                                          console.error(err);
+                                        }
+                                        setExams((prev) => prev.filter((x) => x.id !== ex.id));
                                       }
                                     }}
                                     className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
@@ -2302,7 +2406,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         onClose={() => setPreviewMaterial(null)}
       />
 
-      {/* FIXED: pass attempts so the modal can filter and render */}
       <ExamSubmissionsModal
         exam={selectedExamForSubmissions}
         attempts={examAttempts}
