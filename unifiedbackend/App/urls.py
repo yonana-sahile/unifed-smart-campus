@@ -28,6 +28,7 @@ router.register(r'clearances', views.StudentClearanceViewSet)
 router.register(r'facility-bookings', views.FacilityBookingViewSet)
 router.register(r'campus-alerts', views.CampusAlertViewSet)
 router.register(r'media-posts', views.CampusMediaPostViewSet)
+router.register(r'zoom-sessions', views.ZoomClassSessionViewSet)
 router.register(r'ai', views.AIViewSet, basename='ai')
 
 urlpatterns = [
