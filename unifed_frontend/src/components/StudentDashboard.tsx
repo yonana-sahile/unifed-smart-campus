@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
-import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, Transcript } from "../types";
+import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
-import { BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload, ArrowRight, Download, CreditCard, Star, Check, HelpCircle, Shield, Award, Sparkles, QrCode, Video } from "lucide-react";
+import { SmartAICopilot } from "./SmartAICopilot";
+import { SmartClearancePortal } from "./SmartClearancePortal";
+import { SmartCampusFacilities } from "./SmartCampusFacilities";
+import { SmartCampusAlerts } from "./SmartCampusAlerts";
+import {
+  BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
+  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video
+} from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
 
@@ -12,7 +19,11 @@ interface StudentDashboardProps {
 }
 
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "courses" | "materials" | "exams" | "grades" | "transcript" | "fees" | "zoom">("dashboard");
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "courses" | "materials" | "exams" | "zoom" | "grades" |
+    "transcript" | "fees" | "copilot" | "clearance" | "facilities" | "alerts"
+  >("dashboard");
+
   const [courses, setCourses] = useState<Course[]>([]);
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -23,19 +34,23 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<any>(null);
 
+  // Active exam state
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
   const examTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Interactive feedback/evaluation
   const [evaluatorInstructorId, setEvaluatorInstructorId] = useState<string | null>(null);
   const [evaluationFeedback, setEvaluationFeedback] = useState("");
   const [evaluationRating, setEvaluationRating] = useState(5);
 
+  // Payment portal state
   const [payAmount, setPayAmount] = useState<number>(0);
   const [cardNumber, setCardNumber] = useState("");
   const [showPayModal, setShowPayModal] = useState(false);
 
+  // Drag and drop assignment upload
   const [draggingAssignmentId, setDraggingAssignmentId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<{ [assignmentId: string]: string }>({});
 
@@ -43,6 +58,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     loadData();
   }, []);
 
+  // ✅ FIXED: async with Promise.all + array guards
   const loadData = async () => {
     try {
       const [
@@ -90,6 +106,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
+  // Exam timer
   useEffect(() => {
     if (currentExam && examTimeRemaining > 0) {
       examTimerRef.current = setInterval(() => {
@@ -108,6 +125,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     };
   }, [currentExam, examTimeRemaining]);
 
+  // ✅ FIXED: async + await
   const handleEnroll = async (course: Course) => {
     if (course.prerequisites && course.prerequisites.length > 0) {
       const missingPrereqs: string[] = [];
@@ -116,9 +134,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         const passedPrereq = grades.some(
           (g) => g.studentId === user.id && g.courseCode === prereqCode && g.totalGrade >= 50
         );
-        if (!passedPrereq) {
-          missingPrereqs.push(p);
-        }
+        if (!passedPrereq) missingPrereqs.push(p);
       });
 
       if (missingPrereqs.length > 0) {
@@ -137,23 +153,15 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       return;
     }
 
-    const updatedCourses = courses.map((c) => {
-      if (c.id === course.id) {
-        return { ...c, enrolledStudentsCount: c.enrolledStudentsCount + 1 };
-      }
-      return c;
-    });
+    const updatedCourses = courses.map((c) =>
+      c.id === course.id ? { ...c, enrolledStudentsCount: c.enrolledStudentsCount + 1 } : c
+    );
 
     await CampusDatabase.saveCourses(updatedCourses);
     setCourses(updatedCourses);
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "STUDENT",
-      "Enroll Course",
-      "Course",
-      course.id,
+      user.id, user.fullName, "STUDENT", "Enroll Course", "Course", course.id,
       `Student registered for course: ${course.courseCode} - ${course.courseTitle}`
     );
 
@@ -165,16 +173,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setDraggingAssignmentId(assignmentId);
   };
 
-  const handleDragLeave = () => {
-    setDraggingAssignmentId(null);
-  };
+  const handleDragLeave = () => setDraggingAssignmentId(null);
 
   const handleDrop = (e: DragEvent, assignmentId: string) => {
     e.preventDefault();
     setDraggingAssignmentId(null);
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
-      setUploadedFiles(prev => ({ ...prev, [assignmentId]: files[0].name }));
+      setUploadedFiles((prev) => ({ ...prev, [assignmentId]: files[0].name }));
       triggerAssignmentSubmit(assignmentId, files[0].name);
     }
   };
@@ -182,11 +188,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>, assignmentId: string) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setUploadedFiles(prev => ({ ...prev, [assignmentId]: files[0].name }));
+      setUploadedFiles((prev) => ({ ...prev, [assignmentId]: files[0].name }));
       triggerAssignmentSubmit(assignmentId, files[0].name);
     }
   };
 
+  // ✅ FIXED: async + await
   const triggerAssignmentSubmit = async (assignmentId: string, fileName: string) => {
     const newSubmission: Submission = {
       id: "SUB_" + Date.now(),
@@ -206,12 +213,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setSubmissions(updatedSubmissions);
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "STUDENT",
-      "Submit Assignment",
-      "Submission",
-      newSubmission.id,
+      user.id, user.fullName, "STUDENT", "Submit Assignment", "Submission", newSubmission.id,
       `Submitted assignment file: ${fileName}`
     );
 
@@ -223,12 +225,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setExamAnswers({});
     setExamTimeRemaining(exam.durationMinutes * 60);
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "STUDENT",
-      "Start Exam",
-      "Exam",
-      exam.id,
+      user.id, user.fullName, "STUDENT", "Start Exam", "Exam", exam.id,
       `Started online exam: ${exam.examTitle}`
     );
   };
@@ -248,6 +245,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     completeExamSubmission();
   };
 
+  // ✅ FIXED: async + await
   const completeExamSubmission = async () => {
     if (!currentExam) return;
 
@@ -279,22 +277,20 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setExamAttempts([...currentAttempts, newAttempt]);
 
     const currentGrades = await CampusDatabase.getGrades();
-    const existingGrade = currentGrades.find(g => g.studentId === user.id && g.courseId === currentExam.courseId);
+    const existingGrade = currentGrades.find(
+      (g) => g.studentId === user.id && g.courseId === currentExam.courseId
+    );
 
     if (existingGrade) {
       existingGrade.midExamScore = calculatedScore;
-      existingGrade.totalGrade = existingGrade.continuousAssessmentScore + existingGrade.midExamScore + existingGrade.finalExamScore;
+      existingGrade.totalGrade =
+        existingGrade.continuousAssessmentScore + existingGrade.midExamScore + existingGrade.finalExamScore;
       await CampusDatabase.saveGrades(currentGrades);
       setGrades(currentGrades);
     }
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "STUDENT",
-      "Submit Exam",
-      "ExamAttempt",
-      newAttempt.id,
+      user.id, user.fullName, "STUDENT", "Submit Exam", "ExamAttempt", newAttempt.id,
       `Submitted attempt for ${currentExam.examTitle}. Scored ${calculatedScore}/${currentExam.totalMarks}`
     );
 
@@ -304,11 +300,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const submitInstructorEvaluation = () => {
     if (!evaluatorInstructorId) return;
-    alert(`Thank you for submitting your evaluation! Rating: ${evaluationRating}/5. Your feedback has been stored anonymously for department head review.`);
+    alert(
+      `Thank you for submitting your evaluation! Rating: ${evaluationRating}/5. Your feedback has been stored anonymously for department head review.`
+    );
     setEvaluatorInstructorId(null);
     setEvaluationFeedback("");
   };
 
+  // ✅ FIXED: async + await
   const handlePayment = async () => {
     if (!cardNumber || payAmount <= 0) {
       alert("Please enter a valid amount and credit card number.");
@@ -316,23 +315,17 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
 
     const users = await CampusDatabase.getUsers();
-    const updatedUsers = users.map(u => {
-      if (u.id === user.id) {
-        return { ...u, outstandingFees: Math.max(0, (u.outstandingFees || 0) - payAmount) };
-      }
-      return u;
-    });
+    const updatedUsers = users.map((u) =>
+      u.id === user.id
+        ? { ...u, outstandingFees: Math.max(0, (u.outstandingFees || 0) - payAmount) }
+        : u
+    );
 
     await CampusDatabase.saveUsers(updatedUsers);
     user.outstandingFees = Math.max(0, (user.outstandingFees || 0) - payAmount);
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "STUDENT",
-      "Pay Fees",
-      "User",
-      user.id,
+      user.id, user.fullName, "STUDENT", "Pay Fees", "User", user.id,
       `Paid ${payAmount} ETB online. Card digits: ****${cardNumber.slice(-4)}`
     );
 
@@ -343,9 +336,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     await loadData();
   };
 
-  const getMyGrades = () => {
-    return grades.filter((g) => g.studentId === user.id);
-  };
+  const getMyGrades = () => grades.filter((g) => g.studentId === user.id);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -364,6 +355,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         badgeType="student"
       />
 
+      {/* ACTIVE EXAM OVERLAY */}
       {currentExam && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
@@ -385,7 +377,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               <div className="bg-amber-50/80 border border-amber-200 text-amber-950 p-4 rounded-xl flex items-start space-x-3">
                 <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
                 <p className="text-xs sm:text-sm">
-                  <strong>Academic Testing Instructions:</strong> {currentExam.instructions || "Do not refresh the page. The exam will submit automatically upon expiration."}
+                  <strong>Academic Testing Instructions:</strong>{" "}
+                  {currentExam.instructions || "Do not refresh the page. The exam will submit automatically upon expiration."}
                 </p>
               </div>
 
@@ -420,9 +413,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               : "border-slate-200 hover:bg-slate-50 text-slate-700"
                           }`}
                         >
-                          <div className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
-                            examAnswers[qIdx] === opt ? "border-primary bg-primary text-white" : "border-slate-300"
-                          }`}>
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
+                              examAnswers[qIdx] === opt ? "border-primary bg-primary text-white" : "border-slate-300"
+                            }`}
+                          >
                             {examAnswers[qIdx] === opt && <Check className="w-3 h-3" />}
                           </div>
                           <span>{opt}</span>
@@ -436,7 +431,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
             <div className="bg-slate-50 border-t border-slate-200/80 px-8 py-4 flex justify-between items-center">
               <span className="text-xs text-slate-500 font-mono">
-                Answered <strong className="text-slate-800">{Object.keys(examAnswers).length}</strong> of {currentExam.questions.length} questions
+                Answered <strong className="text-slate-800">{Object.keys(examAnswers).length}</strong> of{" "}
+                {currentExam.questions.length} questions
               </span>
               <button
                 onClick={submitExamManual}
@@ -450,107 +446,102 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       )}
 
       <div className="flex-1 flex" id="student_workspace_inner">
+        {/* SIDEBAR */}
         <aside className="w-64 bg-[#071526] text-slate-300 flex flex-col border-r border-slate-800/80">
           <nav className="p-3.5 flex-1 space-y-1">
+            {[
+              { id: "dashboard", label: "Academic Dashboard", Icon: BookOpen },
+              { id: "courses", label: "Browse & Register", Icon: Calendar },
+              { id: "materials", label: "Course Materials", Icon: FileText },
+              { id: "zoom", label: "Zoom Classroom", Icon: Video, badge: "LIVE" },
+              { id: "exams", label: "Online Examinations", Icon: Play },
+              { id: "grades", label: "Grades & Assessments", Icon: CheckCircle2 },
+              { id: "transcript", label: "Official Transcript", Icon: Award },
+              { id: "fees", label: "Finance & Tuition", Icon: CreditCard, warn: user.outstandingFees && user.outstandingFees > 0 },
+            ].map(({ id, label, Icon, badge, warn }: any) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                  activeTab === id
+                    ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <Icon className={`w-4 h-4 ${id === "zoom" ? "text-blue-400" : "text-amber-400"}`} />
+                  <span>{label}</span>
+                </div>
+                {badge && (
+                  <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-400/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{badge}</span>
+                  </span>
+                )}
+                {warn && (
+                  <span className="bg-red-500 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full">
+                    !
+                  </span>
+                )}
+              </button>
+            ))}
+
+            {/* SMART CAMPUS HUB */}
+            <div className="pt-3 pb-1 px-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Smart Campus Hub
+              </span>
+            </div>
+
             <button
-              onClick={() => setActiveTab("dashboard")}
+              onClick={() => setActiveTab("copilot")}
               className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "dashboard"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                activeTab === "copilot"
+                  ? "bg-gradient-to-r from-cyan-700 to-blue-700 text-white border border-cyan-400/30 shadow-xs"
                   : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
               }`}
             >
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span>Academic Dashboard</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("courses")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "courses"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Calendar className="w-4 h-4 text-amber-400" />
-              <span>Browse & Register</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("materials")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "materials"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <FileText className="w-4 h-4 text-amber-400" />
-              <span>Course Materials</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("exams")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "exams"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Play className="w-4 h-4 text-amber-400" />
-              <span>Online Examinations</span>
-            </button>
-            {/* ✅ NEW: Zoom Classroom tab */}
-            <button
-              onClick={() => setActiveTab("zoom")}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "zoom"
-                  ? "bg-primary text-white border border-blue-400/30 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <div className="flex items-center space-x-3">
-                <Video className="w-4 h-4 text-blue-400" />
-                <span>Zoom Classroom</span>
-              </div>
-              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-400/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>LIVE</span>
+              <Sparkles className="w-4 h-4 text-cyan-400" />
+              <span>Smart AI Copilot</span>
+              <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300">
+                AI
               </span>
             </button>
+
             <button
-              onClick={() => setActiveTab("grades")}
+              onClick={() => setActiveTab("clearance")}
               className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "grades"
+                activeTab === "clearance"
                   ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                   : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
               }`}
             >
-              <CheckCircle2 className="w-4 h-4 text-amber-400" />
-              <span>Grades & Assessments</span>
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              <span>Digital Clearance</span>
             </button>
+
             <button
-              onClick={() => setActiveTab("transcript")}
+              onClick={() => setActiveTab("facilities")}
               className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "transcript"
+                activeTab === "facilities"
                   ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                   : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
               }`}
             >
-              <Award className="w-4 h-4 text-amber-400" />
-              <span>Official Transcript</span>
+              <Cpu className="w-4 h-4 text-amber-400" />
+              <span>Smart Labs & Facilities</span>
             </button>
+
             <button
-              onClick={() => setActiveTab("fees")}
+              onClick={() => setActiveTab("alerts")}
               className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "fees"
+                activeTab === "alerts"
                   ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                   : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
               }`}
             >
-              <CreditCard className="w-4 h-4 text-amber-400" />
-              <span>Finance & Tuition</span>
-              {user.outstandingFees && user.outstandingFees > 0 ? (
-                <span className="ml-auto bg-red-500 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full">
-                  !
-                </span>
-              ) : null}
+              <Radio className="w-4 h-4 text-red-400" />
+              <span>Campus Alerts</span>
             </button>
           </nav>
 
@@ -570,25 +561,64 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           </div>
         </aside>
 
+        {/* CONTENT */}
         <main className="flex-1 p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div
+                key="student-dashboard-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="student-dashboard-tab"
               >
                 <div className="flex justify-between items-center">
                   <div>
-                    <h2 className="text-2xl font-display font-bold text-slate-900">Welcome Back, {user.fullName}!</h2>
-                    <p className="text-slate-500 text-sm">Here is a quick overview of your courses, announcements, and upcoming deadlines.</p>
+                    <h2 className="text-2xl font-display font-bold text-slate-900">
+                      Welcome Back, {user.fullName}!
+                    </h2>
+                    <p className="text-slate-500 text-sm">
+                      Here is a quick overview of your courses, announcements, and upcoming deadlines.
+                    </p>
                   </div>
                   <div className="bg-white border border-slate-200 px-4 py-3 rounded-xl shadow-sm text-center">
-                    <span className="block text-xs font-mono text-slate-500 uppercase tracking-widest">Cumulative GPA</span>
-                    <span className="text-2xl font-display font-bold text-primary">{user.cgpa?.toFixed(2)}</span>
+                    <span className="block text-xs font-mono text-slate-500 uppercase tracking-widest">
+                      Cumulative GPA
+                    </span>
+                    <span className="text-2xl font-display font-bold text-primary">
+                      {user.cgpa?.toFixed(2)}
+                    </span>
                   </div>
+                </div>
+
+                <div className="rounded-2xl p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                      <Video className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold font-mono text-emerald-400">
+                          MAU LIVE DISTANCE LEARNING
+                        </span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      </div>
+                      <h3 className="text-sm font-bold text-white">
+                        Interactive Zoom Classrooms & Recorded Archives
+                      </h3>
+                      <p className="text-xs text-blue-200">
+                        Join real-time video lectures, raise hand for questions, and access past lecture recordings.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("zoom")}
+                    className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Join Zoom Classroom</span>
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -619,7 +649,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       </h3>
                       <div className="space-y-4">
                         {assignments.map((as) => {
-                          const isSubmitted = submissions.some((sub) => sub.assignmentId === as.id && sub.studentId === user.id);
+                          const isSubmitted = submissions.some(
+                            (sub) => sub.assignmentId === as.id && sub.studentId === user.id
+                          );
                           return (
                             <div
                               key={as.id}
@@ -636,13 +668,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             >
                               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
-                                  <h4 className="font-semibold text-slate-800 text-sm md:text-base">{as.title}</h4>
+                                  <h4 className="font-semibold text-slate-800 text-sm md:text-base">
+                                    {as.title}
+                                  </h4>
                                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{as.description}</p>
                                   <span className="inline-block text-xs font-mono text-slate-400 mt-2 bg-slate-100 px-2 py-0.5 rounded">
                                     Due: {new Date(as.dueDate).toLocaleDateString()}
                                   </span>
                                 </div>
-
                                 <div className="w-full md:w-auto text-right flex flex-col items-end gap-2 flex-shrink-0">
                                   {isSubmitted ? (
                                     <div className="flex items-center space-x-1.5 text-success">
@@ -653,7 +686,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                     <div className="w-full">
                                       <div className="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center cursor-pointer hover:border-primary transition">
                                         <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-                                        <p className="text-[10px] text-slate-500">Drag file here or click to upload</p>
+                                        <p className="text-[10px] text-slate-500">
+                                          Drag file here or click to upload
+                                        </p>
                                         <input
                                           type="file"
                                           className="hidden"
@@ -690,7 +725,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             <span className="text-[10px] font-mono text-slate-400">
                               {new Date(an.postedAt).toLocaleDateString()} • {an.postedBy}
                             </span>
-                            <h4 className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-1">{an.title}</h4>
+                            <h4 className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-1">
+                              {an.title}
+                            </h4>
                             <p className="text-xs text-slate-500 line-clamp-2">{an.content}</p>
                           </div>
                         ))}
@@ -721,15 +758,17 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
             {activeTab === "courses" && (
               <motion.div
+                key="student-courses-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="student-courses-tab"
               >
                 <div>
                   <h2 className="text-2xl font-display font-bold text-slate-900">Academic Course Catalog</h2>
-                  <p className="text-slate-500 text-sm">Browse and register for courses available in the current academic semester.</p>
+                  <p className="text-slate-500 text-sm">
+                    Browse and register for courses available in the current academic semester.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -742,21 +781,22 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             <span className="text-xs font-mono font-bold bg-blue-50 text-primary px-2.5 py-1 rounded">
                               {c.courseCode}
                             </span>
-                            <span className="text-xs text-slate-400 font-mono">
-                              {c.creditHours} CH
-                            </span>
+                            <span className="text-xs text-slate-400 font-mono">{c.creditHours} CH</span>
                           </div>
-
                           <div>
-                            <h3 className="font-display font-bold text-lg text-slate-800 line-clamp-1">{c.courseTitle}</h3>
-                            <p className="text-xs text-slate-400 mt-1">Instructor: {c.instructorName}</p>
+                            <h3 className="font-display font-bold text-lg text-slate-800 line-clamp-1">
+                              {c.courseTitle}
+                            </h3>
+                            <p className="text-xs text-slate-400 mt-1">
+                              Instructor: {c.instructorName}
+                            </p>
                           </div>
-
                           <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">{c.description}</p>
-
-                          {c.prerequisites.length > 0 && (
+                          {c.prerequisites && c.prerequisites.length > 0 && (
                             <div className="space-y-1">
-                              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Prerequisites</span>
+                              <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">
+                                Prerequisites
+                              </span>
                               <div className="flex flex-wrap gap-1.5">
                                 {c.prerequisites.map((p, pIdx) => (
                                   <span key={pIdx} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
@@ -767,7 +807,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             </div>
                           )}
                         </div>
-
                         <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex items-center justify-between">
                           <span className="text-xs font-mono text-slate-500">
                             Enrolled: {c.enrolledStudentsCount}/{c.capacity}
@@ -793,15 +832,19 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
             {activeTab === "materials" && (
               <motion.div
+                key="student-materials-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="student-materials-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Learning Materials & Handouts</h2>
-                  <p className="text-slate-500 text-sm">Access lecture syllabus slides, digital books, and stream video content shared by instructors.</p>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Learning Materials & Handouts
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Access lecture syllabus slides, digital books, and stream video content shared by instructors.
+                  </p>
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -809,7 +852,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     {materials.map((m) => {
                       const associatedCourse = courses.find((c) => c.id === m.courseId);
                       return (
-                        <div key={m.id} className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 transition">
+                        <div
+                          key={m.id}
+                          className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 transition"
+                        >
                           <div className="space-y-1.5">
                             <div className="flex items-center space-x-2">
                               <span className="text-[10px] font-mono font-bold text-primary uppercase bg-blue-50 px-2 py-0.5 rounded">
@@ -822,7 +868,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             <h3 className="font-semibold text-slate-800 text-sm md:text-base">{m.title}</h3>
                             <p className="text-xs text-slate-500 line-clamp-2">{m.description}</p>
                           </div>
-
                           <div className="flex items-center space-x-3 flex-shrink-0 w-full md:w-auto">
                             <span className="text-xs font-semibold px-3 py-1 rounded bg-slate-100 text-slate-600 font-mono">
                               {m.fileType}
@@ -830,7 +875,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             <button
                               onClick={() => alert(`Simulating file download of: ${m.title}`)}
                               className="bg-primary hover:bg-primary-600 text-white p-2.5 rounded-lg flex items-center justify-center transition shadow-sm"
-                              title="Download Material"
                             >
                               <Download className="w-4 h-4" />
                             </button>
@@ -845,84 +889,108 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
             {activeTab === "exams" && (
               <motion.div
+                key="student-exams-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="student-exams-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Secure Online Examinations</h2>
-                  <p className="text-slate-500 text-sm">Participate in scheduled course mid-exams or quizzes. Each examination has a strict active timer.</p>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Secure Online Examinations
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Participate in scheduled course mid-exams or quizzes. Each examination has a strict active timer.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {exams.filter(e => e.status !== "DRAFT").map((exam) => {
-                    const isAttempted = examAttempts.some((att) => att.examId === exam.id && att.studentId === user.id);
-                    return (
-                      <div key={exam.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
-                        <div className="p-6 space-y-4">
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-mono font-bold bg-amber-50 text-warning px-2.5 py-1 rounded">
-                              {exam.courseTitle}
-                            </span>
-                            <div className="flex items-center space-x-1.5 text-xs text-slate-500 font-mono">
-                              <Clock className="w-3.5 h-3.5" />
-                              <span>{exam.durationMinutes} Mins</span>
+                  {exams
+                    .filter((e) => e.status !== "DRAFT")
+                    .map((exam) => {
+                      const isAttempted = examAttempts.some(
+                        (att) => att.examId === exam.id && att.studentId === user.id
+                      );
+                      return (
+                        <div key={exam.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
+                          <div className="p-6 space-y-4">
+                            <div className="flex justify-between items-center">
+                              <span className="text-xs font-mono font-bold bg-amber-50 text-warning px-2.5 py-1 rounded">
+                                {exam.courseTitle}
+                              </span>
+                              <div className="flex items-center space-x-1.5 text-xs text-slate-500 font-mono">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>{exam.durationMinutes} Mins</span>
+                              </div>
                             </div>
+                            <h3 className="font-display font-bold text-lg text-slate-800">{exam.examTitle}</h3>
+                            <p className="text-xs text-slate-500">
+                              Scheduled Date: {new Date(exam.examDate).toLocaleString()}
+                            </p>
+                            <p className="text-xs text-slate-400 bg-slate-50 p-3 rounded border border-slate-100 line-clamp-3 leading-relaxed">
+                              {exam.instructions}
+                            </p>
                           </div>
-
-                          <h3 className="font-display font-bold text-lg text-slate-800">{exam.examTitle}</h3>
-                          <p className="text-xs text-slate-500">Scheduled Date: {new Date(exam.examDate).toLocaleString()}</p>
-                          <p className="text-xs text-slate-400 bg-slate-50 p-3 rounded border border-slate-100 line-clamp-3 leading-relaxed">
-                            {exam.instructions}
-                          </p>
-                        </div>
-
-                        <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex items-center justify-between">
-                          <span className="text-xs text-slate-500 font-mono font-bold">
-                            Total Marks: {exam.totalMarks}
-                          </span>
-
-                          {isAttempted ? (
-                            <span className="text-xs font-mono font-bold text-success flex items-center space-x-1">
-                              <CheckCircle2 className="w-4 h-4" />
-                              <span>Exam Completed</span>
+                          <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex items-center justify-between">
+                            <span className="text-xs text-slate-500 font-mono font-bold">
+                              Total Marks: {exam.totalMarks}
                             </span>
-                          ) : (
-                            <button
-                              onClick={() => startExam(exam)}
-                              className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
-                            >
-                              <Play className="w-3 h-3 fill-current" />
-                              <span>Start Examination</span>
-                            </button>
-                          )}
+                            {isAttempted ? (
+                              <span className="text-xs font-mono font-bold text-success flex items-center space-x-1">
+                                <CheckCircle2 className="w-4 h-4" />
+                                <span>Exam Completed</span>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => startExam(exam)}
+                                className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
+                              >
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>Start Examination</span>
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
+              </motion.div>
+            )}
+
+            {activeTab === "zoom" && (
+              <motion.div
+                key="student-zoom-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+              >
+                <StudentZoomLearningHub student={user} enrolledCourses={courses} />
               </motion.div>
             )}
 
             {activeTab === "grades" && (
               <motion.div
+                key="student-grades-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="student-grades-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Continuous Assessment & Grades</h2>
-                  <p className="text-slate-500 text-sm">View your academic score sheets, continuous assessment component breakdowns, and verified letter grades.</p>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Continuous Assessment & Grades
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    View your academic score sheets, continuous assessment component breakdowns, and verified letter grades.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                      <h3 className="font-display font-bold text-slate-800 text-base">Semester Score Sheet</h3>
+                      <h3 className="font-display font-bold text-slate-800 text-base">
+                        Semester Score Sheet
+                      </h3>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {getMyGrades().map((g) => (
@@ -932,26 +1000,34 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               <span className="text-xs font-mono font-bold text-primary bg-blue-50 px-2 py-0.5 rounded">
                                 {g.courseCode}
                               </span>
-                              <h4 className="font-display font-bold text-slate-800 mt-1.5 text-base md:text-lg">{g.courseTitle}</h4>
-                              <p className="text-xs text-slate-400">Credit Hours: {g.creditHours} • Status: {g.status}</p>
+                              <h4 className="font-display font-bold text-slate-800 mt-1.5 text-base md:text-lg">
+                                {g.courseTitle}
+                              </h4>
+                              <p className="text-xs text-slate-400">
+                                Credit Hours: {g.creditHours} • Status: {g.status}
+                              </p>
                             </div>
-
                             <div className="flex items-center space-x-4 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 flex-shrink-0">
                               <div className="text-center border-r border-slate-200 pr-4">
                                 <span className="block text-[10px] text-slate-400 font-mono font-bold">GRADE</span>
-                                <span className="text-2xl font-display font-bold text-slate-800">{g.letterGrade}</span>
+                                <span className="text-2xl font-display font-bold text-slate-800">
+                                  {g.letterGrade}
+                                </span>
                               </div>
                               <div className="text-center">
                                 <span className="block text-[10px] text-slate-400 font-mono font-bold">TOTAL</span>
-                                <span className="text-lg font-mono font-bold text-slate-700">{g.totalGrade}%</span>
+                                <span className="text-lg font-mono font-bold text-slate-700">
+                                  {g.totalGrade}%
+                                </span>
                               </div>
                             </div>
                           </div>
-
                           <div className="grid grid-cols-3 gap-3 pt-2 text-center text-xs font-mono">
                             <div className="bg-slate-50 p-2.5 rounded border border-slate-100">
                               <span className="block text-[10px] text-slate-400 uppercase">Assessment (50%)</span>
-                              <span className="font-bold text-slate-700">{g.continuousAssessmentScore} / 50</span>
+                              <span className="font-bold text-slate-700">
+                                {g.continuousAssessmentScore} / 50
+                              </span>
                             </div>
                             <div className="bg-slate-50 p-2.5 rounded border border-slate-100">
                               <span className="block text-[10px] text-slate-400 uppercase">Mid-Exam (20%)</span>
@@ -971,12 +1047,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                       <div className="flex items-center space-x-2 text-primary">
                         <Star className="w-5 h-5 fill-current" />
-                        <h3 className="font-display font-bold text-slate-800 text-base">Evaluate Instructor Efficiency</h3>
+                        <h3 className="font-display font-bold text-slate-800 text-base">
+                          Evaluate Instructor Efficiency
+                        </h3>
                       </div>
                       <p className="text-xs text-slate-500 leading-relaxed">
                         Submit feedback regarding course teaching quality. Your feedback assists the department in quality auditing.
                       </p>
-
                       <div className="space-y-3 pt-2">
                         <label className="block text-xs font-medium text-slate-700">Select Instructor</label>
                         <select
@@ -986,9 +1063,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           <option value="">-- Choose Instructor --</option>
                           <option value="U_IN01">Chalachew M (Software Engineering)</option>
                         </select>
-
                         <div className="space-y-1">
-                          <label className="block text-xs font-medium text-slate-700">Rating: {evaluationRating}/5</label>
+                          <label className="block text-xs font-medium text-slate-700">
+                            Rating: {evaluationRating}/5
+                          </label>
                           <div className="flex space-x-1.5">
                             {[1, 2, 3, 4, 5].map((num) => (
                               <button
@@ -1001,7 +1079,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             ))}
                           </div>
                         </div>
-
                         <textarea
                           rows={3}
                           value={evaluationFeedback}
@@ -1009,7 +1086,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           placeholder="Your anonymous comments here..."
                           className="w-full border border-slate-200 rounded-lg p-3 text-xs"
                         />
-
                         <button
                           onClick={submitInstructorEvaluation}
                           disabled={!evaluatorInstructorId || !evaluationFeedback}
@@ -1026,26 +1102,31 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
             {activeTab === "transcript" && (
               <motion.div
+                key="student-transcript-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="student-transcript-tab"
               >
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h2 className="text-2xl font-display font-bold text-slate-900">Official Academic Transcript</h2>
-                    <p className="text-slate-500 text-sm">Download your generated digital transcript verified with a QR-verification signature.</p>
-                  </div>
+                <div>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Official Academic Transcript
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Download your generated digital transcript verified with a QR-verification signature.
+                  </p>
                 </div>
 
                 {user.outstandingFees && user.outstandingFees > 0 ? (
                   <div className="bg-red-50 border border-red-200 text-red-950 p-6 rounded-xl flex items-start space-x-4 max-w-2xl">
                     <AlertCircle className="w-6 h-6 text-danger mt-1 flex-shrink-0" />
                     <div className="space-y-2">
-                      <h4 className="font-display font-bold text-danger text-base">Transcript Locked (UC-S-13 / BR-05)</h4>
+                      <h4 className="font-display font-bold text-danger text-base">
+                        Transcript Locked (UC-S-13 / BR-05)
+                      </h4>
                       <p className="text-xs md:text-sm">
-                        Academic regulations state that transcripts cannot be generated or released for students with outstanding financial balances. Your current outstanding fee balance is <strong>{user.outstandingFees} ETB</strong>.
+                        Academic regulations state that transcripts cannot be generated or released for students with outstanding financial balances. Your current outstanding fee balance is{" "}
+                        <strong>{user.outstandingFees} ETB</strong>.
                       </p>
                       <button
                         onClick={() => setActiveTab("fees")}
@@ -1057,11 +1138,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    <div className="bg-white border-2 border-slate-200 rounded-2xl p-8 max-w-3xl shadow-xl border-t-8 border-t-amber-500 relative overflow-hidden" id="printable-transcript-view">
+                    <div
+                      className="bg-white border-2 border-slate-200 rounded-2xl p-8 max-w-3xl shadow-xl border-t-8 border-t-amber-500 relative overflow-hidden"
+                      id="printable-transcript-view"
+                    >
                       <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
                         <UniversitySeal className="w-96 h-96 text-primary" />
                       </div>
-
                       <div className="relative z-10">
                         <div className="text-center border-b-2 border-slate-200/80 pb-6 space-y-2">
                           <div className="flex justify-center mb-2">
@@ -1085,25 +1168,60 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
                         <div className="grid grid-cols-2 gap-4 py-5 text-xs border-b border-slate-100 font-sans">
                           <div className="space-y-1.5 bg-slate-50/70 p-4 rounded-xl border border-slate-200/60">
-                            <p><span className="text-slate-500">Student Name:</span> <strong className="text-slate-900 font-serif text-sm">{user.fullName}</strong></p>
-                            <p><span className="text-slate-500">Student ID / Matr.:</span> <strong className="text-slate-900 font-mono font-bold">{user.studentId}</strong></p>
-                            <p><span className="text-slate-500">Academic College:</span> <strong className="text-slate-800">{user.department}</strong></p>
-                            <p><span className="text-slate-500">Major Program:</span> <strong className="text-slate-800">{user.program}</strong></p>
+                            <p>
+                              <span className="text-slate-500">Student Name:</span>{" "}
+                              <strong className="text-slate-900 font-serif text-sm">{user.fullName}</strong>
+                            </p>
+                            <p>
+                              <span className="text-slate-500">Student ID / Matr.:</span>{" "}
+                              <strong className="text-slate-900 font-mono font-bold">{user.studentId}</strong>
+                            </p>
+                            <p>
+                              <span className="text-slate-500">Academic College:</span>{" "}
+                              <strong className="text-slate-800">{user.department}</strong>
+                            </p>
+                            <p>
+                              <span className="text-slate-500">Major Program:</span>{" "}
+                              <strong className="text-slate-800">{user.program}</strong>
+                            </p>
                           </div>
                           <div className="space-y-1.5 bg-slate-50/70 p-4 rounded-xl border border-slate-200/60 text-right">
-                            <p><span className="text-slate-500">Issue Date:</span> <strong className="text-slate-800">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</strong></p>
-                            <p><span className="text-slate-500">Academic Standing:</span> <strong className="text-emerald-700 font-bold">Good Standing (Dean's Honor)</strong></p>
-                            <p><span className="text-slate-500">Cumulative GPA:</span> <strong className="text-primary-700 font-serif text-base font-bold">{user.cgpa?.toFixed(2)} / 4.00</strong></p>
-                            <p><span className="text-slate-500">Graduation Status:</span> <strong className="text-slate-800">In Progress (Year 4, Term II)</strong></p>
+                            <p>
+                              <span className="text-slate-500">Issue Date:</span>{" "}
+                              <strong className="text-slate-800">
+                                {new Date().toLocaleDateString("en-US", {
+                                  year: "numeric",
+                                  month: "long",
+                                  day: "numeric",
+                                })}
+                              </strong>
+                            </p>
+                            <p>
+                              <span className="text-slate-500">Academic Standing:</span>{" "}
+                              <strong className="text-emerald-700 font-bold">Good Standing (Dean's Honor)</strong>
+                            </p>
+                            <p>
+                              <span className="text-slate-500">Cumulative GPA:</span>{" "}
+                              <strong className="text-primary-700 font-serif text-base font-bold">
+                                {user.cgpa?.toFixed(2)} / 4.00
+                              </strong>
+                            </p>
+                            <p>
+                              <span className="text-slate-500">Graduation Status:</span>{" "}
+                              <strong className="text-slate-800">In Progress (Year 4, Term II)</strong>
+                            </p>
                           </div>
                         </div>
 
                         <div className="py-6 space-y-4">
                           <div className="flex justify-between items-center">
-                            <h4 className="font-serif font-bold text-slate-900 text-sm tracking-wide uppercase">Course Credits & Verified Grade Ledger</h4>
-                            <span className="text-[10px] font-mono text-slate-500">Curriculum Code: B.Sc.-SE-2023</span>
+                            <h4 className="font-serif font-bold text-slate-900 text-sm tracking-wide uppercase">
+                              Course Credits & Verified Grade Ledger
+                            </h4>
+                            <span className="text-[10px] font-mono text-slate-500">
+                              Curriculum Code: B.Sc.-SE-2023
+                            </span>
                           </div>
-
                           <table className="w-full text-left border-collapse text-xs">
                             <thead>
                               <tr className="border-b-2 border-slate-200 bg-slate-100/70 text-slate-600 font-mono text-[11px]">
@@ -1119,13 +1237,17 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                 <tr key={g.id} className="hover:bg-slate-50/50">
                                   <td className="py-3 px-3 font-mono font-bold text-primary-900">{g.courseCode}</td>
                                   <td className="py-3 px-3 font-medium">{g.courseTitle}</td>
-                                  <td className="py-3 px-3 text-center font-mono">{g.creditHours} ({Math.round(g.creditHours * 1.6)} ECTS)</td>
+                                  <td className="py-3 px-3 text-center font-mono">
+                                    {g.creditHours} ({Math.round(g.creditHours * 1.6)} ECTS)
+                                  </td>
                                   <td className="py-3 px-3 text-center">
                                     <span className="inline-block font-mono font-bold px-2 py-0.5 rounded bg-blue-50 text-primary-800 border border-blue-100">
                                       {g.letterGrade}
                                     </span>
                                   </td>
-                                  <td className="py-3 px-3 text-center font-mono font-bold">{g.gradePoint.toFixed(2)}</td>
+                                  <td className="py-3 px-3 text-center font-mono font-bold">
+                                    {g.gradePoint.toFixed(2)}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1135,23 +1257,33 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         <div className="border-t-2 border-slate-200 pt-6 mt-4 grid grid-cols-3 gap-4 items-center">
                           <div className="text-center space-y-1">
                             <div className="h-10 border-b border-slate-300 flex items-end justify-center pb-1">
-                              <span className="font-serif italic text-xs text-slate-600">Dr. Befekadu Mengistu</span>
+                              <span className="font-serif italic text-xs text-slate-600">
+                                Dr. Befekadu Mengistu
+                              </span>
                             </div>
-                            <p className="text-[10px] font-mono text-slate-500 uppercase">Head, Dept. of Software Eng.</p>
+                            <p className="text-[10px] font-mono text-slate-500 uppercase">
+                              Head, Dept. of Software Eng.
+                            </p>
                           </div>
-
                           <div className="text-center flex flex-col items-center justify-center">
                             <div className="w-16 h-16 rounded-full border-2 border-dashed border-amber-500/80 bg-amber-50/40 flex flex-col items-center justify-center p-1 shadow-inner">
-                              <span className="text-[8px] font-mono font-bold text-amber-800 leading-tight text-center">MAU OFFICIAL REGISTRAR SEAL</span>
+                              <span className="text-[8px] font-mono font-bold text-amber-800 leading-tight text-center">
+                                MAU OFFICIAL REGISTRAR SEAL
+                              </span>
                             </div>
-                            <span className="text-[9px] font-mono text-slate-400 mt-1">Doc Ref: MAU-TR-{Date.now().toString().slice(-6)}</span>
+                            <span className="text-[9px] font-mono text-slate-400 mt-1">
+                              Doc Ref: MAU-TR-{Date.now().toString().slice(-6)}
+                            </span>
                           </div>
-
                           <div className="text-center space-y-1">
                             <div className="h-10 border-b border-slate-300 flex items-end justify-center pb-1">
-                              <span className="font-serif italic text-xs text-slate-600">Abebech Tadesse, M.Sc.</span>
+                              <span className="font-serif italic text-xs text-slate-600">
+                                Abebech Tadesse, M.Sc.
+                              </span>
                             </div>
-                            <p className="text-[10px] font-mono text-slate-500 uppercase">University Registrar Director</p>
+                            <p className="text-[10px] font-mono text-slate-500 uppercase">
+                              University Registrar Director
+                            </p>
                           </div>
                         </div>
 
@@ -1178,36 +1310,43 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
             {activeTab === "fees" && (
               <motion.div
+                key="student-fees-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="student-fees-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Outstanding Semester Fees</h2>
-                  <p className="text-slate-500 text-sm">Review your tuition balance and verify online card payments directly.</p>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Outstanding Semester Fees
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Review your tuition balance and verify online card payments directly.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
-                    <span className="text-xs uppercase text-slate-400 font-mono tracking-widest font-bold">Tuition Fee Due</span>
+                    <span className="text-xs uppercase text-slate-400 font-mono tracking-widest font-bold">
+                      Tuition Fee Due
+                    </span>
                     <h3 className="text-3xl font-display font-bold text-slate-900">
                       {user.outstandingFees ? `${user.outstandingFees} ETB` : "0.00 ETB"}
                     </h3>
                     {user.outstandingFees && user.outstandingFees > 0 ? (
                       <div className="bg-red-50 text-danger border border-red-100 p-3.5 rounded-lg text-xs flex items-start space-x-2">
-                        <AlertCircle className="w-4.5 h-4.5 flex-shrink-0 mt-0.5" />
-                        <span>Outstanding tuition balance blocks course enrollment and transcript download.</span>
+                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        <span>
+                          Outstanding tuition balance blocks course enrollment and transcript download.
+                        </span>
                       </div>
                     ) : (
                       <div className="bg-emerald-50 text-success border border-emerald-100 p-3.5 rounded-lg text-xs flex items-start space-x-2">
-                        <CheckCircle2 className="w-4.5 h-4.5 flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                         <span>All fees cleared! You have no outstanding balance.</span>
                       </div>
                     )}
-
-                    {user.outstandingFees && user.outstandingFees > 0 ? (
+                    {user.outstandingFees && user.outstandingFees > 0 && (
                       <button
                         onClick={() => {
                           setPayAmount(user.outstandingFees || 0);
@@ -1217,11 +1356,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       >
                         Clear Fees
                       </button>
-                    ) : null}
+                    )}
                   </div>
 
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-3 col-span-2 text-xs">
-                    <h4 className="font-display font-bold text-slate-800 text-sm">Payment Methods & Instructions</h4>
+                    <h4 className="font-display font-bold text-slate-800 text-sm">
+                      Payment Methods & Instructions
+                    </h4>
                     <p className="text-slate-500 leading-relaxed">
                       You can pay your tuition online safely using credit card or Telebirr integrations. Verification of payments is completed instantly.
                     </p>
@@ -1252,10 +1393,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       <h3 className="font-display font-bold text-lg text-slate-800 border-b border-slate-100 pb-3">
                         Secure Card Payment
                       </h3>
-
                       <div className="space-y-3 text-xs">
                         <div className="space-y-1">
-                          <label className="block text-slate-600 font-medium">Payment Amount (ETB)</label>
+                          <label className="block text-slate-600 font-medium">
+                            Payment Amount (ETB)
+                          </label>
                           <input
                             type="number"
                             className="w-full border border-slate-200 rounded-lg p-2.5 font-mono"
@@ -1263,9 +1405,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             onChange={(e) => setPayAmount(parseFloat(e.target.value) || 0)}
                           />
                         </div>
-
                         <div className="space-y-1">
-                          <label className="block text-slate-600 font-medium">Credit Card Number</label>
+                          <label className="block text-slate-600 font-medium">
+                            Credit Card Number
+                          </label>
                           <input
                             type="text"
                             placeholder="4111 2222 3333 4444"
@@ -1275,7 +1418,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             onChange={(e) => setCardNumber(e.target.value)}
                           />
                         </div>
-
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <label className="block text-slate-600 font-medium">Expiry</label>
@@ -1297,7 +1439,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           </div>
                         </div>
                       </div>
-
                       <div className="flex space-x-3 pt-4">
                         <button
                           onClick={() => setShowPayModal(false)}
@@ -1318,15 +1459,47 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* ✅ TAB: ZOOM CLASSROOM */}
-            {activeTab === "zoom" && (
+            {activeTab === "copilot" && (
               <motion.div
+                key="student-copilot-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
-                key="student-zoom-tab"
               >
-                <StudentZoomLearningHub student={user} enrolledCourses={courses} />
+                <SmartAICopilot user={user} />
+              </motion.div>
+            )}
+
+            {activeTab === "clearance" && (
+              <motion.div
+                key="student-clearance-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+              >
+                <SmartClearancePortal user={user} />
+              </motion.div>
+            )}
+
+            {activeTab === "facilities" && (
+              <motion.div
+                key="student-facilities-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+              >
+                <SmartCampusFacilities user={user} />
+              </motion.div>
+            )}
+
+            {activeTab === "alerts" && (
+              <motion.div
+                key="student-alerts-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+              >
+                <SmartCampusAlerts user={user} />
               </motion.div>
             )}
           </AnimatePresence>

@@ -1,27 +1,13 @@
 import { useState, useEffect } from "react";
-import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade } from "../types";
+import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, Grade } from "../types";
 import { CampusDatabase } from "../services/api";
-import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
+import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
+import { SmartCampusFacilities } from "./SmartCampusFacilities";
+import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import {
-  BookOpen,
-  FileText,
-  PlusCircle,
-  Award,
-  AlertTriangle,
-  Users,
-  Volume2,
-  Calendar,
-  CheckCircle2,
-  ChevronRight,
-  Activity,
-  BrainCircuit,
-  Sparkles,
-  Send,
-  Trash,
-  Layout,
-  Check,
-  Shield,
-  Video
+  BookOpen, FileText, PlusCircle, Award, AlertTriangle, Users, Volume2,
+  Calendar, CheckCircle2, ChevronRight, Activity, BrainCircuit, Sparkles,
+  Send, Trash, Layout, Check, Cpu, Radio, Video
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { InstructorZoomManager } from "./InstructorZoomManager";
@@ -32,7 +18,11 @@ interface InstructorDashboardProps {
 }
 
 export default function InstructorDashboard({ user, onLogout }: InstructorDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "materials" | "assignments" | "exams" | "grades" | "attendance" | "analytics" | "zoom">("dashboard");
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "materials" | "assignments" | "exams" | "grades" |
+    "attendance" | "analytics" | "facilities" | "alerts" | "zoom"
+  >("dashboard");
+
   const [courses, setCourses] = useState<Course[]>([]);
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -43,38 +33,41 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>("C_SOFT401");
 
+  // Material Creation
   const [newMaterialTitle, setNewMaterialTitle] = useState("");
   const [newMaterialType, setNewMaterialType] = useState<"PDF" | "Video" | "Document" | "Slide">("PDF");
   const [newMaterialDesc, setNewMaterialDesc] = useState("");
 
+  // Announcement
   const [newAnnounceTitle, setNewAnnounceTitle] = useState("");
   const [newAnnounceContent, setNewAnnounceContent] = useState("");
 
+  // Assignment
   const [newAssignTitle, setNewAssignTitle] = useState("");
   const [newAssignDueDate, setNewAssignDueDate] = useState("2026-07-15T23:59");
   const [newAssignDesc, setNewAssignDesc] = useState("");
 
-  const [newExamTitle, setNewExamTitle] = useState("");
-  const [newExamDuration, setNewExamDuration] = useState(45);
-  const [newExamInstructions, setNewExamInstructions] = useState("");
-
+  // Smart Exam Generator
   const [smartTopic, setSmartTopic] = useState("");
   const [smartQty, setSmartQty] = useState(4);
   const [smartDifficulty, setSmartDifficulty] = useState("Medium");
   const [generatingExam, setGeneratingExam] = useState(false);
   const [generatedQuestions, setGeneratedQuestions] = useState<any[]>([]);
 
+  // Attendance
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split("T")[0]);
   const [attendanceMap, setAttendanceMap] = useState<{ [studentId: string]: boolean }>({
-    "U_ST01": true,
-    "U_ST02": true,
-    "U_ST03": false
+    U_ST01: true,
+    U_ST02: true,
+    U_ST03: false,
   });
 
+  // Grading
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [gradingScore, setGradingScore] = useState<number>(0);
   const [gradingFeedback, setGradingFeedback] = useState("");
 
+  // AI Analytics
   const [analyzingStudentId, setAnalyzingStudentId] = useState<string>("U_ST03");
   const [analyticsResult, setAnalyticsResult] = useState<any>(null);
   const [calculatingPredictor, setCalculatingPredictor] = useState(false);
@@ -83,6 +76,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     loadData();
   }, []);
 
+  // ✅ FIXED: async with Promise.all + array guards
   const loadData = async () => {
     try {
       const [
@@ -126,44 +120,40 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
-  const getActiveCourse = () => {
-    return courses.find((c) => c.id === selectedCourseId) || courses[0];
-  };
+  const getActiveCourse = () => courses.find((c) => c.id === selectedCourseId) || courses[0];
 
+  // ✅ FIXED: async + await
   const handlePostAnnouncement = async () => {
     if (!newAnnounceTitle || !newAnnounceContent) return;
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
 
-    const newAnn: Announcement = {
-      id: "AN_" + Date.now(),
-      courseId: activeCourse.id,
-      courseTitle: activeCourse.courseTitle,
-      title: newAnnounceTitle,
-      content: newAnnounceContent,
-      postedBy: user.fullName,
-      postedAt: new Date().toISOString()
-    };
+    try {
+      await CampusDatabase.createAnnouncement({
+        course: activeCourse.id,
+        courseTitle: activeCourse.courseTitle,
+        title: newAnnounceTitle,
+        content: newAnnounceContent,
+        postedBy: user.fullName,
+        postedAt: new Date().toISOString(),
+      });
 
-    const updatedAnn = [newAnn, ...announcements];
-    await CampusDatabase.saveAnnouncements(updatedAnn);
-    setAnnouncements(updatedAnn);
+      await CampusDatabase.addAuditLog(
+        user.id, user.fullName, "INSTRUCTOR", "Post Announcement", "Announcement", "new",
+        `Posted bulletin in ${activeCourse.courseCode}: ${newAnnounceTitle}`
+      );
 
-    await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Post Announcement",
-      "Announcement",
-      newAnn.id,
-      `Posted bulletin in ${activeCourse.courseCode}: ${newAnnounceTitle}`
-    );
-
-    setNewAnnounceTitle("");
-    setNewAnnounceContent("");
-    alert("Announcement broadcasted successfully!");
+      await loadData();
+      setNewAnnounceTitle("");
+      setNewAnnounceContent("");
+      alert("Announcement broadcasted successfully!");
+    } catch (err) {
+      console.error(err);
+      alert("Failed to post announcement.");
+    }
   };
 
+  // ✅ FIXED: async + await
   const handleAddMaterial = async () => {
     if (!newMaterialTitle || !newMaterialDesc) return;
     const activeCourse = getActiveCourse();
@@ -175,7 +165,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       title: newMaterialTitle,
       fileType: newMaterialType,
       uploadedAt: new Date().toISOString(),
-      description: newMaterialDesc
+      description: newMaterialDesc,
     };
 
     const updatedMats = [newMat, ...materials];
@@ -183,12 +173,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     setMaterials(updatedMats);
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Upload Material",
-      "CourseMaterial",
-      newMat.id,
+      user.id, user.fullName, "INSTRUCTOR", "Upload Material", "CourseMaterial", newMat.id,
       `Uploaded course handout: ${newMaterialTitle}`
     );
 
@@ -197,6 +182,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("Course material uploaded and published successfully!");
   };
 
+  // ✅ FIXED: async + await
   const handleAddAssignment = async () => {
     if (!newAssignTitle || !newAssignDesc) return;
     const activeCourse = getActiveCourse();
@@ -208,7 +194,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       title: newAssignTitle,
       dueDate: new Date(newAssignDueDate).toISOString(),
       maxScore: 100,
-      description: newAssignDesc
+      description: newAssignDesc,
     };
 
     const updatedAs = [newAs, ...assignments];
@@ -216,12 +202,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     setAssignments(updatedAs);
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Create Assignment",
-      "Assignment",
-      newAs.id,
+      user.id, user.fullName, "INSTRUCTOR", "Create Assignment", "Assignment", newAs.id,
       `Created assignment outline in ${activeCourse.courseCode}: ${newAssignTitle}`
     );
 
@@ -230,20 +211,15 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     alert("Assignment publication complete!");
   };
 
+  // ✅ FIXED: async + await
   const handleGradeSubmission = async () => {
     if (!selectedSubmission) return;
 
-    const updatedSubmissions = submissions.map((s) => {
-      if (s.id === selectedSubmission.id) {
-        return {
-          ...s,
-          score: gradingScore,
-          feedback: gradingFeedback,
-          status: "GRADED" as const
-        };
-      }
-      return s;
-    });
+    const updatedSubmissions = submissions.map((s) =>
+      s.id === selectedSubmission.id
+        ? { ...s, score: gradingScore, feedback: gradingFeedback, status: "GRADED" as const }
+        : s
+    );
 
     await CampusDatabase.saveSubmissions(updatedSubmissions);
     setSubmissions(updatedSubmissions);
@@ -255,18 +231,14 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
     if (studentGrade) {
       studentGrade.continuousAssessmentScore = parseFloat(((gradingScore / 100) * 50).toFixed(1));
-      studentGrade.totalGrade = studentGrade.continuousAssessmentScore + studentGrade.midExamScore + studentGrade.finalExamScore;
+      studentGrade.totalGrade =
+        studentGrade.continuousAssessmentScore + studentGrade.midExamScore + studentGrade.finalExamScore;
       await CampusDatabase.saveGrades(currentGrades);
       setGrades(currentGrades);
     }
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Grade Assessment",
-      "Submission",
-      selectedSubmission.id,
+      user.id, user.fullName, "INSTRUCTOR", "Grade Assessment", "Submission", selectedSubmission.id,
       `Graded student submission for ${selectedSubmission.studentName}. Score: ${gradingScore}/100`
     );
 
@@ -277,49 +249,39 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     await loadData();
   };
 
+  // ✅ FIXED: async + await
   const handleSubmitFinalGrade = async (gradeId: string) => {
-    const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
-
     const gradeObj = grades.find((g) => g.id === gradeId);
     if (!gradeObj) return;
 
     if (gradeObj.studentName.includes("Tarekegn") || gradeObj.studentId === "U_ST03") {
       const confirmProceed = window.confirm(
-        `Attendance WARNING (UC-I-09): Student ${gradeObj.studentName} has only met 70% attendance. Current policies require 80% minimum. Do you have official clearance to proceed with grade submission?`
+        `Attendance WARNING (UC-I-09): Student ${gradeObj.studentName} has only met 70% attendance. Current policies require 80% minimum. Do you have official clearance to proceed?`
       );
       if (!confirmProceed) return;
     }
 
-    const updatedGrades = grades.map((g) => {
-      if (g.id === gradeId) {
-        return { ...g, status: "SUBMITTED" as const };
-      }
-      return g;
-    });
+    const updatedGrades = grades.map((g) =>
+      g.id === gradeId ? { ...g, status: "SUBMITTED" as const } : g
+    );
 
     await CampusDatabase.saveGrades(updatedGrades);
     setGrades(updatedGrades);
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Submit Final Grade",
-      "Grade",
-      gradeId,
+      user.id, user.fullName, "INSTRUCTOR", "Submit Final Grade", "Grade", gradeId,
       `Submitted final calculated grade for student ${gradeObj.studentName} to Registrar.`
     );
 
     alert("Final grade submitted to Registrar directory successfully!");
   };
 
+  // ✅ FIXED: uses real CampusDatabase AI endpoint instead of /api/gemini
   const handleGenerateSmartExam = async () => {
     if (!smartTopic) {
       alert("Please provide a topic for smart question generation.");
       return;
     }
-
     const activeCourse = getActiveCourse();
     if (!activeCourse) return;
 
@@ -331,7 +293,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         courseId: activeCourse.id,
         topic: smartTopic,
         numberOfQuestions: smartQty,
-        difficulty: smartDifficulty
+        difficulty: smartDifficulty,
       });
 
       if (data.success && data.questions) {
@@ -340,12 +302,14 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         throw new Error(data.error || "Failed to parse API questions.");
       }
     } catch (err: any) {
-      alert("Error generating questions: " + err.message);
+      console.error(err);
+      alert("Error generating questions: " + (err?.message || "Unknown error"));
     } finally {
       setGeneratingExam(false);
     }
   };
 
+  // ✅ FIXED: async + await
   const handleSaveGeneratedExam = async () => {
     if (generatedQuestions.length === 0) return;
     const activeCourse = getActiveCourse();
@@ -360,10 +324,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       examTitle: `Smart Exam: ${smartTopic} (${smartDifficulty})`,
       examDate: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
       durationMinutes: 60,
-      totalMarks: totalMarks,
+      totalMarks,
       instructions: "This exam was dynamically modeled and audited using the server-side AI engine. All standard testing regulations apply.",
       status: "SCHEDULED",
-      questions: generatedQuestions
+      questions: generatedQuestions,
     };
 
     const currentExams = await CampusDatabase.getExams();
@@ -371,12 +335,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     setExams([newExam, ...currentExams]);
 
     await CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "INSTRUCTOR",
-      "Publish AI Exam",
-      "Exam",
-      newExam.id,
+      user.id, user.fullName, "INSTRUCTOR", "Publish AI Exam", "Exam", newExam.id,
       `Published AI-generated exam on ${smartTopic} inside ${activeCourse.courseCode}`
     );
 
@@ -386,16 +345,34 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     setActiveTab("exams");
   };
 
+  // ✅ FIXED: uses real CampusDatabase.predictStudentRisk and maps fields
   const handlePredictDropoutRisk = async () => {
     setCalculatingPredictor(true);
     setAnalyticsResult(null);
 
     try {
-      const result = await CampusDatabase.predictStudentRisk(analyzingStudentId);
-      setAnalyticsResult(result);
-    } catch (err) {
+      const result: any = await CampusDatabase.predictStudentRisk(analyzingStudentId);
+
+      // Map backend snake_case response to what the UI renders
+      const mapped = {
+        status: result.classification === "HIGH_RISK" ? "At-Risk"
+              : result.classification === "MODERATE_RISK" ? "At-Risk"
+              : "Not At-Risk",
+        riskProbability: ((result.dropoutProbability || 0) * 100).toFixed(1),
+        metrics: {
+          attendance: result.attendancePercentage ?? 0,
+          grade: result.continuousAssessmentAvg ?? 0,
+          submissions: result.continuousAssessmentAvg ?? 0,
+          library: "N/A",
+        },
+        feedback: result.recommendedAction || "No further action.",
+        interventions: result.keyRiskFactors || [],
+      };
+
+      setAnalyticsResult(mapped);
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to predict risk. Please ensure backend is running.");
+      alert("Failed to predict risk: " + (err?.message || "Unknown error"));
     } finally {
       setCalculatingPredictor(false);
     }
@@ -415,139 +392,153 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       <div className="flex-1 flex" id="instructor_workspace_inner">
         <aside className="w-64 bg-[#071526] text-slate-300 flex flex-col border-r border-slate-800/80">
           <div className="p-3.5 border-b border-slate-800/80 space-y-1.5 bg-slate-950/40">
-            <label className="text-[10px] font-mono text-amber-400/90 uppercase tracking-widest font-bold">Active Course Context</label>
+            <label className="text-[10px] font-mono text-amber-400/90 uppercase tracking-widest font-bold">
+              Active Course Context
+            </label>
             <select
               className="w-full bg-[#0d2238] text-slate-100 rounded-xl p-2.5 text-xs border border-slate-700/80 font-medium focus:border-amber-400 focus:outline-none"
               value={selectedCourseId}
               onChange={(e) => setSelectedCourseId(e.target.value)}
             >
-              <option value="C_SOFT401">SOFT401: Advanced Software Eng</option>
-              <option value="C_CSCI402">CSCI402: Distributed Database</option>
-              <option value="C_MATH301">MATH301: Discrete Math & Graph</option>
+              {courses.length > 0 ? (
+                courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.courseCode}: {c.courseTitle}
+                  </option>
+                ))
+              ) : (
+                <>
+                  <option value="C_SOFT401">SOFT401: Advanced Software Eng</option>
+                  <option value="C_CSCI402">CSCI402: Distributed Database</option>
+                  <option value="C_MATH301">MATH301: Discrete Math & Graph</option>
+                </>
+              )}
             </select>
           </div>
 
           <nav className="p-3.5 flex-1 space-y-1">
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "dashboard"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Layout className="w-4 h-4 text-amber-400" />
-              <span>Bulletin & Syllabus</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("materials")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "materials"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <FileText className="w-4 h-4 text-amber-400" />
-              <span>Course Materials</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("assignments")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "assignments"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <PlusCircle className="w-4 h-4 text-amber-400" />
-              <span>Grade Submissions</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("exams")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "exams"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              <span>AI Exam Modeler</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("grades")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "grades"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Award className="w-4 h-4 text-amber-400" />
-              <span>Submit Final Grades</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("attendance")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "attendance"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Users className="w-4 h-4 text-amber-400" />
-              <span>Student Attendance</span>
-            </button>
-            <button
-              onClick={() => setActiveTab("analytics")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "analytics"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <BrainCircuit className="w-4 h-4 text-amber-400" />
-              <span>AI Student Analytics</span>
-            </button>
-            {/* ✅ NEW: Zoom Live Teaching tab */}
-            <button
-              onClick={() => setActiveTab("zoom")}
-              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "zoom"
-                  ? "bg-primary text-white border border-blue-400/30 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <div className="flex items-center space-x-3">
-                <Video className="w-4 h-4 text-blue-400" />
-                <span>Zoom Live Teaching</span>
-              </div>
-              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-400/30">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <span>LIVE</span>
+            {[
+              { id: "dashboard", label: "Bulletin & Syllabus", Icon: Layout },
+              { id: "zoom", label: "Zoom Live Teaching", Icon: Video, badge: "LIVE" },
+              { id: "materials", label: "Course Materials", Icon: FileText },
+              { id: "assignments", label: "Grade Submissions", Icon: PlusCircle },
+              { id: "exams", label: "AI Exam Modeler", Icon: Sparkles },
+              { id: "grades", label: "Submit Final Grades", Icon: Award },
+              { id: "attendance", label: "Student Attendance", Icon: Users },
+              { id: "analytics", label: "AI Student Analytics", Icon: BrainCircuit },
+            ].map(({ id, label, Icon, badge }: any) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                  activeTab === id
+                    ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                }`}
+              >
+                <div className="flex items-center space-x-3">
+                  <Icon className={`w-4 h-4 ${id === "zoom" ? "text-blue-400" : "text-amber-400"}`} />
+                  <span>{label}</span>
+                </div>
+                {badge && (
+                  <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-400/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>{badge}</span>
+                  </span>
+                )}
+              </button>
+            ))}
+
+            <div className="pt-3 pb-1 px-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                Smart Operations
               </span>
+            </div>
+
+            <button
+              onClick={() => setActiveTab("facilities")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "facilities"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <Cpu className="w-4 h-4 text-amber-400" />
+              <span>Lab & Hall Bookings</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab("alerts")}
+              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "alerts"
+                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <Radio className="w-4 h-4 text-red-400" />
+              <span>Broadcast Alerts</span>
             </button>
           </nav>
 
           <div className="p-4 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono text-slate-400 space-y-1">
-            <p>Faculty ID: <span className="text-amber-400">INST001</span></p>
+            <p>
+              Faculty ID: <span className="text-amber-400">INST001</span>
+            </p>
             <p>Dept Chair: Dr. Befekadu</p>
-            <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800/50">Status: Teaching Active</p>
+            <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800/50">
+              Status: Teaching Active
+            </p>
           </div>
         </aside>
 
         <main className="flex-1 p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
-            {/* TAB: BULLETIN & SYLLABUS */}
+            {/* BULLETIN & SYLLABUS */}
             {activeTab === "dashboard" && (
               <motion.div
+                key="instructor-dashboard-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="instructor-dashboard-tab"
               >
                 <div>
                   <h2 className="text-2xl font-display font-bold text-slate-900">
                     Syllabus Outline & Bulletin Control
                   </h2>
-                  <p className="text-slate-500 text-sm">Post announcements and configure syllabi details for {getActiveCourse()?.courseTitle}.</p>
+                  <p className="text-slate-500 text-sm">
+                    Post announcements and configure syllabi details for {getActiveCourse()?.courseTitle}.
+                  </p>
+                </div>
+
+                <div className="rounded-2xl p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">
+                      <Video className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-xs font-bold font-mono text-emerald-400">
+                          MAU VIRTUAL CLASSROOM
+                        </span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                      </div>
+                      <h3 className="text-sm font-bold text-white">
+                        Online Zoom Teaching & Virtual Lectures
+                      </h3>
+                      <p className="text-xs text-blue-200">
+                        Start instant live classes, share slides, manage student chat & take attendance.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("zoom")}
+                    className="flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0"
+                  >
+                    <Video className="w-3.5 h-3.5" />
+                    <span>Open Zoom Teaching Hub</span>
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -582,16 +573,20 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   </div>
 
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
-                    <h3 className="font-display font-bold text-slate-800 text-base">Active Course Announcements</h3>
+                    <h3 className="font-display font-bold text-slate-800 text-base">
+                      Active Course Announcements
+                    </h3>
                     <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto space-y-3 pr-2">
                       {announcements
-                        .filter((an) => an.courseId === selectedCourseId)
+                        .filter((an: any) => (an.courseId || an.course) === selectedCourseId)
                         .map((an) => (
                           <div key={an.id} className="pt-3 first:pt-0 space-y-1">
                             <span className="text-[10px] font-mono text-slate-400">
                               {new Date(an.postedAt).toLocaleDateString()}
                             </span>
-                            <h4 className="font-semibold text-slate-800 text-xs md:text-sm">{an.title}</h4>
+                            <h4 className="font-semibold text-slate-800 text-xs md:text-sm">
+                              {an.title}
+                            </h4>
                             <p className="text-xs text-slate-500">{an.content}</p>
                           </div>
                         ))}
@@ -601,18 +596,22 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               </motion.div>
             )}
 
-            {/* TAB: MANAGE MATERIALS */}
+            {/* MATERIALS */}
             {activeTab === "materials" && (
               <motion.div
+                key="instructor-materials-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="instructor-materials-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Manage Course Materials</h2>
-                  <p className="text-slate-500 text-sm">Upload, categorize and publish lecture materials and slides.</p>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Manage Course Materials
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Upload, categorize and publish lecture materials and slides.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -624,7 +623,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         <input
                           type="text"
                           className="w-full border border-slate-200 rounded-lg p-2.5"
-                          placeholder="e.g. Chapter 3: Dynamic Activity modeling"
                           value={newMaterialTitle}
                           onChange={(e) => setNewMaterialTitle(e.target.value)}
                         />
@@ -647,7 +645,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         <textarea
                           rows={3}
                           className="w-full border border-slate-200 rounded-lg p-2.5"
-                          placeholder="Specify chapter details or learning targets..."
                           value={newMaterialDesc}
                           onChange={(e) => setNewMaterialDesc(e.target.value)}
                         />
@@ -662,7 +659,9 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   </div>
 
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
-                    <h3 className="font-display font-bold text-slate-800 text-base">Published Course Resources</h3>
+                    <h3 className="font-display font-bold text-slate-800 text-base">
+                      Published Course Resources
+                    </h3>
                     <div className="divide-y divide-slate-100">
                       {materials
                         .filter((m) => m.courseId === selectedCourseId)
@@ -682,7 +681,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                 setMaterials(updated);
                               }}
                               className="text-slate-400 hover:text-danger p-2 transition"
-                              title="Delete Resource"
                             >
                               <Trash className="w-4 h-4" />
                             </button>
@@ -694,23 +692,29 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               </motion.div>
             )}
 
-            {/* TAB: GRADE ASSIGNMENTS */}
+            {/* ASSIGNMENTS */}
             {activeTab === "assignments" && (
               <motion.div
+                key="instructor-assignments-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="instructor-assignments-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Grade Student Submissions</h2>
-                  <p className="text-slate-500 text-sm">Review uploaded files from students, evaluate continuous assessment points, and record feedback.</p>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Grade Student Submissions
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Review uploaded files from students, evaluate continuous assessment points, and record feedback.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
-                    <h3 className="font-display font-bold text-slate-800 text-base">Student Submissions</h3>
+                    <h3 className="font-display font-bold text-slate-800 text-base">
+                      Student Submissions
+                    </h3>
                     <div className="divide-y divide-slate-100">
                       {submissions
                         .filter((sub) => sub.courseId === selectedCourseId)
@@ -728,20 +732,29 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           >
                             <div className="space-y-1">
                               <div className="flex items-center space-x-2">
-                                <h4 className="font-semibold text-slate-800 text-sm">{sub.studentName}</h4>
-                                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                                  sub.status === "GRADED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-warning"
-                                }`}>
+                                <h4 className="font-semibold text-slate-800 text-sm">
+                                  {sub.studentName}
+                                </h4>
+                                <span
+                                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                                    sub.status === "GRADED"
+                                      ? "bg-emerald-50 text-emerald-700"
+                                      : "bg-amber-50 text-warning"
+                                  }`}
+                                >
                                   {sub.status}
                                 </span>
                               </div>
                               <p className="text-xs text-slate-500">{sub.assignmentTitle}</p>
-                              <p className="text-[10px] font-mono text-slate-400">File: {sub.fileName || "None"}</p>
+                              <p className="text-[10px] font-mono text-slate-400">
+                                File: {sub.fileName || "None"}
+                              </p>
                             </div>
-
                             <div className="text-right flex items-center space-x-2">
                               {sub.status === "GRADED" && (
-                                <span className="font-mono text-sm font-bold text-slate-800">{sub.score} / 100</span>
+                                <span className="font-mono text-sm font-bold text-slate-800">
+                                  {sub.score} / 100
+                                </span>
                               )}
                               <ChevronRight className="w-4 h-4 text-slate-400" />
                             </div>
@@ -751,17 +764,26 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   </div>
 
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 h-fit">
-                    <h3 className="font-display font-bold text-slate-800 text-base">Grading Console</h3>
+                    <h3 className="font-display font-bold text-slate-800 text-base">
+                      Grading Console
+                    </h3>
                     {selectedSubmission ? (
                       <div className="space-y-4 text-xs">
                         <div className="p-3 bg-slate-50 rounded-lg space-y-1">
-                          <p className="text-[10px] uppercase text-slate-400 font-mono font-bold">Student</p>
-                          <p className="font-semibold text-slate-800 text-sm">{selectedSubmission.studentName}</p>
-                          <p className="text-[10px] text-slate-500 font-mono">Submitted: {new Date(selectedSubmission.submittedAt).toLocaleString()}</p>
+                          <p className="text-[10px] uppercase text-slate-400 font-mono font-bold">
+                            Student
+                          </p>
+                          <p className="font-semibold text-slate-800 text-sm">
+                            {selectedSubmission.studentName}
+                          </p>
+                          <p className="text-[10px] text-slate-500 font-mono">
+                            Submitted: {new Date(selectedSubmission.submittedAt).toLocaleString()}
+                          </p>
                         </div>
-
                         <div className="space-y-1">
-                          <label className="block font-medium text-slate-600">Assign Score (0 - 100)</label>
+                          <label className="block font-medium text-slate-600">
+                            Assign Score (0 - 100)
+                          </label>
                           <input
                             type="number"
                             min={0}
@@ -771,18 +793,17 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                             onChange={(e) => setGradingScore(parseInt(e.target.value) || 0)}
                           />
                         </div>
-
                         <div className="space-y-1">
-                          <label className="block font-medium text-slate-600">Feedback Comments</label>
+                          <label className="block font-medium text-slate-600">
+                            Feedback Comments
+                          </label>
                           <textarea
                             rows={4}
                             className="w-full border border-slate-200 rounded-lg p-2.5"
-                            placeholder="Write constructive evaluation notes here..."
                             value={gradingFeedback}
                             onChange={(e) => setGradingFeedback(e.target.value)}
                           />
                         </div>
-
                         <button
                           onClick={handleGradeSubmission}
                           className="w-full bg-primary hover:bg-primary-600 text-white py-2.5 rounded-lg font-semibold transition"
@@ -793,7 +814,9 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     ) : (
                       <div className="text-center py-12 text-slate-400 space-y-2">
                         <AlertTriangle className="w-8 h-8 mx-auto text-slate-300" />
-                        <p className="text-xs">Select a submission from the list to begin grading.</p>
+                        <p className="text-xs">
+                          Select a submission from the list to begin grading.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -801,14 +824,14 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               </motion.div>
             )}
 
-            {/* TAB: SMART EXAM GENERATOR */}
+            {/* EXAMS (AI Modeler) */}
             {activeTab === "exams" && (
               <motion.div
+                key="instructor-exams-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="instructor-exams-tab"
               >
                 <div>
                   <h2 className="text-2xl font-display font-bold text-slate-900 flex items-center space-x-2">
@@ -816,27 +839,31 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     <span>AI Smart Exam Generator</span>
                   </h2>
                   <p className="text-slate-500 text-sm">
-                    Generate objective questions (MCQs & True/False) tailored to your syllabus using the Django backend AI engine.
+                    Generate objective questions (MCQs & True/False) tailored to your syllabus using the server-side AI engine.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 h-fit">
-                    <h3 className="font-display font-bold text-slate-800 text-base">Generation Parameters</h3>
+                    <h3 className="font-display font-bold text-slate-800 text-base">
+                      Generation Parameters
+                    </h3>
                     <div className="space-y-4 text-xs">
                       <div className="space-y-1">
-                        <label className="block font-medium text-slate-600">Topic Outline / Learning Objective</label>
+                        <label className="block font-medium text-slate-600">
+                          Topic Outline / Learning Objective
+                        </label>
                         <input
                           type="text"
                           className="w-full border border-slate-200 rounded-lg p-2.5 font-medium"
-                          placeholder="e.g. Unified Modeling Language Diagrams"
                           value={smartTopic}
                           onChange={(e) => setSmartTopic(e.target.value)}
                         />
                       </div>
-
                       <div className="space-y-1">
-                        <label className="block font-medium text-slate-600">Quantity of Questions</label>
+                        <label className="block font-medium text-slate-600">
+                          Quantity of Questions
+                        </label>
                         <select
                           className="w-full border border-slate-200 rounded-lg p-2.5 bg-white font-mono"
                           value={smartQty}
@@ -848,7 +875,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           <option value={8}>8 Questions</option>
                         </select>
                       </div>
-
                       <div className="space-y-1">
                         <label className="block font-medium text-slate-600">Difficulty Grade</label>
                         <div className="grid grid-cols-3 gap-2">
@@ -867,7 +893,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           ))}
                         </div>
                       </div>
-
                       <button
                         onClick={handleGenerateSmartExam}
                         disabled={generatingExam}
@@ -890,7 +915,9 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                     <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-                      <h3 className="font-display font-bold text-slate-800 text-base">Generated Questions Output</h3>
+                      <h3 className="font-display font-bold text-slate-800 text-base">
+                        Generated Questions Output
+                      </h3>
                       {generatedQuestions.length > 0 && (
                         <button
                           onClick={handleSaveGeneratedExam}
@@ -900,32 +927,42 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         </button>
                       )}
                     </div>
-
                     <div className="space-y-6 max-h-[60vh] overflow-y-auto pr-2">
                       {generatedQuestions.length > 0 ? (
                         generatedQuestions.map((q, idx) => (
-                          <div key={idx} className="bg-slate-50 border border-slate-100 rounded-xl p-5 space-y-3">
+                          <div
+                            key={idx}
+                            className="bg-slate-50 border border-slate-100 rounded-xl p-5 space-y-3"
+                          >
                             <div className="flex justify-between items-start">
                               <h4 className="font-semibold text-slate-800 text-sm">
-                                Question {idx + 1}: <span className="font-normal text-slate-700">{q.questionText}</span>
+                                Question {idx + 1}:{" "}
+                                <span className="font-normal text-slate-700">
+                                  {q.questionText}
+                                </span>
                               </h4>
                               <span className="text-[10px] font-mono bg-blue-50 text-primary px-2.5 py-0.5 rounded font-bold uppercase">
                                 {q.questionType} • {q.marks || 5} Marks
                               </span>
                             </div>
-
                             {q.options && q.options.length > 0 && (
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
                                 {q.options.map((opt: string, optIdx: number) => (
                                   <div
                                     key={optIdx}
                                     className={`p-2.5 rounded-lg border flex items-center space-x-2 ${
-                                      opt === q.correctAnswer ? "bg-emerald-50 border-emerald-200 text-emerald-900" : "bg-white border-slate-200"
+                                      opt === q.correctAnswer
+                                        ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                                        : "bg-white border-slate-200"
                                     }`}
                                   >
-                                    <div className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border ${
-                                      opt === q.correctAnswer ? "bg-success text-white border-emerald-300" : "border-slate-300"
-                                    }`}>
+                                    <div
+                                      className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border ${
+                                        opt === q.correctAnswer
+                                          ? "bg-success text-white border-emerald-300"
+                                          : "border-slate-300"
+                                      }`}
+                                    >
                                       {opt === q.correctAnswer && <Check className="w-2.5 h-2.5" />}
                                     </div>
                                     <span>{opt}</span>
@@ -933,7 +970,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                 ))}
                               </div>
                             )}
-
                             <p className="text-xs font-mono text-emerald-700">
                               <strong>Key Answer:</strong> {q.correctAnswer}
                             </p>
@@ -943,7 +979,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         <div className="text-center py-20 text-slate-400 space-y-3">
                           <Sparkles className="w-12 h-12 mx-auto text-slate-200 animate-pulse" />
                           <p className="text-xs">
-                            Define your topic and click generate. The Django backend AI will generate high-fidelity examination pools.
+                            Define your topic and click generate. The server-side AI will generate high-fidelity examination pools.
                           </p>
                         </div>
                       )}
@@ -953,19 +989,21 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               </motion.div>
             )}
 
-            {/* TAB: SUBMIT FINAL GRADES */}
+            {/* GRADES */}
             {activeTab === "grades" && (
               <motion.div
+                key="instructor-grades-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="instructor-grades-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Calculate & Submit Final Grades</h2>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Calculate & Submit Final Grades
+                  </h2>
                   <p className="text-slate-500 text-sm">
-                    Submit evaluated scores to the Registrar. Final grade submission automatically validates student attendance metrics (UC-I-09).
+                    Submit evaluated scores to the Registrar. Final grade submission validates student attendance metrics (UC-I-09).
                   </p>
                 </div>
 
@@ -992,16 +1030,22 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                             <td className="p-4 font-mono">{g.continuousAssessmentScore}</td>
                             <td className="p-4 font-mono">{g.midExamScore}</td>
                             <td className="p-4 font-mono">{g.finalExamScore}</td>
-                            <td className="p-4 font-mono font-bold text-slate-950">{g.totalGrade}%</td>
-                            <td className="p-4 font-mono text-slate-800 font-bold">{g.letterGrade} ({g.gradePoint.toFixed(2)})</td>
+                            <td className="p-4 font-mono font-bold text-slate-950">
+                              {g.totalGrade}%
+                            </td>
+                            <td className="p-4 font-mono text-slate-800 font-bold">
+                              {g.letterGrade} ({g.gradePoint.toFixed(2)})
+                            </td>
                             <td className="p-4">
-                              <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                                g.status === "APPROVED"
-                                  ? "bg-emerald-50 text-emerald-700"
-                                  : g.status === "SUBMITTED"
-                                  ? "bg-blue-50 text-primary"
-                                  : "bg-slate-100 text-slate-500"
-                              }`}>
+                              <span
+                                className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                                  g.status === "APPROVED"
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : g.status === "SUBMITTED"
+                                    ? "bg-blue-50 text-primary"
+                                    : "bg-slate-100 text-slate-500"
+                                }`}
+                              >
                                 {g.status}
                               </span>
                             </td>
@@ -1025,23 +1069,29 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               </motion.div>
             )}
 
-            {/* TAB: TRACK ATTENDANCE */}
+            {/* ATTENDANCE */}
             {activeTab === "attendance" && (
               <motion.div
+                key="instructor-attendance-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="instructor-attendance-tab"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Course Attendance Ledger</h2>
-                  <p className="text-slate-500 text-sm">Monitor student course logs and manage attendance minimum warnings (UC-I-07).</p>
+                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                    Course Attendance Ledger
+                  </h2>
+                  <p className="text-slate-500 text-sm">
+                    Monitor student course logs and manage attendance minimum warnings (UC-I-07).
+                  </p>
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 max-w-2xl">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <h3 className="font-display font-bold text-slate-800 text-base">Attendance Roster</h3>
+                    <h3 className="font-display font-bold text-slate-800 text-base">
+                      Attendance Roster
+                    </h3>
                     <input
                       type="date"
                       className="border border-slate-200 rounded-lg p-2 text-xs font-mono"
@@ -1054,19 +1104,20 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     {[
                       { id: "U_ST01", name: "Tadesse Mersha", studentId: "MAU1402271" },
                       { id: "U_ST02", name: "Yonas Sahle", studentId: "MAU1402530" },
-                      { id: "U_ST03", name: "Tarekegn Abebe", studentId: "MAU1402284" }
+                      { id: "U_ST03", name: "Tarekegn Abebe", studentId: "MAU1402284" },
                     ].map((st) => {
                       const isPresent = attendanceMap[st.id] !== false;
                       return (
                         <div key={st.id} className="py-3 flex justify-between items-center">
                           <div>
                             <h4 className="font-semibold text-slate-800 text-sm">{st.name}</h4>
-                            <p className="text-[10px] font-mono text-slate-400">ID: {st.studentId}</p>
+                            <p className="text-[10px] font-mono text-slate-400">
+                              ID: {st.studentId}
+                            </p>
                           </div>
-
                           <div className="flex space-x-2">
                             <button
-                              onClick={() => setAttendanceMap(prev => ({ ...prev, [st.id]: true }))}
+                              onClick={() => setAttendanceMap((prev) => ({ ...prev, [st.id]: true }))}
                               className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-mono transition ${
                                 isPresent
                                   ? "bg-emerald-500 text-white"
@@ -1076,7 +1127,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                               Present
                             </button>
                             <button
-                              onClick={() => setAttendanceMap(prev => ({ ...prev, [st.id]: false }))}
+                              onClick={() => setAttendanceMap((prev) => ({ ...prev, [st.id]: false }))}
                               className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-mono transition ${
                                 !isPresent
                                   ? "bg-red-500 text-white"
@@ -1095,12 +1146,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     onClick={async () => {
                       alert(`Attendance saved successfully for ${attendanceDate}! Audit ledger updated.`);
                       await CampusDatabase.addAuditLog(
-                        user.id,
-                        user.fullName,
-                        "INSTRUCTOR",
-                        "Save Attendance",
-                        "Course",
-                        selectedCourseId,
+                        user.id, user.fullName, "INSTRUCTOR", "Save Attendance", "Course", selectedCourseId,
                         `Recorded class attendance roster for date: ${attendanceDate}`
                       );
                     }}
@@ -1112,22 +1158,22 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               </motion.div>
             )}
 
-            {/* TAB: STUDENT AI ANALYTICS & DROPOUT PREDICTOR */}
+            {/* ANALYTICS */}
             {activeTab === "analytics" && (
               <motion.div
+                key="instructor-analytics-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
-                key="instructor-analytics-tab"
               >
                 <div>
                   <h2 className="text-2xl font-display font-bold text-slate-900 flex items-center space-x-2">
                     <Activity className="w-6 h-6 text-primary" />
-                    <span>Predictive Student Analytics (Logistic Regression)</span>
+                    <span>Predictive Student Analytics</span>
                   </h2>
                   <p className="text-slate-500 text-sm">
-                    Classify students as at-risk or not at-risk based on attendance rate, assessment trends, and engagement metrics via the Django backend prediction model.
+                    Classify students as at-risk based on attendance rate, assessment trends, and engagement metrics via the server-side prediction model.
                   </p>
                 </div>
 
@@ -1135,16 +1181,13 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4 h-fit">
                     <h3 className="font-display font-bold text-slate-800 text-base">Select Student</h3>
                     <div className="space-y-3 text-xs">
-                      <select
-                        className="w-full border border-slate-200 rounded-lg p-2.5 bg-white font-medium"
+                      <input
+                        type="text"
                         value={analyzingStudentId}
                         onChange={(e) => setAnalyzingStudentId(e.target.value)}
-                      >
-                        <option value="U_ST01">Tadesse Mersha (Active, Good Profile)</option>
-                        <option value="U_ST02">Yonas Sahle (High Performer)</option>
-                        <option value="U_ST03">Tarekegn Abebe (Lower Attendance / Overdue Balance)</option>
-                      </select>
-
+                        placeholder="Student ID (e.g. 3)"
+                        className="w-full border border-slate-200 rounded-lg p-2.5 bg-white font-mono"
+                      />
                       <button
                         onClick={handlePredictDropoutRisk}
                         disabled={calculatingPredictor}
@@ -1174,20 +1217,23 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                       <div className="space-y-6 text-xs md:text-sm">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-5 rounded-xl border border-slate-100">
                           <div>
-                            <span className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">Classification Status</span>
-                            <h4 className={`text-xl font-display font-bold mt-1 ${
-                              analyticsResult.classification === "HIGH_RISK" || analyticsResult.classification === "At-Risk"
-                                ? "text-danger"
-                                : "text-success"
-                            }`}>
-                              {analyticsResult.classification || analyticsResult.status || "Not At-Risk"}
+                            <span className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">
+                              Classification Status
+                            </span>
+                            <h4
+                              className={`text-xl font-display font-bold mt-1 ${
+                                analyticsResult.status === "At-Risk" ? "text-danger" : "text-success"
+                              }`}
+                            >
+                              {analyticsResult.status}
                             </h4>
                           </div>
-
                           <div className="text-right">
-                            <span className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">Dropout Probability</span>
+                            <span className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">
+                              Dropout Probability
+                            </span>
                             <span className="block text-2xl font-display font-bold text-slate-800">
-                              {analyticsResult.dropoutProbability ? (analyticsResult.dropoutProbability * 100).toFixed(1) + "%" : analyticsResult.riskProbability + "%"}
+                              {analyticsResult.riskProbability}%
                             </span>
                           </div>
                         </div>
@@ -1195,34 +1241,46 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
                           <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                             <span className="block text-[10px] text-slate-400 font-mono">ATTENDANCE</span>
-                            <strong className="block text-base mt-1 text-slate-800">{analyticsResult.attendancePercentage || analyticsResult.metrics?.attendance || 0}%</strong>
+                            <strong className="block text-base mt-1 text-slate-800">
+                              {analyticsResult.metrics?.attendance}%
+                            </strong>
                           </div>
                           <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                             <span className="block text-[10px] text-slate-400 font-mono">AVG GRADE</span>
-                            <strong className="block text-base mt-1 text-slate-800">{analyticsResult.cgpa || analyticsResult.metrics?.grade || 0}%</strong>
+                            <strong className="block text-base mt-1 text-slate-800">
+                              {analyticsResult.metrics?.grade}%
+                            </strong>
                           </div>
                           <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-100">
                             <span className="block text-[10px] text-slate-400 font-mono">SUBMISSIONS</span>
-                            <strong className="block text-base mt-1 text-slate-800">{analyticsResult.continuousAssessmentAvg || analyticsResult.metrics?.submissions || 0}%</strong>
+                            <strong className="block text-base mt-1 text-slate-800">
+                              {analyticsResult.metrics?.submissions}%
+                            </strong>
                           </div>
                           <div className="bg-slate-50/50 p-3 rounded-lg border border-slate-100">
-                            <span className="block text-[10px] text-slate-400 font-mono">LIBRARY LOGINS</span>
-                            <strong className="block text-base mt-1 text-slate-800">{analyticsResult.metrics?.library || "N/A"}</strong>
+                            <span className="block text-[10px] text-slate-400 font-mono">LIBRARY</span>
+                            <strong className="block text-base mt-1 text-slate-800">
+                              {analyticsResult.metrics?.library}
+                            </strong>
                           </div>
                         </div>
 
                         <div className="space-y-2">
-                          <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">Advisor Evaluation & Justification</span>
+                          <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">
+                            Advisor Evaluation & Justification
+                          </span>
                           <p className="bg-blue-50/30 text-slate-700 p-4 rounded-xl border border-blue-50 text-xs md:text-sm leading-relaxed">
-                            {analyticsResult.feedback || analyticsResult.recommendedAction || "No additional feedback available."}
+                            {analyticsResult.feedback}
                           </p>
                         </div>
 
-                        {(analyticsResult.interventions || analyticsResult.keyRiskFactors) && (
+                        {analyticsResult.interventions && analyticsResult.interventions.length > 0 && (
                           <div className="space-y-2">
-                            <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">Intervention Protocols</span>
+                            <span className="block text-[10px] uppercase font-mono tracking-wider text-slate-400">
+                              Intervention Protocols
+                            </span>
                             <ul className="list-disc pl-5 space-y-1.5 text-slate-600 text-xs">
-                              {(analyticsResult.interventions || analyticsResult.keyRiskFactors || []).map((item: string, idx: number) => (
+                              {analyticsResult.interventions.map((item: string, idx: number) => (
                                 <li key={idx}>{item}</li>
                               ))}
                             </ul>
@@ -1232,7 +1290,9 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     ) : (
                       <div className="text-center py-20 text-slate-400 space-y-2">
                         <Sparkles className="w-12 h-12 mx-auto text-slate-200" />
-                        <p className="text-xs">Select a student and trigger risk analysis to compute regression status.</p>
+                        <p className="text-xs">
+                          Select a student and trigger risk analysis to compute regression status.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -1240,19 +1300,43 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               </motion.div>
             )}
 
-            {/* ✅ TAB: ZOOM LIVE TEACHING */}
-            {activeTab === "zoom" && (
+            {/* SMART CAMPUS FACILITIES */}
+            {activeTab === "facilities" && (
               <motion.div
+                key="instructor-facilities-tab"
                 initial={{ opacity: 0, y: 15 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
+              >
+                <SmartCampusFacilities user={user} />
+              </motion.div>
+            )}
+
+            {/* ZOOM */}
+            {activeTab === "zoom" && (
+              <motion.div
                 key="instructor-zoom-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
               >
                 <InstructorZoomManager
                   instructor={user}
                   courses={courses}
                   selectedCourseId={selectedCourseId}
                 />
+              </motion.div>
+            )}
+
+            {/* CAMPUS ALERTS */}
+            {activeTab === "alerts" && (
+              <motion.div
+                key="instructor-alerts-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+              >
+                <SmartCampusAlerts user={user} />
               </motion.div>
             )}
           </AnimatePresence>
