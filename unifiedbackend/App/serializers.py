@@ -232,3 +232,17 @@ class CampusMediaPostSerializer(serializers.ModelSerializer):
         if obj.video_file:
             return obj.video_file.url
         return obj.video_url
+class ZoomClassSessionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ZoomClassSession
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'course': {'required': False, 'allow_null': True},
+            'passcode': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'topic': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'lecture_notes': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'recording_url': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'recording_duration': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'host_url': {'required': False, 'allow_blank': True, 'allow_null': True},
+        }
