@@ -2,8 +2,9 @@ import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
 import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, Transcript } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
-import { BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload, ArrowRight, Download, CreditCard, Star, Check, HelpCircle, Shield, Award, Sparkles, QrCode } from "lucide-react";
+import { BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload, ArrowRight, Download, CreditCard, Star, Check, HelpCircle, Shield, Award, Sparkles, QrCode, Video } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
 
 interface StudentDashboardProps {
   user: User;
@@ -11,7 +12,7 @@ interface StudentDashboardProps {
 }
 
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "courses" | "materials" | "exams" | "grades" | "transcript" | "fees">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "courses" | "materials" | "exams" | "grades" | "transcript" | "fees" | "zoom">("dashboard");
   const [courses, setCourses] = useState<Course[]>([]);
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -22,23 +23,19 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<any>(null);
 
-  // Active exam state
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
   const examTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Interactive feedback/evaluation
   const [evaluatorInstructorId, setEvaluatorInstructorId] = useState<string | null>(null);
   const [evaluationFeedback, setEvaluationFeedback] = useState("");
   const [evaluationRating, setEvaluationRating] = useState(5);
 
-  // Payment portal state
   const [payAmount, setPayAmount] = useState<number>(0);
   const [cardNumber, setCardNumber] = useState("");
   const [showPayModal, setShowPayModal] = useState(false);
 
-  // Drag and drop assignment upload
   const [draggingAssignmentId, setDraggingAssignmentId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<{ [assignmentId: string]: string }>({});
 
@@ -46,7 +43,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     loadData();
   }, []);
 
-  // ✅ FIXED: Async data loading with proper error handling
   const loadData = async () => {
     try {
       const [
@@ -82,7 +78,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setSettings(settingsData || null);
     } catch (error) {
       console.error("Failed to load student data:", error);
-      // Fallback to empty arrays
       setCourses([]);
       setMaterials([]);
       setAnnouncements([]);
@@ -95,7 +90,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  // Start exam timer
   useEffect(() => {
     if (currentExam && examTimeRemaining > 0) {
       examTimerRef.current = setInterval(() => {
@@ -114,13 +108,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     };
   }, [currentExam, examTimeRemaining]);
 
-  const handleEnroll = (course: Course) => {
-    // BR-01 Check: Prerequisites check
+  const handleEnroll = async (course: Course) => {
     if (course.prerequisites && course.prerequisites.length > 0) {
       const missingPrereqs: string[] = [];
       course.prerequisites.forEach((p) => {
         const prereqCode = p.split(" ")[0];
-        // Check if student completed it with D or higher (>= 50 grade)
         const passedPrereq = grades.some(
           (g) => g.studentId === user.id && g.courseCode === prereqCode && g.totalGrade >= 50
         );
@@ -135,19 +127,16 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       }
     }
 
-    // Fee payment check
     if (user.outstandingFees && user.outstandingFees > 1000) {
       alert(`Enrollment Blocked: You must clear outstanding fee balances exceeding 1000 ETB. Current balance: ${user.outstandingFees} ETB.`);
       return;
     }
 
-    // Capacity Check
     if (course.enrolledStudentsCount >= course.capacity) {
       alert("Course is full. Adding to waitlist.");
       return;
     }
 
-    // Enroll
     const updatedCourses = courses.map((c) => {
       if (c.id === course.id) {
         return { ...c, enrolledStudentsCount: c.enrolledStudentsCount + 1 };
@@ -155,10 +144,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       return c;
     });
 
-    CampusDatabase.saveCourses(updatedCourses);
+    await CampusDatabase.saveCourses(updatedCourses);
     setCourses(updatedCourses);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "STUDENT",
@@ -171,7 +160,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     alert(`Successfully registered for ${course.courseCode}!`);
   };
 
-  // Drag and Drop simulation
   const handleDragOver = (e: DragEvent, assignmentId: string) => {
     e.preventDefault();
     setDraggingAssignmentId(assignmentId);
@@ -199,7 +187,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  const triggerAssignmentSubmit = (assignmentId: string, fileName: string) => {
+  const triggerAssignmentSubmit = async (assignmentId: string, fileName: string) => {
     const newSubmission: Submission = {
       id: "SUB_" + Date.now(),
       assignmentId,
@@ -212,12 +200,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       status: "PENDING"
     };
 
-    const currentSubmissions = CampusDatabase.getSubmissions();
+    const currentSubmissions = await CampusDatabase.getSubmissions();
     const updatedSubmissions = [newSubmission, ...currentSubmissions];
-    CampusDatabase.saveSubmissions(updatedSubmissions);
+    await CampusDatabase.saveSubmissions(updatedSubmissions);
     setSubmissions(updatedSubmissions);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "STUDENT",
@@ -230,12 +218,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     alert(`Successfully uploaded and submitted ${fileName}!`);
   };
 
-  // Exam Workflow
-  const startExam = (exam: Exam) => {
+  const startExam = async (exam: Exam) => {
     setCurrentExam(exam);
     setExamAnswers({});
     setExamTimeRemaining(exam.durationMinutes * 60);
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "STUDENT",
@@ -261,17 +248,15 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     completeExamSubmission();
   };
 
-  const completeExamSubmission = () => {
+  const completeExamSubmission = async () => {
     if (!currentExam) return;
 
-    // Calculate score for objective questions
     let calculatedScore = 0;
     currentExam.questions.forEach((q, idx) => {
       const studentAns = examAnswers[idx];
       if (q.questionType !== "short_answer" && studentAns === q.correctAnswer) {
         calculatedScore += q.marks;
       } else if (q.questionType === "short_answer") {
-        // Mock default score for subjective short answers
         calculatedScore += Math.floor(q.marks * 0.7);
       }
     });
@@ -289,22 +274,21 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       submittedAt: new Date().toISOString()
     };
 
-    const currentAttempts = CampusDatabase.getExamAttempts();
-    CampusDatabase.saveExamAttempts([...currentAttempts, newAttempt]);
+    const currentAttempts = await CampusDatabase.getExamAttempts();
+    await CampusDatabase.saveExamAttempts([...currentAttempts, newAttempt]);
     setExamAttempts([...currentAttempts, newAttempt]);
 
-    // Create a new Grade or update continuous assessment
-    const currentGrades = CampusDatabase.getGrades();
+    const currentGrades = await CampusDatabase.getGrades();
     const existingGrade = currentGrades.find(g => g.studentId === user.id && g.courseId === currentExam.courseId);
 
     if (existingGrade) {
       existingGrade.midExamScore = calculatedScore;
       existingGrade.totalGrade = existingGrade.continuousAssessmentScore + existingGrade.midExamScore + existingGrade.finalExamScore;
-      CampusDatabase.saveGrades(currentGrades);
+      await CampusDatabase.saveGrades(currentGrades);
       setGrades(currentGrades);
     }
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "STUDENT",
@@ -318,7 +302,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     alert(`Exam submitted successfully! Your preliminary score: ${calculatedScore}/${currentExam.totalMarks}`);
   };
 
-  // Evaluate Instructor
   const submitInstructorEvaluation = () => {
     if (!evaluatorInstructorId) return;
     alert(`Thank you for submitting your evaluation! Rating: ${evaluationRating}/5. Your feedback has been stored anonymously for department head review.`);
@@ -326,24 +309,24 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setEvaluationFeedback("");
   };
 
-  // Clear outstanding fees
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (!cardNumber || payAmount <= 0) {
       alert("Please enter a valid amount and credit card number.");
       return;
     }
 
-    const updatedUsers = CampusDatabase.getUsers().map(u => {
+    const users = await CampusDatabase.getUsers();
+    const updatedUsers = users.map(u => {
       if (u.id === user.id) {
         return { ...u, outstandingFees: Math.max(0, (u.outstandingFees || 0) - payAmount) };
       }
       return u;
     });
 
-    CampusDatabase.saveUsers(updatedUsers);
+    await CampusDatabase.saveUsers(updatedUsers);
     user.outstandingFees = Math.max(0, (user.outstandingFees || 0) - payAmount);
 
-    CampusDatabase.addAuditLog(
+    await CampusDatabase.addAuditLog(
       user.id,
       user.fullName,
       "STUDENT",
@@ -357,7 +340,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setPayAmount(0);
     setCardNumber("");
     setShowPayModal(false);
-    loadData();
+    await loadData();
   };
 
   const getMyGrades = () => {
@@ -372,7 +355,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="student_dashboard_main">
-      {/* UNIVERSITY INSTITUTIONAL HEADER */}
       <UniversityTopBar
         user={user}
         onLogout={onLogout}
@@ -382,7 +364,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         badgeType="student"
       />
 
-      {/* ACTIVE EXAM OVERLAY CONTAINER */}
       {currentExam && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
@@ -468,9 +449,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         </div>
       )}
 
-      {/* MAIN CONTAINER */}
       <div className="flex-1 flex" id="student_workspace_inner">
-        {/* SIDEBAR */}
         <aside className="w-64 bg-[#071526] text-slate-300 flex flex-col border-r border-slate-800/80">
           <nav className="p-3.5 flex-1 space-y-1">
             <button
@@ -517,6 +496,24 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               <Play className="w-4 h-4 text-amber-400" />
               <span>Online Examinations</span>
             </button>
+            {/* ✅ NEW: Zoom Classroom tab */}
+            <button
+              onClick={() => setActiveTab("zoom")}
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                activeTab === "zoom"
+                  ? "bg-primary text-white border border-blue-400/30 shadow-xs"
+                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+              }`}
+            >
+              <div className="flex items-center space-x-3">
+                <Video className="w-4 h-4 text-blue-400" />
+                <span>Zoom Classroom</span>
+              </div>
+              <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-400/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>LIVE</span>
+              </span>
+            </button>
             <button
               onClick={() => setActiveTab("grades")}
               className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
@@ -557,7 +554,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
             </button>
           </nav>
 
-          {/* Quick info / status */}
           <div className="p-4 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono text-slate-400 space-y-1">
             <div className="flex justify-between items-center text-[10px]">
               <span className="text-slate-500">CURRICULUM</span>
@@ -574,10 +570,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           </div>
         </aside>
 
-        {/* WORKSPACE CONTENT AREA */}
         <main className="flex-1 p-8 overflow-y-auto">
           <AnimatePresence mode="wait">
-            {/* TAB: DASHBOARD */}
             {activeTab === "dashboard" && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -597,11 +591,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </div>
                 </div>
 
-                {/* Dashboard Grid */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Left Column: My Courses & Deadlines */}
                   <div className="lg:col-span-2 space-y-6">
-                    {/* Courses Card */}
                     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                       <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
                         <BookOpen className="w-5 h-5 text-primary" />
@@ -621,7 +612,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       </div>
                     </div>
 
-                    {/* Pending Assignments */}
                     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                       <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
                         <FileText className="w-5 h-5 text-primary" />
@@ -661,7 +651,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                     </div>
                                   ) : (
                                     <div className="w-full">
-                                      {/* Drag and Drop Zone */}
                                       <div className="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center cursor-pointer hover:border-primary transition">
                                         <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
                                         <p className="text-[10px] text-slate-500">Drag file here or click to upload</p>
@@ -689,9 +678,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     </div>
                   </div>
 
-                  {/* Right Column: Announcements & System Updates */}
                   <div className="space-y-6">
-                    {/* Announcements list */}
                     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                       <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
                         <AlertCircle className="w-5 h-5 text-primary" />
@@ -710,7 +697,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       </div>
                     </div>
 
-                    {/* Outstanding fees warning panel */}
                     {user.outstandingFees && user.outstandingFees > 0 && (
                       <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-950 space-y-3">
                         <div className="flex items-center space-x-2 text-danger">
@@ -733,7 +719,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* TAB: BROWSE COURSES */}
             {activeTab === "courses" && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -806,7 +791,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* TAB: LEARNING MATERIALS */}
             {activeTab === "materials" && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -859,7 +843,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* TAB: TAKE EXAMS */}
             {activeTab === "exams" && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -923,7 +906,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* TAB: GRADES */}
             {activeTab === "grades" && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -938,7 +920,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  {/* Left panel: Grades breakdowns */}
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50">
                       <h3 className="font-display font-bold text-slate-800 text-base">Semester Score Sheet</h3>
@@ -967,7 +948,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             </div>
                           </div>
 
-                          {/* Breakdown bar */}
                           <div className="grid grid-cols-3 gap-3 pt-2 text-center text-xs font-mono">
                             <div className="bg-slate-50 p-2.5 rounded border border-slate-100">
                               <span className="block text-[10px] text-slate-400 uppercase">Assessment (50%)</span>
@@ -987,7 +967,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     </div>
                   </div>
 
-                  {/* Right panel: evaluate instructor */}
                   <div className="space-y-6">
                     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                       <div className="flex items-center space-x-2 text-primary">
@@ -1045,7 +1024,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* TAB: TRANSCRIPT */}
             {activeTab === "transcript" && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -1080,7 +1058,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 ) : (
                   <div className="space-y-6">
                     <div className="bg-white border-2 border-slate-200 rounded-2xl p-8 max-w-3xl shadow-xl border-t-8 border-t-amber-500 relative overflow-hidden" id="printable-transcript-view">
-                      {/* Background Watermark */}
                       <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
                         <UniversitySeal className="w-96 h-96 text-primary" />
                       </div>
@@ -1155,7 +1132,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           </table>
                         </div>
 
-                        {/* Signatures & Seal Verification */}
                         <div className="border-t-2 border-slate-200 pt-6 mt-4 grid grid-cols-3 gap-4 items-center">
                           <div className="text-center space-y-1">
                             <div className="h-10 border-b border-slate-300 flex items-end justify-center pb-1">
@@ -1200,7 +1176,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* TAB: OUTSTANDING FEES */}
             {activeTab === "fees" && (
               <motion.div
                 initial={{ opacity: 0, y: 15 }}
@@ -1215,7 +1190,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  {/* Balance card */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
                     <span className="text-xs uppercase text-slate-400 font-mono tracking-widest font-bold">Tuition Fee Due</span>
                     <h3 className="text-3xl font-display font-bold text-slate-900">
@@ -1246,7 +1220,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     ) : null}
                   </div>
 
-                  {/* Payment Info */}
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-3 col-span-2 text-xs">
                     <h4 className="font-display font-bold text-slate-800 text-sm">Payment Methods & Instructions</h4>
                     <p className="text-slate-500 leading-relaxed">
@@ -1273,7 +1246,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </div>
                 </div>
 
-                {/* Simulated Credit Card Modal */}
                 {showPayModal && (
                   <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white w-full max-w-md rounded-xl overflow-hidden shadow-2xl p-6 space-y-4">
@@ -1345,11 +1317,22 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 )}
               </motion.div>
             )}
+
+            {/* ✅ TAB: ZOOM CLASSROOM */}
+            {activeTab === "zoom" && (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                key="student-zoom-tab"
+              >
+                <StudentZoomLearningHub student={user} enrolledCourses={courses} />
+              </motion.div>
+            )}
           </AnimatePresence>
         </main>
       </div>
 
-      {/* INSTITUTIONAL FOOTER */}
       <AcademicFooter />
     </div>
   );
