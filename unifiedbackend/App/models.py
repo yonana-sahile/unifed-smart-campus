@@ -89,6 +89,13 @@ class CourseMaterial(models.Model):
     description = models.TextField()
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
+    # ✅ NEW: File attachment metadata for PDF/DOCX uploads
+    file_name = models.CharField(max_length=255, blank=True, null=True)
+    file_size = models.CharField(max_length=50, blank=True, null=True)
+    file_data = models.TextField(blank=True, null=True)  # base64 Data URL
+    chapter_week = models.CharField(max_length=100, blank=True, null=True)
+    instructor_name = models.CharField(max_length=100, blank=True, null=True)
+
     def __str__(self):
         return self.title
 
@@ -181,6 +188,15 @@ class Exam(models.Model):
         ('ARCHIVED', 'Archived'),
     )
 
+    CATEGORY_CHOICES = (
+        ('MID_EXAM', 'Midterm Exam'),
+        ('FINAL_EXAM', 'Final Exam'),
+        ('QUIZ', 'Quiz'),
+        ('PRACTICE', 'Practice'),
+        ('TEST', 'Laboratory Test'),
+        ('EXAM', 'General Exam'),
+    )
+
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='exams')
     course_title = models.CharField(max_length=200)
     exam_title = models.CharField(max_length=200)
@@ -192,6 +208,12 @@ class Exam(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # ✅ NEW: Push portal fields for live exam distribution to students
+    is_pushed = models.BooleanField(default=False)
+    pushed_at = models.DateTimeField(blank=True, null=True)
+    created_by = models.CharField(max_length=100, blank=True, null=True)
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='EXAM', blank=True)
 
     def __str__(self):
         return self.exam_title
@@ -675,6 +697,9 @@ class CampusMediaPost(models.Model):
         if self.video_file:
             return self.video_file.url
         return self.video_url
+
+
+# ---------- ZOOM CLASS SESSION ----------
 class ZoomClassSession(models.Model):
     STATUS_CHOICES = (
         ('UPCOMING', 'Upcoming'),
