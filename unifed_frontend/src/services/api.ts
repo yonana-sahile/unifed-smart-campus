@@ -82,6 +82,18 @@ export const getMaterials = (): Promise<CourseMaterial[]> =>
 export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMaterial[]> =>
   api.put('/materials/', materials).then(r => r.data);
 
+// ✅ NEW: create one material via POST (matches DRF ModelViewSet).
+// Needed for PDF/DOCX file attachments + chapter tagging since bulk PUT
+// on the list endpoint is not supported.
+export const addMaterial = (material: any): Promise<CourseMaterial> =>
+  api.post('/materials/', material).then(r => r.data);
+
+export const updateMaterial = (id: string, material: any): Promise<CourseMaterial> =>
+  api.patch(`/materials/${id}/`, material).then(r => r.data);
+
+export const deleteMaterial = (id: string): Promise<void> =>
+  api.delete(`/materials/${id}/`).then(() => undefined);
+
 // ---------- ANNOUNCEMENTS ----------
 export const getAnnouncements = (): Promise<Announcement[]> =>
   api.get('/announcements/').then(r => unwrapList<Announcement>(r.data));
@@ -136,16 +148,42 @@ export const getAssignments = (): Promise<Assignment[]> =>
   api.get('/assignments/').then(r => unwrapList<Assignment>(r.data));
 export const saveAssignments = (assignments: Assignment[]): Promise<Assignment[]> =>
   api.put('/assignments/', assignments).then(r => r.data);
+export const addAssignment = (assignment: any): Promise<Assignment> =>
+  api.post('/assignments/', assignment).then(r => r.data);
+export const deleteAssignment = (id: string): Promise<void> =>
+  api.delete(`/assignments/${id}/`).then(() => undefined);
 
 // ---------- SUBMISSIONS ----------
 export const getSubmissions = (): Promise<Submission[]> =>
   api.get('/submissions/').then(r => unwrapList<Submission>(r.data));
 export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]> =>
   api.put('/submissions/', submissions).then(r => r.data);
+export const addSubmission = (submission: any): Promise<Submission> =>
+  api.post('/submissions/', submission).then(r => r.data);
 
 // ---------- EXAMS ----------
 export const getExams = (): Promise<Exam[]> =>
   api.get('/exams/').then(r => unwrapList<Exam>(r.data));
+
+// ✅ NEW: create one exam via POST with nested questions + push metadata.
+// DRF's ModelViewSet doesn't allow PUT on the list endpoint, so we use
+// POST for creations and a dedicated /push/ action for the push toggle.
+export const createExam = (exam: any): Promise<Exam> =>
+  api.post('/exams/', exam).then(r => r.data);
+
+export const updateExam = (id: string, exam: any): Promise<Exam> =>
+  api.patch(`/exams/${id}/`, exam).then(r => r.data);
+
+// ✅ NEW: toggle the "pushed to students" flag via the dedicated action.
+// Flipping status between DRAFT and ACTIVE + recording pushed_at.
+export const pushExam = (examId: string, isPushed: boolean): Promise<Exam> =>
+  api.post(`/exams/${examId}/push/`, { is_pushed: isPushed }).then(r => r.data);
+
+export const deleteExam = (id: string): Promise<void> =>
+  api.delete(`/exams/${id}/`).then(() => undefined);
+
+// Legacy compatibility — DRF disallows bulk PUT on /exams/ (405).
+// Kept so older components don't crash at import time.
 export const saveExams = (exams: Exam[]): Promise<Exam[]> =>
   api.put('/exams/', exams).then(r => r.data);
 
@@ -154,6 +192,10 @@ export const getExamAttempts = (): Promise<ExamAttempt[]> =>
   api.get('/exam-attempts/').then(r => unwrapList<ExamAttempt>(r.data));
 export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> =>
   api.put('/exam-attempts/', attempts).then(r => r.data);
+
+// ✅ NEW: student submits one attempt via POST
+export const createExamAttempt = (attempt: any): Promise<ExamAttempt> =>
+  api.post('/exam-attempts/', attempt).then(r => r.data);
 
 // ---------- GRADES ----------
 export const getGrades = (): Promise<Grade[]> =>
@@ -323,12 +365,6 @@ export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
   api.post(`/media-posts/${id}/like/`).then(r => r.data);
 
 // ---------- ZOOM CLASS SESSIONS ----------
-// ✅ MOVED ABOVE the CampusDatabase export so the functions exist at
-// object-creation time. Previously they were declared AFTER the export,
-// which left `CampusDatabase.getZoomSessions` as `undefined`.
-//
-// Convert camelCase → snake_case for DRF. Only includes keys that are
-// actually present in `data`, so PATCH partial updates work correctly.
 const toZoomSnakeCase = (data: any): any => {
   const keyMap: Record<string, string> = {
     courseId: 'course', course: 'course',
@@ -359,7 +395,6 @@ const toZoomSnakeCase = (data: any): any => {
   return result;
 };
 
-// Convert snake_case → camelCase for the frontend components.
 const fromZoomSnakeCase = (raw: any) => ({
   id: String(raw?.id ?? ""),
   courseId: raw?.course ?? raw?.courseId ?? null,
@@ -406,18 +441,29 @@ export const CampusDatabase = {
   saveCourses,
   getMaterials,
   saveMaterials,
+  addMaterial,
+  updateMaterial,
+  deleteMaterial,
   getAnnouncements,
   createAnnouncement,
   updateAnnouncement,
   deleteAnnouncement,
   getAssignments,
   saveAssignments,
+  addAssignment,
+  deleteAssignment,
   getSubmissions,
   saveSubmissions,
+  addSubmission,
   getExams,
+  createExam,
+  updateExam,
+  pushExam,
+  deleteExam,
   saveExams,
   getExamAttempts,
   saveExamAttempts,
+  createExamAttempt,
   getGrades,
   saveGrades,
   getTranscripts,

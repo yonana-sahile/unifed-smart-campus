@@ -13,12 +13,6 @@ import random
 import string
 
 
-# ---------- CUSTOM PERMISSION ----------
-# We'll use DRF's built-in IsAuthenticatedOrReadOnly for most views.
-# This allows GET requests without authentication, but requires auth for writes.
-# For UserViewSet, we keep create as AllowAny.
-
-
 # ---------- AUTH ----------
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
@@ -53,8 +47,6 @@ class AuthViewSet(viewsets.GenericViewSet):
 
 
 # ---------- GENERIC BASE VIEWSET ----------
-# Uses IsAuthenticatedOrReadOnly so that unauthenticated users can view data
-# but must be logged in to create, update, or delete.
 class BaseViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
 
@@ -63,18 +55,13 @@ class BaseViewSet(viewsets.ModelViewSet):
 
 
 # ---------- USER ----------
-# User creation (register) is open to all, but listing, updating, deleting
-# still require authentication (IsAuthenticatedOrReadOnly).
-# We override get_permissions to allow unauthenticated POST for registration.
 class UserViewSet(BaseViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
 
     def get_permissions(self):
-        # Allow any user to create (register) a new account
         if self.action == 'create':
             return [permissions.AllowAny()]
-        # For update_user action, we still require authentication
         return super().get_permissions()
 
     @action(detail=True, methods=['put'], permission_classes=[permissions.IsAuthenticated])
@@ -103,8 +90,6 @@ class CourseViewSet(BaseViewSet):
         if course.enrolled_students_count >= course.capacity:
             return Response({'error': 'Course is full'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Check prerequisites (simple implementation – can be extended)
-        # For now, we skip detailed check and just increment.
         course.enrolled_students_count += 1
         course.save()
 
@@ -113,13 +98,13 @@ class CourseViewSet(BaseViewSet):
 
 # ---------- COURSE MATERIAL ----------
 class CourseMaterialViewSet(BaseViewSet):
-    queryset = CourseMaterial.objects.all()
+    queryset = CourseMaterial.objects.all().order_by('-uploaded_at')
     serializer_class = CourseMaterialSerializer
 
 
 # ---------- ANNOUNCEMENT ----------
 class AnnouncementViewSet(BaseViewSet):
-    queryset = Announcement.objects.all()
+    queryset = Announcement.objects.all().order_by('-posted_at')
     serializer_class = AnnouncementSerializer
 
 
@@ -143,7 +128,7 @@ class QuestionViewSet(BaseViewSet):
 
 # ---------- EXAM ----------
 class ExamViewSet(BaseViewSet):
-    queryset = Exam.objects.all()
+    queryset = Exam.objects.all().order_by('-created_at')
     serializer_class = ExamSerializer
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
@@ -169,10 +154,32 @@ class ExamViewSet(BaseViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    # ✅ NEW: Dedicated push action for the instructor push portal.
+    # Accepts { is_pushed: true/false } and flips the exam's status between
+    # DRAFT and ACTIVE, recording the push timestamp.
+    # The frontend calls POST /exams/{id}/push/ instead of PATCHing the
+    # full exam object, which is cleaner and avoids the 405 bulk-PUT trap.
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def push(self, request, pk=None):
+        exam = self.get_object()
+        is_pushed = bool(request.data.get('is_pushed', True))
+
+        exam.is_pushed = is_pushed
+        exam.status = 'ACTIVE' if is_pushed else 'DRAFT'
+        if is_pushed:
+            exam.pushed_at = timezone.now()
+            if not exam.created_by:
+                exam.created_by = request.user.full_name
+        else:
+            exam.pushed_at = None
+        exam.save()
+
+        return Response(self.get_serializer(exam).data)
+
 
 # ---------- EXAM ATTEMPT ----------
 class ExamAttemptViewSet(BaseViewSet):
-    queryset = ExamAttempt.objects.all()
+    queryset = ExamAttempt.objects.all().order_by('-submitted_at')
     serializer_class = ExamAttemptSerializer
 
 
@@ -260,7 +267,7 @@ class CertificateRecordViewSet(BaseViewSet):
 
 # ---------- AUDIT LOG ----------
 class AuditLogViewSet(BaseViewSet):
-    queryset = AuditLog.objects.all()
+    queryset = AuditLog.objects.all().order_by('-timestamp')
     serializer_class = AuditLogSerializer
 
 
@@ -288,7 +295,7 @@ class CampusAlertViewSet(BaseViewSet):
     serializer_class = CampusAlertSerializer
 
 
-# ✅ ---------- CAMPUS MEDIA POST (UPDATED WITH FILE UPLOAD) ----------
+# ---------- CAMPUS MEDIA POST ----------
 class CampusMediaPostViewSet(BaseViewSet):
     queryset = CampusMediaPost.objects.all()
     serializer_class = CampusMediaPostSerializer
@@ -307,53 +314,32 @@ class CampusMediaPostViewSet(BaseViewSet):
         post.save()
         return Response({'likes_count': post.likes_count})
 
-    # ✅ FIXED: Override create to handle file uploads (multipart/form-data)
-    # correctly, including JSONField ("tags") which arrives as a raw JSON
-    # string over multipart and must be parsed back into a real list before
-    # validation — otherwise it gets stored as a literal string.
     def create(self, request, *args, **kwargs):
-        # ⚠️ IMPORTANT: do NOT use request.data.copy() when a file is
-        # present. QueryDict.copy() performs a deepcopy() internally, and
-        # deep-copying an in-memory/temporary uploaded file object corrupts
-        # it — Django's FileField then rejects it with "The submitted data
-        # was not a file. Check the encoding type on the form." even though
-        # a real file was actually uploaded.
-        #
-        # QueryDict.dict() avoids this: it builds a plain dict using the
-        # SAME object references (no deep copy), so the file stays intact.
         if hasattr(request.data, 'dict'):
             data = request.data.dict()
         else:
             data = dict(request.data)
 
-        # Explicitly (re)attach the file from request.FILES to be safe
-        # regardless of how the multipart parser merged it into request.data.
         if request.FILES.get('video_file'):
             data['video_file'] = request.FILES['video_file']
 
-        # ✅ Parse "tags" back into a real list/dict if it arrived as a
-        # JSON-encoded string (always the case for multipart/form-data,
-        # since HTML forms can only send strings/files, never nested types).
         raw_tags = data.get('tags')
         if isinstance(raw_tags, str):
             try:
                 data['tags'] = json.loads(raw_tags)
             except (TypeError, ValueError):
-                # Fall back to a single-item list rather than failing the
-                # whole request over a malformed tags string.
                 data['tags'] = [raw_tags] if raw_tags else []
 
-        # The serializer will validate that at least one video source exists
         serializer = self.get_serializer(data=data)
         if serializer.is_valid():
             self.perform_create(serializer)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-        # ✅ Log full validation errors server-side too, so you can see them
-        # in the Django console (runserver output) without needing the
-        # browser DevTools open.
         print("CampusMediaPost create() validation errors:", serializer.errors)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# ---------- ZOOM CLASS SESSION ----------
 class ZoomClassSessionViewSet(BaseViewSet):
     queryset = ZoomClassSession.objects.all().order_by('-start_time')
     serializer_class = ZoomClassSessionSerializer
@@ -378,6 +364,7 @@ class ZoomClassSessionViewSet(BaseViewSet):
         session.save()
         return Response(self.get_serializer(session).data)
 
+
 # ---------- AI ----------
 class AIViewSet(viewsets.GenericViewSet):
     permission_classes = [permissions.IsAuthenticated]
@@ -390,7 +377,6 @@ class AIViewSet(viewsets.GenericViewSet):
         except User.DoesNotExist:
             return Response({'error': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Calculate risk based on attendance, grades, etc.
         attendance = AttendanceRecord.objects.filter(student=student)
         avg_attendance = attendance.aggregate(Avg('attendance_percentage'))['attendance_percentage__avg'] or 0
 
@@ -430,7 +416,6 @@ class AIViewSet(viewsets.GenericViewSet):
         num_questions = request.data.get('numberOfQuestions', 4)
         difficulty = request.data.get('difficulty', 'Medium')
 
-        # Generate mock questions
         questions = []
         for i in range(num_questions):
             questions.append({

@@ -40,10 +40,6 @@ class CourseSerializer(serializers.ModelSerializer):
 
 
 # ---------- COURSE MATERIAL ----------
-# ✅ UPDATED: allow PDF/DOCX file attachment metadata as optional so the
-# instructor's upload form (with .pdf/.docx attachments and chapter tags)
-# can POST successfully. Without extra_kwargs, DRF would reject these
-# fields as required when they arrive empty over JSON.
 class CourseMaterialSerializer(serializers.ModelSerializer):
     class Meta:
         model = CourseMaterial
@@ -95,11 +91,12 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 # ---------- EXAM ----------
-# ✅ UPDATED: allow the new push-portal fields (is_pushed, pushed_at,
-# created_by, category) to be sent from the frontend, and mark auto-set
-# fields as read-only so DRF doesn't demand them on POST.
+# ✅ FIXED: `questions` is now writable so the instructor's Exam Builder
+# can POST the full exam (title + duration + all questions) in a single
+# request. Custom create/update handle the nested Question creation and
+# M2M linking.
 class ExamSerializer(serializers.ModelSerializer):
-    questions = QuestionSerializer(many=True, read_only=True)
+    questions = QuestionSerializer(many=True, required=False)
 
     class Meta:
         model = Exam
@@ -112,6 +109,29 @@ class ExamSerializer(serializers.ModelSerializer):
             'category': {'required': False, 'allow_blank': True, 'allow_null': True},
             'status': {'required': False},
         }
+
+    def create(self, validated_data):
+        questions_data = validated_data.pop('questions', [])
+        exam = Exam.objects.create(**validated_data)
+        for q_data in questions_data:
+            # Remove DRF-injected non-model keys if present
+            q_data.pop('id', None)
+            q = Question.objects.create(**q_data)
+            exam.questions.add(q)
+        return exam
+
+    def update(self, instance, validated_data):
+        questions_data = validated_data.pop('questions', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if questions_data is not None:
+            instance.questions.clear()
+            for q_data in questions_data:
+                q_data.pop('id', None)
+                q = Question.objects.create(**q_data)
+                instance.questions.add(q)
+        return instance
 
 
 # ---------- EXAM ATTEMPT ----------
@@ -250,7 +270,6 @@ class CampusMediaPostSerializer(serializers.ModelSerializer):
         }
 
     def get_video_source(self, obj):
-        """Return the video URL from file or URL field."""
         if obj.video_file:
             return obj.video_file.url
         return obj.video_url
