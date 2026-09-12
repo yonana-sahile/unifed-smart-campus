@@ -8,8 +8,22 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
 DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
 
-# Allow Render domain, localhost, and custom hostnames
-ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '*.onrender.com,localhost,127.0.0.1').split(',')
+# Allow Render domain, wildcard domain, localhost, and custom hostnames
+ALLOWED_HOSTS = [
+    'unifed-smart-campus.onrender.com',
+    '.onrender.com',
+    'localhost',
+    '127.0.0.1',
+    '*',
+]
+
+# Add additional hosts from environment variables if present
+EXTRA_ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '')
+if EXTRA_ALLOWED_HOSTS:
+    ALLOWED_HOSTS.extend([host.strip() for host in EXTRA_ALLOWED_HOSTS.split(',') if host.strip()])
+
+# Tell Django it is behind a reverse proxy (Render) handling HTTPS
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -108,6 +122,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
     "http://frontend:5173",
+    "https://unifed-smart-campus.onrender.com",
 ]
 
 # Dynamically append extra CORS origins (e.g., Vercel deployment URL) from environment variable
@@ -119,6 +134,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "http://frontend:5173",
+    "https://unifed-smart-campus.onrender.com",
     "https://*.onrender.com",
     "https://*.vercel.app",
 ]
