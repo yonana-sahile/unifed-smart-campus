@@ -44,8 +44,8 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # WhiteNoise for serving static files on Render
-    'corsheaders.middleware.CorsMiddleware',
+    'corsheaders.middleware.CorsMiddleware',  # Placed above WhiteNoise to intercept origins early
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -74,7 +74,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'unifiedbackend.wsgi.application'
 
-# Database Configuration (Parse DATABASE_URL environment variable on Render, with fallback to local env vars)
+# Database Configuration
 DATABASES = {
     'default': dj_database_url.config(
         default=f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'postgres')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'smartcampus_db')}",
@@ -123,6 +123,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://frontend:5173",
     "https://unifed-smart-campus.onrender.com",
+    "https://unifed-smart-campus.vercel.app",
 ]
 
 # Dynamically append extra CORS origins (e.g., Vercel deployment URL) from environment variable
