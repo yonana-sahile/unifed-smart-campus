@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import type { User, Grade, AuditLog } from "../types";
-import { CampusDatabase } from "../services/api"; // ✅ Changed from mockData
+import { CampusDatabase } from "../services/api";
 import { AcademicFooter, EthiopianFlag } from "./UniversityHeader";
 import { UpdateProfileModal } from "./UpdateProfileModal";
 import {
@@ -15,14 +15,16 @@ import {
   Database,
   UserCog,
   Camera,
-  Edit3
+  Edit3,
+  Menu,
+  X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
-  // ✅ Profile update state
   const [currentUser, setCurrentUser] = useState<User>(user);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   useEffect(() => {
     setCurrentUser(user);
@@ -38,7 +40,6 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     return () => window.removeEventListener("uscms_user_updated", handleUserUpdate);
   }, [currentUser.id]);
 
-  // Dashboard state
   const [activeTab, setActiveTab] = useState<"hemis" | "exit-exams" | "grading-audit" | "grants" | "reports">("hemis");
   const [students, setStudents] = useState<User[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -46,7 +47,6 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string>("2026-06-28T10:15:22Z");
 
-  // States for Fayda & Exit Exam interactive tools
   const [faydaStatus, setFaydaStatus] = useState<{ [id: string]: "VERIFIED" | "PENDING" | "FLAGGED" }>({
     "U_ST01": "VERIFIED",
     "U_ST02": "VERIFIED",
@@ -68,7 +68,6 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     loadData();
   }, []);
 
-  // ✅ FIXED: Async data loading with proper error handling
   const loadData = async () => {
     try {
       const [usersData, gradesData, logsData] = await Promise.all([
@@ -88,7 +87,6 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }
   };
 
-  // ✅ FIXED: Async HEMIS sync
   const triggerHEMISSync = async () => {
     setIsSyncing(true);
     setTimeout(async () => {
@@ -114,12 +112,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }, 1800);
   };
 
-  // ✅ FIXED: Async verify Fayda ID
   const verifyFaydaID = async (studentId: string, name: string) => {
-    setFaydaStatus(prev => ({
-      ...prev,
-      [studentId]: "VERIFIED"
-    }));
+    setFaydaStatus(prev => ({ ...prev, [studentId]: "VERIFIED" }));
     try {
       await CampusDatabase.addAuditLog(
         currentUser.id,
@@ -137,12 +131,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }
   };
 
-  // ✅ FIXED: Async approve exit exam ticket
   const approveExitExamTicket = async (studentId: string, name: string) => {
-    setExitExamStatus(prev => ({
-      ...prev,
-      [studentId]: "APPROVED"
-    }));
+    setExitExamStatus(prev => ({ ...prev, [studentId]: "APPROVED" }));
     try {
       await CampusDatabase.addAuditLog(
         currentUser.id,
@@ -160,12 +150,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }
   };
 
-  // ✅ FIXED: Async flag exit exam ticket
   const flagExitExamTicket = async (studentId: string, name: string) => {
-    setExitExamStatus(prev => ({
-      ...prev,
-      [studentId]: "FLAGGED"
-    }));
+    setExitExamStatus(prev => ({ ...prev, [studentId]: "FLAGGED" }));
     try {
       await CampusDatabase.addAuditLog(
         currentUser.id,
@@ -183,7 +169,6 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
     }
   };
 
-  // ✅ FIXED: Async release grant
   const handleReleaseGrant = async () => {
     setReleasingGrant(true);
     setTimeout(async () => {
@@ -211,120 +196,142 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
 
   const showToast = (msg: string) => {
     setActiveNotification(msg);
-    setTimeout(() => {
-      setActiveNotification(null);
-    }, 4000);
+    setTimeout(() => setActiveNotification(null), 4000);
   };
 
-  // Basic stats for Quality Audit
   const averageGpa = students.length > 0 ? (students.reduce((acc, s) => acc + (s.cgpa || 0), 0) / students.length).toFixed(2) : "0.00";
 
-  // Grade Distribution count
   const letterGradeCounts = Array.isArray(grades) ? grades.reduce((acc, g) => {
     acc[g.letterGrade] = (acc[g.letterGrade] || 0) + 1;
     return acc;
   }, {} as { [key: string]: number }) : {};
 
+  const navItems = [
+    { id: "hemis", label: "HEMIS Integration Portal", shortLabel: "HEMIS", Icon: Database, badge: "Live", badgeColor: "emerald" },
+    { id: "exit-exams", label: "Exit Exam Compliance", shortLabel: "Exit Exams", Icon: CheckSquare, badge: "National", badgeColor: "amber" },
+    { id: "grading-audit", label: "Academic Grade Audit", shortLabel: "Grade Audit", Icon: BarChart2 },
+    { id: "grants", label: "Federal Operational Grants", shortLabel: "Grants", Icon: Coins },
+    { id: "reports", label: "Executive Quality Report", shortLabel: "Reports", Icon: FileText },
+  ] as const;
+
+  const goToTab = (id: string) => {
+    setActiveTab(id as any);
+    setIsMobileNavOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      {/* Interactive notification toaster */}
+      {/* Notification toaster */}
       <AnimatePresence>
         {activeNotification && (
           <motion.div
             initial={{ opacity: 0, y: -50, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white border border-emerald-500/30 px-6 py-3.5 rounded-xl shadow-2xl flex items-center space-x-3 text-xs md:text-sm font-semibold max-w-lg"
+            className="fixed top-4 sm:top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white border border-emerald-500/30 px-4 sm:px-6 py-3 sm:py-3.5 rounded-xl shadow-2xl flex items-center space-x-2 sm:space-x-3 text-[11px] sm:text-xs md:text-sm font-semibold max-w-[90vw] sm:max-w-lg"
           >
-            <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
-            <span className="text-emerald-400 font-bold">Federal Monitor:</span>
-            <span>{activeNotification}</span>
+            <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-emerald-500 rounded-full animate-ping shrink-0" />
+            <span className="text-emerald-400 font-bold shrink-0">Federal Monitor:</span>
+            <span className="truncate">{activeNotification}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Main Government Header with Profile Update */}
-      <header className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 text-white border-b border-emerald-500/20 sticky top-0 z-40 px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div className="flex items-center space-x-4">
-          <div className="bg-emerald-500/15 border border-emerald-400/30 p-1.5 rounded-xl flex items-center justify-center shadow-inner">
-            <EthiopianFlag className="w-10 h-6.5 rounded-sm shadow-md" />
-          </div>
-          <div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-md font-bold tracking-widest border border-emerald-500/10">
-                FDRE Government Portal
-              </span>
-              <span className="text-slate-400 text-xs font-mono">• Active Clearance</span>
-            </div>
-            <h1 className="text-lg md:text-xl font-display font-extrabold text-slate-100 tracking-tight leading-tight">
-              Higher Education Management Information System (HEMIS)
-            </h1>
-            <p className="text-xs text-emerald-400/80 font-medium">
-              Ministry of Education • National Quality Assurance & Audit Directorate
-            </p>
-          </div>
-        </div>
+      {/* Government Header */}
+      <header className="bg-gradient-to-r from-emerald-950 via-slate-900 to-emerald-950 text-white border-b border-emerald-500/20 sticky top-0 z-40 px-3 sm:px-6 py-3 sm:py-4">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4">
+          {/* Left: hamburger + flag + titles */}
+          <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 w-full md:w-auto">
+            {/* Mobile hamburger */}
+            <button
+              type="button"
+              onClick={() => setIsMobileNavOpen((prev) => !prev)}
+              className="lg:hidden p-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 focus:outline-none transition shrink-0 active:scale-95"
+              aria-label="Toggle navigation menu"
+            >
+              {isMobileNavOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+            </button>
 
-        {/* ✅ Profile section with edit button */}
-        <div className="flex items-center space-x-3">
-          <button
-            type="button"
-            onClick={() => setIsProfileModalOpen(true)}
-            title="Click to edit profile, update name, password, or avatar • መገለጫዎን ለማዘመን ይጫኑ"
-            className="group flex items-center space-x-3 p-1.5 rounded-xl hover:bg-white/10 transition text-left cursor-pointer border border-transparent hover:border-emerald-400/40"
-          >
-            <div className="text-right">
-              <div className="flex items-center justify-end space-x-1">
-                <span className="text-sm font-semibold text-slate-100 group-hover:text-emerald-300 transition-colors">
-                  {currentUser.fullName}
+            <div className="bg-emerald-500/15 border border-emerald-400/30 p-1.5 rounded-xl flex items-center justify-center shadow-inner shrink-0">
+              <EthiopianFlag className="w-8 h-5 sm:w-10 sm:h-6.5 rounded-sm shadow-md" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
+                <span className="text-[9px] sm:text-[10px] font-mono bg-emerald-500/20 text-emerald-300 px-1.5 sm:px-2 py-0.5 rounded-md font-bold tracking-widest border border-emerald-500/10">
+                  FDRE Government Portal
                 </span>
-                <Edit3 className="w-3 h-3 text-slate-400 group-hover:text-emerald-300 opacity-60 group-hover:opacity-100 transition-opacity" />
+                <span className="text-slate-400 text-[10px] sm:text-xs font-mono hidden sm:inline">• Active Clearance</span>
               </div>
-              <span className="block text-[10px] text-emerald-400 font-mono uppercase font-bold tracking-wider">
-                Senior Federal Inspector
-              </span>
+              <h1 className="text-xs sm:text-base md:text-xl font-display font-extrabold text-slate-100 tracking-tight leading-tight truncate">
+                Higher Education Management Information System (HEMIS)
+              </h1>
+              <p className="text-[10px] sm:text-xs text-emerald-400/80 font-medium truncate">
+                Ministry of Education • National Quality Assurance & Audit Directorate
+              </p>
             </div>
+          </div>
 
-            <div className="relative">
-              {currentUser.avatarUrl ? (
-                <img
-                  src={currentUser.avatarUrl}
-                  alt={currentUser.fullName}
-                  referrerPolicy="no-referrer"
-                  className="w-9 h-9 rounded-xl border border-emerald-500/60 object-cover shadow-md group-hover:border-emerald-400 transition"
-                />
-              ) : (
-                <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 font-display font-bold text-sm shadow-md group-hover:border-emerald-400 transition">
-                  {currentUser.fullName.charAt(0)}
+          {/* Right: profile + logout */}
+          <div className="flex items-center space-x-2 sm:space-x-3 shrink-0 self-end md:self-auto">
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="group flex items-center space-x-2 sm:space-x-3 p-1 sm:p-1.5 rounded-xl hover:bg-white/10 transition text-left cursor-pointer border border-transparent hover:border-emerald-400/40"
+            >
+              <div className="text-right hidden sm:block">
+                <div className="flex items-center justify-end space-x-1">
+                  <span className="text-xs sm:text-sm font-semibold text-slate-100 group-hover:text-emerald-300 transition-colors truncate max-w-[140px]">
+                    {currentUser.fullName}
+                  </span>
+                  <Edit3 className="w-3 h-3 text-slate-400 group-hover:text-emerald-300 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
                 </div>
-              )}
-              <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-slate-950 p-0.5 rounded-md shadow-xs opacity-80 group-hover:opacity-100 transition-opacity">
-                <Camera className="w-2.5 h-2.5" />
+                <span className="block text-[10px] text-emerald-400 font-mono uppercase font-bold tracking-wider">
+                  Senior Federal Inspector
+                </span>
               </div>
-            </div>
-          </button>
 
-          <button
-            type="button"
-            onClick={() => setIsProfileModalOpen(true)}
-            className="hidden sm:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold transition"
-            title="Update Profile, Name, Password & Avatar"
-          >
-            <UserCog className="w-3.5 h-3.5" />
-            <span>Edit Profile</span>
-          </button>
+              <div className="relative shrink-0">
+                {currentUser.avatarUrl ? (
+                  <img
+                    src={currentUser.avatarUrl}
+                    alt={currentUser.fullName}
+                    referrerPolicy="no-referrer"
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl border border-emerald-500/60 object-cover shadow-md group-hover:border-emerald-400 transition"
+                  />
+                ) : (
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-emerald-400 font-display font-bold text-sm shadow-md group-hover:border-emerald-400 transition">
+                    {currentUser.fullName.charAt(0)}
+                  </div>
+                )}
+                <div className="absolute -bottom-1 -right-1 bg-emerald-500 text-slate-950 p-0.5 rounded-md shadow-xs opacity-80 group-hover:opacity-100 transition-opacity">
+                  <Camera className="w-2 sm:w-2.5 h-2 sm:h-2.5" />
+                </div>
+              </div>
+            </button>
 
-          <div className="h-8 w-px bg-slate-700" />
-          <button
-            onClick={onLogout}
-            className="px-4 py-2 bg-slate-800/80 hover:bg-red-950/40 border border-slate-700 hover:border-red-500/40 text-slate-200 hover:text-red-300 rounded-lg text-xs font-bold transition duration-200"
-          >
-            Sign Out
-          </button>
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="hidden xl:flex items-center space-x-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold transition"
+              title="Update Profile, Name, Password & Avatar"
+            >
+              <UserCog className="w-3.5 h-3.5" />
+              <span>Edit Profile</span>
+            </button>
+
+            <div className="h-8 w-px bg-slate-700 hidden sm:block" />
+            <button
+              onClick={onLogout}
+              className="px-2.5 sm:px-4 py-1.5 sm:py-2 bg-slate-800/80 hover:bg-red-950/40 border border-slate-700 hover:border-red-500/40 text-slate-200 hover:text-red-300 rounded-lg text-[11px] sm:text-xs font-bold transition duration-200 shrink-0"
+            >
+              <span className="hidden sm:inline">Sign Out</span>
+              <span className="sm:hidden">Exit</span>
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* ✅ Update Profile Modal */}
+      {/* Update Profile Modal */}
       <UpdateProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
@@ -332,11 +339,127 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
         onProfileUpdated={(updated) => setCurrentUser(updated)}
       />
 
-      {/* Main Container Layout */}
-      <div className="flex-1 flex flex-col lg:flex-row">
-        {/* Left Side Navigation Sidebar */}
-        <aside className="w-full lg:w-72 bg-slate-900 text-slate-300 flex flex-col border-r border-slate-800/80">
-          {/* Quick Stats Summary Card */}
+      {/* MOBILE SLIDE-OUT DRAWER */}
+      <AnimatePresence>
+        {isMobileNavOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileNavOpen(false)}
+              className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 26, stiffness: 280 }}
+              className="fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-slate-900 text-slate-300 shadow-2xl flex flex-col border-r border-slate-800 overflow-hidden"
+            >
+              {/* Drawer header */}
+              <div className="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 font-bold">
+                    {currentUser.fullName.charAt(0)}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-white truncate">{currentUser.fullName}</h4>
+                    <p className="text-[10px] font-mono text-emerald-400 font-bold">SENIOR FEDERAL INSPECTOR</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Audited institution card */}
+              <div className="p-4 border-b border-slate-800/50 bg-slate-950/20">
+                <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-2 font-bold">
+                  Audited Institution
+                </div>
+                <div className="flex items-center space-x-3">
+                  <div className="w-1.5 h-8 bg-emerald-500 rounded" />
+                  <div className="min-w-0">
+                    <h4 className="font-display font-extrabold text-slate-200 text-xs truncate">Mekdela Amba University</h4>
+                    <p className="text-[10px] text-slate-500 font-mono">ID: MAU-GOV-90112</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Nav items */}
+              <nav className="p-3 flex-1 overflow-y-auto space-y-1.5">
+                {navItems.map(({ id, label, Icon, badge, badgeColor }: any) => (
+                  <button
+                    key={id}
+                    onClick={() => goToTab(id)}
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition ${
+                      activeTab === id
+                        ? "bg-gradient-to-r from-emerald-950/80 to-emerald-900/40 border border-emerald-500/20 text-white"
+                        : "text-slate-400 hover:bg-slate-800/50 hover:text-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center space-x-3 min-w-0">
+                      <Icon className="w-4 h-4 text-emerald-400 shrink-0" />
+                      <span className="truncate">{label}</span>
+                    </div>
+                    {badge && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                          badgeColor === "amber"
+                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/10"
+                            : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10"
+                        }`}
+                      >
+                        {badge}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </nav>
+
+              {/* Drawer footer */}
+              <div className="p-3 border-t border-slate-800 bg-slate-950/30">
+                <div className="flex items-center space-x-2 text-xs text-slate-400 mb-1.5">
+                  <Shield className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="font-bold font-mono text-[10px]">COMPLIANCE ASSURED</span>
+                </div>
+                <p className="text-[10px] text-slate-500 leading-normal">
+                  All inspections logged instantly in the national ledger under Higher Education Proclamation No. 1152/2019.
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MOBILE HORIZONTAL QUICK-NAV */}
+      <div className="lg:hidden sticky top-[72px] sm:top-[80px] md:top-[88px] z-30 bg-slate-900 border-b border-slate-800/90 px-2 py-1.5 overflow-x-auto flex items-center space-x-1.5 shadow-md shrink-0 scrollbar-none">
+        {navItems.map(({ id, shortLabel, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id as any)}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
+              activeTab === id
+                ? "bg-emerald-600 text-white border border-emerald-400/40 shadow-xs"
+                : "bg-slate-800/60 text-slate-300 hover:bg-slate-800 border border-slate-800"
+            }`}
+          >
+            <Icon className={`w-3.5 h-3.5 ${activeTab === id ? "text-white" : "text-emerald-400/80"}`} />
+            <span>{shortLabel}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Main Layout */}
+      <div className="flex-1 flex min-w-0">
+        {/* DESKTOP SIDEBAR (hidden below lg) */}
+        <aside className="hidden lg:flex lg:w-72 bg-slate-900 text-slate-300 flex-col border-r border-slate-800/80 shrink-0">
           <div className="p-5 border-b border-slate-800/50 bg-slate-950/20">
             <div className="text-[10px] font-mono text-slate-500 uppercase tracking-wider mb-2 font-bold">
               Audited Institution
@@ -428,7 +551,6 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
             </button>
           </nav>
 
-          {/* Secure Audit Badge */}
           <div className="p-5 border-t border-slate-800 bg-slate-950/30 space-y-2 mt-auto">
             <div className="flex items-center space-x-2 text-xs text-slate-400">
               <Shield className="w-3.5 h-3.5 text-emerald-500" />
@@ -440,14 +562,14 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
           </div>
         </aside>
 
-        {/* Right Side Auditing Canvas */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto">
+        {/* MAIN CONTENT */}
+        <main className="flex-1 p-3.5 sm:p-6 md:p-8 overflow-y-auto min-w-0">
           {/* TAB 1: HEMIS MASTER INTEGRATION */}
           {activeTab === "hemis" && (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-5">
                 <div>
-                  <h3 className="text-xl md:text-2xl font-display font-extrabold text-slate-900">
+                  <h3 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold text-slate-900">
                     National HEMIS Interface & Sync Core
                   </h3>
                   <p className="text-slate-500 text-xs md:text-sm mt-1">
@@ -457,15 +579,15 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 <button
                   onClick={triggerHEMISSync}
                   disabled={isSyncing}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2.5 shadow-md shadow-emerald-600/10 disabled:opacity-70 disabled:cursor-not-allowed"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 sm:px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2.5 shadow-md shadow-emerald-600/10 disabled:opacity-70 disabled:cursor-not-allowed w-full md:w-auto"
                 >
                   <RefreshCw className={`w-4 h-4 ${isSyncing ? "animate-spin" : ""}`} />
                   <span>{isSyncing ? "Syncing Entire Ledger..." : "Trigger Master HEMIS Sync"}</span>
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider">
                       HEMIS Bridge Status
@@ -473,16 +595,16 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                     <span className="h-2.5 w-2.5 bg-emerald-500 rounded-full animate-pulse" />
                   </div>
                   <div className="flex items-baseline justify-between">
-                    <strong className="text-2xl font-display font-black text-slate-800">CONNECTED</strong>
+                    <strong className="text-xl sm:text-2xl font-display font-black text-slate-800">CONNECTED</strong>
                     <span className="text-xs text-emerald-600 font-bold font-mono">SSL Secure</span>
                   </div>
                   <div className="text-[10px] text-slate-500 space-y-0.5">
-                    <p>Endpoint: <span className="font-mono">https://hemis.moe.gov.et/api/v4</span></p>
-                    <p>Last Audited Handshake: <span className="font-mono">{new Date(lastSyncTime).toLocaleString()}</span></p>
+                    <p className="break-all">Endpoint: <span className="font-mono">https://hemis.moe.gov.et/api/v4</span></p>
+                    <p>Last Handshake: <span className="font-mono">{new Date(lastSyncTime).toLocaleString()}</span></p>
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider">
                       Biometric Fayda Alignment
@@ -490,7 +612,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                     <span className="text-xs text-slate-500 font-semibold font-mono">MAU Directory</span>
                   </div>
                   <div className="flex items-baseline justify-between">
-                    <strong className="text-2xl font-display font-black text-slate-800">
+                    <strong className="text-xl sm:text-2xl font-display font-black text-slate-800">
                       {Object.values(faydaStatus).filter(s => s === "VERIFIED").length} / {students.length}
                     </strong>
                     <span className="text-xs bg-amber-500/10 text-amber-700 px-2 py-0.5 rounded font-bold border border-amber-500/10">
@@ -502,7 +624,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                   </p>
                 </div>
 
-                <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+                <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-wider">
                       Data Portability Health
@@ -510,7 +632,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                     <span className="text-xs text-emerald-600 font-bold">100% Valid</span>
                   </div>
                   <div className="flex items-baseline justify-between">
-                    <strong className="text-2xl font-display font-black text-slate-800">99.8%</strong>
+                    <strong className="text-xl sm:text-2xl font-display font-black text-slate-800">99.8%</strong>
                     <span className="text-[10px] text-slate-400 font-mono">0 Sync Dropped</span>
                   </div>
                   <p className="text-[10px] text-slate-500 leading-normal">
@@ -519,7 +641,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
                 <div>
                   <h4 className="font-display font-bold text-slate-800 text-base">
                     Federal Biometric Fayda ID Audit
@@ -530,7 +652,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs md:text-sm">
+                  <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[820px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-400 font-mono text-xs">
                         <th className="p-4">Student ID</th>
@@ -568,7 +690,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                                 {status}
                               </span>
                             </td>
-                            <td className="p-4 text-right">
+                            <td className="p-4 text-right whitespace-nowrap">
                               {status === "PENDING" ? (
                                 <button
                                   onClick={() => verifyFaydaID(st.id, st.fullName)}
@@ -594,8 +716,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
           {activeTab === "exit-exams" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
-                <h3 className="text-xl md:text-2xl font-display font-extrabold text-slate-900 flex items-center space-x-2">
-                  <CheckSquare className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold text-slate-900 flex items-center space-x-2">
+                  <CheckSquare className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 shrink-0" />
                   <span>National Graduation Exit Examination Clearance Desk</span>
                 </h3>
                 <p className="text-slate-500 text-xs md:text-sm mt-1">
@@ -603,13 +725,13 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div className="bg-gradient-to-br from-emerald-950 to-slate-900 text-white rounded-2xl p-5 shadow border border-emerald-500/10">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+                <div className="bg-gradient-to-br from-emerald-950 to-slate-900 text-white rounded-2xl p-4 sm:p-5 shadow border border-emerald-500/10">
                   <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold">
                     Exit Exam Enrollees
                   </span>
                   <div className="flex justify-between items-baseline mt-2">
-                    <span className="text-3xl font-display font-black">3</span>
+                    <span className="text-2xl sm:text-3xl font-display font-black">3</span>
                     <span className="text-xs text-slate-300 font-mono">Software Eng.</span>
                   </div>
                   <div className="h-1 bg-emerald-950 rounded-full mt-3 overflow-hidden">
@@ -617,12 +739,12 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-1">
                   <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
                     Tickets Approved
                   </span>
                   <div className="flex justify-between items-baseline">
-                    <span className="text-3xl font-display font-black text-slate-800">
+                    <span className="text-2xl sm:text-3xl font-display font-black text-slate-800">
                       {Object.values(exitExamStatus).filter(s => s === "APPROVED").length}
                     </span>
                     <span className="text-xs text-emerald-600 font-bold">Passed MoE Clearance</span>
@@ -630,26 +752,26 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                   <p className="text-[10px] text-slate-500">Hall entrance tickets dispatched to student profiles.</p>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-1">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm space-y-1">
                   <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 font-bold">
                     Min Attendance Target
                   </span>
                   <div className="flex justify-between items-baseline">
-                    <span className="text-3xl font-display font-black text-slate-800">80%</span>
+                    <span className="text-2xl sm:text-3xl font-display font-black text-slate-800">80%</span>
                     <span className="text-xs text-slate-400">MoE Directive UC-I-07</span>
                   </div>
                   <p className="text-[10px] text-slate-500">Continuous attendance tracking audited.</p>
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
                 <div>
                   <h4 className="font-display font-bold text-slate-800 text-base">Graduating Student Clearance Desk</h4>
                   <p className="text-slate-500 text-xs">Verify study hours, continuous grading status, outstanding fees, and dispatch examination hall tickets.</p>
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs md:text-sm">
+                  <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[920px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-400 font-mono text-xs">
                         <th className="p-4">Student</th>
@@ -708,7 +830,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                                 {status}
                               </span>
                             </td>
-                            <td className="p-4 text-right space-x-2">
+                            <td className="p-4 text-right space-x-2 whitespace-nowrap">
                               {status === "PENDING" ? (
                                 <>
                                   <button
@@ -752,7 +874,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
           {activeTab === "grading-audit" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
-                <h3 className="text-xl md:text-2xl font-display font-extrabold text-slate-900">
+                <h3 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold text-slate-900">
                   Academic Standardizations & Grade Curve Compliance
                 </h3>
                 <p className="text-slate-500 text-xs md:text-sm mt-1">
@@ -760,8 +882,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm flex flex-col justify-between">
                   <div>
                     <h4 className="font-display font-bold text-slate-800 text-sm">Grading Curve Distribution</h4>
                     <p className="text-slate-500 text-xs mt-0.5">MAU vs MoE National Benchmark Curve</p>
@@ -777,7 +899,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                       <div key={idx} className="space-y-1">
                         <div className="flex justify-between text-xs text-slate-700">
                           <span className="font-semibold">{g.grade} <span className="text-slate-400 font-normal">({g.count} records)</span></span>
-                          <span className="font-mono text-slate-500">Benchmark: {g.benchmark}</span>
+                          <span className="font-mono text-slate-500">Bench: {g.benchmark}</span>
                         </div>
                         <div className="h-6 bg-slate-100 rounded-lg overflow-hidden flex items-center relative">
                           <div
@@ -801,14 +923,14 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                   </div>
                 </div>
 
-                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
                   <h4 className="font-display font-bold text-slate-800 text-base">Grading Ledgers Verification Queue</h4>
                   <p className="text-slate-500 text-xs">Verify continuous assessments vs final exams weight distribution (50/20/30 MoE policy).</p>
 
                   <div className="overflow-x-auto max-h-[400px] overflow-y-auto pr-1">
-                    <table className="w-full text-left text-xs md:text-sm">
+                    <table className="w-full text-left text-xs md:text-sm min-w-[820px]">
                       <thead>
-                        <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-400 font-mono text-xs sticky top-0 bg-white">
+                        <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-400 font-mono text-xs sticky top-0 bg-white z-10">
                           <th className="p-3">Student Name</th>
                           <th className="p-3">Course Code</th>
                           <th className="p-3">Continuous (50)</th>
@@ -846,8 +968,8 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
           {activeTab === "grants" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
-                <h3 className="text-xl md:text-2xl font-display font-extrabold text-slate-900 flex items-center space-x-2">
-                  <Coins className="w-6 h-6 text-emerald-600" />
+                <h3 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold text-slate-900 flex items-center space-x-2">
+                  <Coins className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-600 shrink-0" />
                   <span>Federal Capacity Building & Capital Grants Allocation</span>
                 </h3>
                 <p className="text-slate-500 text-xs md:text-sm mt-1">
@@ -855,21 +977,21 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
                   <div>
                     <h4 className="font-display font-bold text-slate-800 text-base">Federal Lab Scaling Grant</h4>
                     <p className="text-slate-500 text-xs">Authorize and sign off on semester infrastructure grants for research labs.</p>
                   </div>
 
                   <div className="space-y-2.5">
-                    <div className="flex justify-between text-xs text-slate-600">
+                    <div className="flex justify-between text-xs text-slate-600 gap-2">
                       <span>Fund Target:</span>
-                      <strong className="text-slate-800">Advanced Systems Lab (Engineering Block C)</strong>
+                      <strong className="text-slate-800 text-right">Advanced Systems Lab (Block C)</strong>
                     </div>
                     <div className="flex justify-between text-xs text-slate-600">
                       <span>Allocation Amount:</span>
-                      <strong className="text-slate-900 font-mono text-base text-emerald-700 font-bold">25,000,000 ETB</strong>
+                      <strong className="text-slate-900 font-mono text-sm sm:text-base text-emerald-700 font-bold">25,000,000 ETB</strong>
                     </div>
                     <div className="flex justify-between text-xs text-slate-600">
                       <span>Status:</span>
@@ -879,7 +1001,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                           <span>RELEASED TO CENTRAL BANK</span>
                         </span>
                       ) : (
-                        <span className="text-amber-600 font-bold text-xs font-mono">PENDING RELEASE AUTHORIZATION</span>
+                        <span className="text-amber-600 font-bold text-xs font-mono">PENDING AUTHORIZATION</span>
                       )}
                     </div>
                   </div>
@@ -890,7 +1012,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                       <p className="text-slate-800 break-all select-all border border-slate-200 bg-white p-2 rounded leading-normal font-bold">
                         {grantHash}
                       </p>
-                      <p className="text-emerald-600 text-[9px] font-bold">✓ Transaction confirmed on National Higher Education Blockchain Ledger (FDRE-Ledger-Core-V2)</p>
+                      <p className="text-emerald-600 text-[9px] font-bold">✓ Confirmed on National Higher Education Blockchain Ledger</p>
                     </div>
                   )}
 
@@ -908,7 +1030,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                       ) : (
                         <>
                           <Coins className="w-4 h-4" />
-                          <span>Release & Cryptographically Sign Grant</span>
+                          <span>Release & Sign Grant</span>
                         </>
                       )}
                     </button>
@@ -919,9 +1041,9 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                   )}
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
                   <div>
-                    <h4 className="font-display font-bold text-slate-800 text-base">Gender Inclusivity & Support Support Fund</h4>
+                    <h4 className="font-display font-bold text-slate-800 text-base">Gender Inclusivity Support Fund</h4>
                     <p className="text-slate-500 text-xs">Under Federal Directive 41/2012, 10% of institutional grant allocations must directly support special programs for female engineering candidates.</p>
                   </div>
 
@@ -946,10 +1068,10 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                       </div>
                       <div className="py-2.5 flex justify-between items-center">
                         <div>
-                          <strong className="text-slate-800 block text-sm">Biometric Laptop Distribution Program</strong>
+                          <strong className="text-slate-800 block text-sm">Biometric Laptop Distribution</strong>
                           <span className="text-[10px] text-slate-400">Special Ministry support package</span>
                         </div>
-                        <span className="font-mono text-emerald-600 font-bold">Allocated & Received</span>
+                        <span className="font-mono text-emerald-600 font-bold">Received</span>
                       </div>
                     </div>
                   </div>
@@ -962,7 +1084,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
           {activeTab === "reports" && (
             <div className="space-y-6">
               <div className="border-b border-slate-200 pb-5">
-                <h3 className="text-xl md:text-2xl font-display font-extrabold text-slate-900">
+                <h3 className="text-lg sm:text-xl md:text-2xl font-display font-extrabold text-slate-900">
                   Institutional Compliance & Quality Assurance Report
                 </h3>
                 <p className="text-slate-500 text-xs md:text-sm mt-1">
@@ -970,13 +1092,13 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                 </p>
               </div>
 
-              <div className="max-w-3xl mx-auto bg-white border border-slate-300 rounded-2xl p-8 shadow-xl space-y-8 relative">
+              <div className="max-w-3xl mx-auto bg-white border border-slate-300 rounded-2xl p-4 sm:p-6 md:p-8 shadow-xl space-y-6 sm:space-y-8 relative">
                 <div className="text-center space-y-2 border-b border-double border-slate-300 pb-6">
-                  <span className="text-3xl">🇪🇹</span>
-                  <h4 className="text-base font-display font-extrabold tracking-tight text-slate-900 uppercase">
+                  <span className="text-2xl sm:text-3xl">🇪🇹</span>
+                  <h4 className="text-sm sm:text-base font-display font-extrabold tracking-tight text-slate-900 uppercase">
                     Federal Democratic Republic of Ethiopia
                   </h4>
-                  <h5 className="text-sm font-display font-bold text-slate-700 uppercase">
+                  <h5 className="text-xs sm:text-sm font-display font-bold text-slate-700 uppercase">
                     Ministry of Education
                   </h5>
                   <p className="text-[10px] font-mono text-slate-500 tracking-widest uppercase">
@@ -984,14 +1106,14 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono text-slate-600 bg-slate-50 p-4 rounded-xl border border-slate-100">
                   <div>
                     <p>REPORT SERIAL: <span className="font-bold text-slate-800">MOE-QA-2026-MAU-SE</span></p>
-                    <p>AUDITOR IN CHARGE: <span className="font-bold text-slate-800">{currentUser.fullName}</span></p>
+                    <p>AUDITOR: <span className="font-bold text-slate-800">{currentUser.fullName}</span></p>
                   </div>
-                  <div className="text-right">
-                    <p>DATE COMPILED: <span className="font-bold text-slate-800">{new Date().toLocaleDateString()}</span></p>
-                    <p>COMPLIANCE RATING: <span className="font-bold text-emerald-600">CLASS A • CERTIFIED</span></p>
+                  <div className="sm:text-right">
+                    <p>DATE: <span className="font-bold text-slate-800">{new Date().toLocaleDateString()}</span></p>
+                    <p>COMPLIANCE: <span className="font-bold text-emerald-600">CLASS A • CERTIFIED</span></p>
                   </div>
                 </div>
 
@@ -1012,7 +1134,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                       <strong>National ID Biometric Compliance:</strong> Student national IDs (Fayda tokens) are validated across primary rosters, ensuring absolute identity safety.
                     </li>
                     <li>
-                      <strong>National Senior Graduation Exit Exams:</strong> Out of graduating software engineering seniors, {Object.values(exitExamStatus).filter(s => s === "APPROVED").length} of 3 eligible candidates have been issued examination tickets for immediate entry.
+                      <strong>National Senior Graduation Exit Exams:</strong> Out of graduating software engineering seniors, {Object.values(exitExamStatus).filter(s => s === "APPROVED").length} of 3 eligible candidates have been issued examination tickets.
                     </li>
                     <li>
                       <strong>Standard Grading Adherence:</strong> No grade inflation has been detected. Average CGPA stands at <strong>{averageGpa}</strong>, compliant with quality standards.
@@ -1020,24 +1142,24 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                   </ul>
                 </div>
 
-                <div className="pt-8 flex justify-between items-end border-t border-slate-200">
+                <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row justify-between sm:items-end gap-4 border-t border-slate-200">
                   <div className="space-y-1 text-center text-xs">
                     <div className="font-bold font-mono text-slate-800">Dr. Tolossa Seme</div>
                     <div className="text-[10px] text-slate-400 font-mono">Senior Director, Quality Assurance MoE</div>
-                    <div className="text-[9px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold uppercase mt-1">
+                    <div className="text-[9px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-mono font-bold uppercase mt-1 inline-block">
                       ✓ Biometric Signed
                     </div>
                   </div>
 
-                  <div className="text-right text-[10px] font-mono text-slate-400">
-                    <p>Document SHA-256 Token Checksum:</p>
-                    <p className="font-bold text-slate-600 select-all font-mono text-[9px]">
+                  <div className="text-center sm:text-right text-[10px] font-mono text-slate-400">
+                    <p>Document SHA-256 Checksum:</p>
+                    <p className="font-bold text-slate-600 select-all text-[9px] break-all">
                       e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
                     </p>
                   </div>
                 </div>
 
-                <div className="absolute bottom-4 right-4 print:hidden">
+                <div className="pt-2 flex justify-center sm:justify-end">
                   <button
                     onClick={async () => {
                       try {
@@ -1055,7 +1177,7 @@ export function AuditorDashboard({ user, onLogout }: { user: User; onLogout: () 
                         console.error("Failed to print report:", error);
                       }
                     }}
-                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md"
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-md w-full sm:w-auto justify-center"
                   >
                     <FileText className="w-3.5 h-3.5 text-emerald-400" />
                     <span>Print/Export Dossier</span>
