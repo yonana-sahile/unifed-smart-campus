@@ -9,7 +9,7 @@ import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { ExamResultsModal } from "./ExamResultsModal";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
-  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video
+  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
@@ -25,6 +25,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     "transcript" | "fees" | "copilot" | "clearance" | "facilities" | "alerts"
   >("dashboard");
 
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -40,7 +41,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
   const examTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // NEW: results modal state
   const [viewingAttempt, setViewingAttempt] = useState<ExamAttempt | null>(null);
 
   const [evaluatorInstructorId, setEvaluatorInstructorId] = useState<string | null>(null);
@@ -269,7 +269,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     let calculatedScore = 0;
     currentExam.questions.forEach((q, idx) => {
       const studentAns = examAnswers[idx];
-      // Auto-grade MCQ / TF questions only (marks worth full if correct)
       if (studentAns && studentAns === q.correctAnswer) {
         calculatedScore += q.marks;
       }
@@ -305,7 +304,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       };
       setExamAttempts((prev) => [...prev, normalizedAttempt]);
 
-      // Sync grade sheet if a matching grade row exists
       const allGrades = await CampusDatabase.getGrades();
       const gradeList = Array.isArray(allGrades) ? allGrades : [];
       const existingGrade = gradeList.find(
@@ -333,7 +331,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         `Submitted attempt for ${currentExam.examTitle}. Scored ${calculatedScore}/${currentExam.totalMarks}`
       );
 
-      // Open the detailed results modal instead of just alerting
       setViewingAttempt(normalizedAttempt);
       setCurrentExam(null);
     } catch (err: any) {
@@ -389,6 +386,29 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
+  const navItems = [
+    { id: "dashboard", label: "Academic Dashboard", shortLabel: "Dashboard", Icon: BookOpen },
+    { id: "courses", label: "Browse & Register", shortLabel: "Courses", Icon: Calendar },
+    { id: "materials", label: "Course Materials", shortLabel: "Materials", Icon: FileText },
+    { id: "zoom", label: "Zoom Classroom", shortLabel: "Zoom", Icon: Video, isZoom: true },
+    { id: "exams", label: "Online Examinations", shortLabel: "Exams", Icon: Play },
+    { id: "grades", label: "Grades & Assessments", shortLabel: "Grades", Icon: CheckCircle2 },
+    { id: "transcript", label: "Official Transcript", shortLabel: "Transcript", Icon: Award },
+    { id: "fees", label: "Finance & Tuition", shortLabel: "Tuition", Icon: CreditCard, isFees: true },
+  ] as const;
+
+  const smartItems = [
+    { id: "copilot", label: "Smart AI Copilot", shortLabel: "AI Copilot", Icon: Sparkles, isCopilot: true },
+    { id: "clearance", label: "Digital Clearance", shortLabel: "Clearance", Icon: ShieldCheck },
+    { id: "facilities", label: "Smart Labs & Facilities", shortLabel: "Facilities", Icon: Cpu },
+    { id: "alerts", label: "Campus Alerts", shortLabel: "Alerts", Icon: Radio },
+  ] as const;
+
+  const goToTab = (id: string) => {
+    setActiveTab(id as any);
+    setIsMobileNavOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="student_dashboard_main">
       <UniversityTopBar
@@ -398,110 +418,124 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         portalSubtitle="College of Informatics & Technology • Software Engineering"
         badgeText={user.studentId ? `STUDENT • ${user.studentId}` : "STUDENT"}
         badgeType="student"
+        onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
+        isMobileNavOpen={isMobileNavOpen}
       />
 
-      {currentExam && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
-            <div className="university-gradient text-white p-6 flex justify-between items-center border-b border-amber-500/20">
-              <div className="flex items-center space-x-3">
-                <UniversitySeal className="w-10 h-10" />
-                <div>
-                  <p className="text-xs font-mono text-amber-300 tracking-widest uppercase font-bold">{currentExam.courseTitle}</p>
-                  <h3 className="text-xl font-display font-bold mt-0.5 text-slate-100">{currentExam.examTitle}</h3>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2 bg-slate-900/80 px-4 py-2.5 rounded-xl border border-amber-500/30">
-                <Clock className="w-5 h-5 text-amber-400" />
-                <span className="font-mono text-lg font-bold text-amber-400">{formatTime(examTimeRemaining)}</span>
-              </div>
-            </div>
-
-            <div className="p-8 overflow-y-auto space-y-8 flex-1">
-              <div className="bg-amber-50/80 border border-amber-200 text-amber-950 p-4 rounded-xl flex items-start space-x-3">
-                <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5 text-amber-600" />
-                <p className="text-xs sm:text-sm">
-                  <strong>Academic Testing Instructions:</strong>{" "}
-                  {currentExam.instructions || "Do not refresh the page. The exam will submit automatically upon expiration."}
-                </p>
-              </div>
-
-              {currentExam.questions.map((q, qIdx) => (
-                <div key={qIdx} className="border-b border-slate-100 pb-6 space-y-4">
-                  <div className="flex justify-between items-start">
-                    <h4 className="text-sm sm:text-base font-semibold text-slate-800">
-                      Question {qIdx + 1}: <span className="font-normal text-slate-700">{q.questionText}</span>
-                    </h4>
-                    <span className="text-xs font-mono bg-slate-100 px-2.5 py-1 rounded-md text-slate-600 font-bold border border-slate-200">
-                      {q.marks} Marks
-                    </span>
+      {/* MOBILE SLIDE-OUT DRAWER */}
+      <AnimatePresence>
+        {isMobileNavOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileNavOpen(false)}
+              className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 26, stiffness: 280 }}
+              className="fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-[#071526] text-slate-300 shadow-2xl flex flex-col border-r border-slate-800 overflow-hidden"
+            >
+              <div className="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-primary/20 border border-primary/40 flex items-center justify-center text-primary font-bold">
+                    {user.fullName.charAt(0)}
                   </div>
-
-                  {q.questionType === "short_answer" ? (
-                    <textarea
-                      rows={3}
-                      className="w-full border border-slate-200 focus:border-primary-600 focus:ring-2 focus:ring-primary-600/20 rounded-xl p-3 text-xs sm:text-sm"
-                      placeholder="Type your academic response and justification here..."
-                      value={examAnswers[qIdx] || ""}
-                      onChange={(e) => handleSelectAnswer(qIdx, e.target.value)}
-                    />
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {q.options.map((opt, optIdx) => (
-                        <button
-                          key={optIdx}
-                          onClick={() => handleSelectAnswer(qIdx, opt)}
-                          className={`flex items-center space-x-3 p-3.5 rounded-xl border text-left text-xs sm:text-sm font-medium transition ${
-                            examAnswers[qIdx] === opt
-                              ? "bg-blue-50 border-primary-600 text-primary-700 shadow-xs"
-                              : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <div
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
-                              examAnswers[qIdx] === opt ? "border-primary bg-primary text-white" : "border-slate-300"
-                            }`}
-                          >
-                            {examAnswers[qIdx] === opt && <Check className="w-3 h-3" />}
-                          </div>
-                          <span>{opt}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-white truncate">{user.fullName}</h4>
+                    <p className="text-[10px] font-mono text-amber-400 font-bold">{user.studentId || "STUDENT"}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
-            <div className="bg-slate-50 border-t border-slate-200/80 px-8 py-4 flex justify-between items-center">
-              <span className="text-xs text-slate-500 font-mono">
-                Answered <strong className="text-slate-800">{Object.keys(examAnswers).length}</strong> of{" "}
-                {currentExam.questions.length} questions
-              </span>
-              <button
-                onClick={submitExamManual}
-                className="university-gradient hover:opacity-95 text-white px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition shadow-md border border-amber-400/20"
-              >
-                Submit Exam
-              </button>
-            </div>
+              <nav className="p-3 flex-1 overflow-y-auto space-y-1">
+                {navItems.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => goToTab(id)}
+                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                      activeTab === id
+                        ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                        : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 ${id === "zoom" ? "text-blue-400" : "text-amber-400"}`} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+
+                <div className="pt-3 pb-1 px-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Smart Campus Hub
+                  </span>
+                </div>
+
+                {smartItems.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => goToTab(id)}
+                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                      activeTab === id
+                        ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                        : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 text-amber-400" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </nav>
+
+              <div className="p-3 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono text-slate-400">
+                <div className="flex justify-between items-center text-[10px]">
+                  <span className="text-slate-500">CGPA</span>
+                  <span className="text-amber-400 font-bold">{user.cgpa?.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between items-center text-[10px] mt-1">
+                  <span className="text-slate-500">STANDING</span>
+                  <span className="text-emerald-400 font-bold">Good Standing</span>
+                </div>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
-      <div className="flex-1 flex" id="student_workspace_inner">
-        <aside className="w-64 bg-[#071526] text-slate-300 flex flex-col border-r border-slate-800/80">
+      {/* MOBILE HORIZONTAL QUICK-NAV */}
+      <div className="md:hidden sticky top-[48px] sm:top-[57px] z-30 bg-[#071526] border-b border-slate-800/90 px-2 py-1.5 overflow-x-auto flex items-center space-x-1.5 shadow-md shrink-0 scrollbar-none">
+        {[...navItems, ...smartItems].map(({ id, shortLabel, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id as any)}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
+              activeTab === id
+                ? "bg-primary text-white border border-amber-400/40 shadow-xs"
+                : "bg-slate-900/60 text-slate-300 hover:bg-slate-800 border border-slate-800"
+            }`}
+          >
+            <Icon className={`w-3.5 h-3.5 ${activeTab === id ? "text-amber-300" : "text-amber-400/80"}`} />
+            <span>{shortLabel}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 flex min-w-0" id="student_workspace_inner">
+        {/* DESKTOP SIDEBAR */}
+        <aside className="hidden md:flex md:w-64 bg-[#071526] text-slate-300 flex-col border-r border-slate-800/80 shrink-0">
           <nav className="p-3.5 flex-1 space-y-1">
-            {[
-              { id: "dashboard", label: "Academic Dashboard", Icon: BookOpen },
-              { id: "courses", label: "Browse & Register", Icon: Calendar },
-              { id: "materials", label: "Course Materials", Icon: FileText },
-              { id: "zoom", label: "Zoom Classroom", Icon: Video, badge: "LIVE" },
-              { id: "exams", label: "Online Examinations", Icon: Play },
-              { id: "grades", label: "Grades & Assessments", Icon: CheckCircle2 },
-              { id: "transcript", label: "Official Transcript", Icon: Award },
-              { id: "fees", label: "Finance & Tuition", Icon: CreditCard, warn: user.outstandingFees && user.outstandingFees > 0 },
-            ].map(({ id, label, Icon, badge, warn }: any) => (
+            {navItems.map(({ id, label, Icon, isZoom, isFees }: any) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
@@ -512,19 +546,17 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 }`}
               >
                 <div className="flex items-center space-x-3">
-                  <Icon className={`w-4 h-4 ${id === "zoom" ? "text-blue-400" : "text-amber-400"}`} />
+                  <Icon className={`w-4 h-4 ${isZoom ? "text-blue-400" : "text-amber-400"}`} />
                   <span>{label}</span>
                 </div>
-                {badge && (
+                {isZoom && (
                   <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold border border-emerald-400/30">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>{badge}</span>
+                    <span>LIVE</span>
                   </span>
                 )}
-                {warn && (
-                  <span className="bg-red-500 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full">
-                    !
-                  </span>
+                {isFees && user.outstandingFees && user.outstandingFees > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full">!</span>
                 )}
               </button>
             ))}
@@ -535,56 +567,25 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </span>
             </div>
 
-            <button
-              onClick={() => setActiveTab("copilot")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "copilot"
-                  ? "bg-gradient-to-r from-cyan-700 to-blue-700 text-white border border-cyan-400/30 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Sparkles className="w-4 h-4 text-cyan-400" />
-              <span>Smart AI Copilot</span>
-              <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300">
-                AI
-              </span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("clearance")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "clearance"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4 text-amber-400" />
-              <span>Digital Clearance</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("facilities")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "facilities"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Cpu className="w-4 h-4 text-amber-400" />
-              <span>Smart Labs & Facilities</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("alerts")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "alerts"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Radio className="w-4 h-4 text-red-400" />
-              <span>Campus Alerts</span>
-            </button>
+            {smartItems.map(({ id, label, Icon, isCopilot }: any) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                  activeTab === id
+                    ? isCopilot
+                      ? "bg-gradient-to-r from-cyan-700 to-blue-700 text-white border border-cyan-400/30 shadow-xs"
+                      : "bg-primary text-white border border-amber-400/20 shadow-xs"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                }`}
+              >
+                <Icon className={`w-4 h-4 ${isCopilot ? "text-cyan-400" : "text-amber-400"}`} />
+                <span>{label}</span>
+                {isCopilot && (
+                  <span className="ml-auto px-1.5 py-0.5 rounded text-[9px] font-bold bg-cyan-500/20 text-cyan-300">AI</span>
+                )}
+              </button>
+            ))}
           </nav>
 
           <div className="p-4 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono text-slate-400 space-y-1">
@@ -603,7 +604,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           </div>
         </aside>
 
-        <main className="flex-1 p-8 overflow-y-auto">
+        <main className="flex-1 p-3.5 sm:p-6 md:p-8 overflow-y-auto min-w-0">
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div
@@ -613,20 +614,20 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
               >
-                <div className="flex justify-between items-center">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-2xl font-display font-bold text-slate-900">
+                    <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                       Welcome Back, {user.fullName}!
                     </h2>
-                    <p className="text-slate-500 text-sm">
+                    <p className="text-slate-500 text-xs sm:text-sm">
                       Here is a quick overview of your courses, announcements, and upcoming deadlines.
                     </p>
                   </div>
-                  <div className="bg-white border border-slate-200 px-4 py-3 rounded-xl shadow-sm text-center">
-                    <span className="block text-xs font-mono text-slate-500 uppercase tracking-widest">
+                  <div className="bg-white border border-slate-200 px-4 py-2.5 sm:py-3 rounded-xl shadow-sm text-left sm:text-center w-fit">
+                    <span className="block text-[10px] sm:text-xs font-mono text-slate-500 uppercase tracking-widest">
                       Cumulative GPA
                     </span>
-                    <span className="text-2xl font-display font-bold text-primary">
+                    <span className="text-xl sm:text-2xl font-display font-bold text-primary">
                       {user.cgpa?.toFixed(2)}
                     </span>
                   </div>
@@ -664,7 +665,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 space-y-6">
-                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm">
                       <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
                         <BookOpen className="w-5 h-5 text-primary" />
                         <span>Registered Courses</span>
@@ -683,7 +684,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       </div>
                     </div>
 
-                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm">
                       <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
                         <FileText className="w-5 h-5 text-primary" />
                         <span>Upcoming Assignments & File Upload</span>
@@ -755,7 +756,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </div>
 
                   <div className="space-y-6">
-                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm">
                       <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
                         <AlertCircle className="w-5 h-5 text-primary" />
                         <span>Bulletin Board</span>
@@ -776,7 +777,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     </div>
 
                     {user.outstandingFees && user.outstandingFees > 0 && (
-                      <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-950 space-y-3">
+                      <div className="bg-red-50 border border-red-200 rounded-xl p-4 sm:p-6 text-red-950 space-y-3">
                         <div className="flex items-center space-x-2 text-danger">
                           <AlertCircle className="w-5 h-5" />
                           <h4 className="font-display font-bold">Outstanding Fees Warning</h4>
@@ -806,8 +807,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">Academic Course Catalog</h2>
-                  <p className="text-slate-500 text-sm">
+                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">Academic Course Catalog</h2>
+                  <p className="text-slate-500 text-xs sm:text-sm">
                     Browse and register for courses available in the current academic semester.
                   </p>
                 </div>
@@ -880,10 +881,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                     Learning Materials & Handouts
                   </h2>
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-slate-500 text-xs sm:text-sm">
                     Access lecture syllabus slides, digital books, and stream video content shared by instructors.
                   </p>
                 </div>
@@ -895,7 +896,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       return (
                         <div
                           key={m.id}
-                          className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 transition"
+                          className="p-4 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 transition"
                         >
                           <div className="space-y-1.5">
                             <div className="flex items-center space-x-2">
@@ -915,7 +916,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             </span>
                             <button
                               onClick={() => {
-                                // Client-side download from base64 data URL or a stub fallback
                                 if (m.fileData) {
                                   const a = document.createElement("a");
                                   a.href = m.fileData;
@@ -949,10 +949,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                     Secure Online Examinations
                   </h2>
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-slate-500 text-xs sm:text-sm">
                     Participate in scheduled course mid-exams or quizzes. Each examination has a strict active timer.
                   </p>
                 </div>
@@ -1042,24 +1042,24 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                     Continuous Assessment & Grades
                   </h2>
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-slate-500 text-xs sm:text-sm">
                     View your academic score sheets, continuous assessment component breakdowns, and verified letter grades.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                    <div className="p-6 border-b border-slate-100 bg-slate-50/50">
+                    <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50">
                       <h3 className="font-display font-bold text-slate-800 text-base">
                         Semester Score Sheet
                       </h3>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {getMyGrades().map((g) => (
-                        <div key={g.id} className="p-6 space-y-4">
+                        <div key={g.id} className="p-4 sm:p-6 space-y-4">
                           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
                             <div>
                               <span className="text-xs font-mono font-bold text-primary bg-blue-50 px-2 py-0.5 rounded">
@@ -1087,7 +1087,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               </div>
                             </div>
                           </div>
-                          <div className="grid grid-cols-3 gap-3 pt-2 text-center text-xs font-mono">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-center text-xs font-mono">
                             <div className="bg-slate-50 p-2.5 rounded border border-slate-100">
                               <span className="block text-[10px] text-slate-400 uppercase">Assessment (50%)</span>
                               <span className="font-bold text-slate-700">
@@ -1109,7 +1109,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </div>
 
                   <div className="space-y-6">
-                    <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                       <div className="flex items-center space-x-2 text-primary">
                         <Star className="w-5 h-5 fill-current" />
                         <h3 className="font-display font-bold text-slate-800 text-base">
@@ -1174,10 +1174,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                     Official Academic Transcript
                   </h2>
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-slate-500 text-xs sm:text-sm">
                     Download your generated digital transcript verified with a QR-verification signature.
                   </p>
                 </div>
@@ -1204,7 +1204,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 ) : (
                   <div className="space-y-6">
                     <div
-                      className="bg-white border-2 border-slate-200 rounded-2xl p-8 max-w-3xl shadow-xl border-t-8 border-t-amber-500 relative overflow-hidden"
+                      className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-8 max-w-3xl shadow-xl border-t-8 border-t-amber-500 relative overflow-hidden"
                       id="printable-transcript-view"
                     >
                       <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
@@ -1213,12 +1213,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       <div className="relative z-10">
                         <div className="text-center border-b-2 border-slate-200/80 pb-6 space-y-2">
                           <div className="flex justify-center mb-2">
-                            <UniversitySeal className="w-18 h-18 drop-shadow-md" />
+                            <UniversitySeal className="w-16 h-16 sm:w-18 sm:h-18 drop-shadow-md" />
                           </div>
-                          <h3 className="font-serif font-bold text-2xl tracking-tight text-slate-950 uppercase">
+                          <h3 className="font-serif font-bold text-xl sm:text-2xl tracking-tight text-slate-950 uppercase">
                             Mekdela Amba University
                           </h3>
-                          <p className="text-xs uppercase tracking-widest text-slate-600 font-mono font-bold">
+                          <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-600 font-mono font-bold">
                             Office of the University Registrar • የሬጅስትራር ጽሕፈት ቤት
                           </p>
                           <p className="text-[11px] text-slate-500 italic font-serif">
@@ -1231,7 +1231,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4 py-5 text-xs border-b border-slate-100 font-sans">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-5 text-xs border-b border-slate-100 font-sans">
                           <div className="space-y-1.5 bg-slate-50/70 p-4 rounded-xl border border-slate-200/60">
                             <p>
                               <span className="text-slate-500">Student Name:</span>{" "}
@@ -1250,7 +1250,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               <strong className="text-slate-800">{user.program}</strong>
                             </p>
                           </div>
-                          <div className="space-y-1.5 bg-slate-50/70 p-4 rounded-xl border border-slate-200/60 text-right">
+                          <div className="space-y-1.5 bg-slate-50/70 p-4 rounded-xl border border-slate-200/60 md:text-right">
                             <p>
                               <span className="text-slate-500">Issue Date:</span>{" "}
                               <strong className="text-slate-800">
@@ -1279,7 +1279,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         </div>
 
                         <div className="py-6 space-y-4">
-                          <div className="flex justify-between items-center">
+                          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1">
                             <h4 className="font-serif font-bold text-slate-900 text-sm tracking-wide uppercase">
                               Course Credits & Verified Grade Ledger
                             </h4>
@@ -1287,39 +1287,41 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               Curriculum Code: B.Sc.-SE-2023
                             </span>
                           </div>
-                          <table className="w-full text-left border-collapse text-xs">
-                            <thead>
-                              <tr className="border-b-2 border-slate-200 bg-slate-100/70 text-slate-600 font-mono text-[11px]">
-                                <th className="py-2.5 px-3">Course Code</th>
-                                <th className="py-2.5 px-3">Course Title</th>
-                                <th className="py-2.5 px-3 text-center">Credit Hours (ECTS)</th>
-                                <th className="py-2.5 px-3 text-center">Letter Grade</th>
-                                <th className="py-2.5 px-3 text-center">Grade Point</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 text-slate-800 font-sans">
-                              {getMyGrades().map((g) => (
-                                <tr key={g.id} className="hover:bg-slate-50/50">
-                                  <td className="py-3 px-3 font-mono font-bold text-primary-900">{g.courseCode}</td>
-                                  <td className="py-3 px-3 font-medium">{g.courseTitle}</td>
-                                  <td className="py-3 px-3 text-center font-mono">
-                                    {g.creditHours} ({Math.round(g.creditHours * 1.6)} ECTS)
-                                  </td>
-                                  <td className="py-3 px-3 text-center">
-                                    <span className="inline-block font-mono font-bold px-2 py-0.5 rounded bg-blue-50 text-primary-800 border border-blue-100">
-                                      {g.letterGrade}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-3 text-center font-mono font-bold">
-                                    {g.gradePoint.toFixed(2)}
-                                  </td>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse text-xs min-w-[600px]">
+                              <thead>
+                                <tr className="border-b-2 border-slate-200 bg-slate-100/70 text-slate-600 font-mono text-[11px]">
+                                  <th className="py-2.5 px-3">Course Code</th>
+                                  <th className="py-2.5 px-3">Course Title</th>
+                                  <th className="py-2.5 px-3 text-center">Credit Hours (ECTS)</th>
+                                  <th className="py-2.5 px-3 text-center">Letter Grade</th>
+                                  <th className="py-2.5 px-3 text-center">Grade Point</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 text-slate-800 font-sans">
+                                {getMyGrades().map((g) => (
+                                  <tr key={g.id} className="hover:bg-slate-50/50">
+                                    <td className="py-3 px-3 font-mono font-bold text-primary-900">{g.courseCode}</td>
+                                    <td className="py-3 px-3 font-medium">{g.courseTitle}</td>
+                                    <td className="py-3 px-3 text-center font-mono">
+                                      {g.creditHours} ({Math.round(g.creditHours * 1.6)} ECTS)
+                                    </td>
+                                    <td className="py-3 px-3 text-center">
+                                      <span className="inline-block font-mono font-bold px-2 py-0.5 rounded bg-blue-50 text-primary-800 border border-blue-100">
+                                        {g.letterGrade}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-3 text-center font-mono font-bold">
+                                      {g.gradePoint.toFixed(2)}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
 
-                        <div className="border-t-2 border-slate-200 pt-6 mt-4 grid grid-cols-3 gap-4 items-center">
+                        <div className="border-t-2 border-slate-200 pt-6 mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                           <div className="text-center space-y-1">
                             <div className="h-10 border-b border-slate-300 flex items-end justify-center pb-1">
                               <span className="font-serif italic text-xs text-slate-600">
@@ -1352,7 +1354,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           </div>
                         </div>
 
-                        <div className="border-t border-slate-100 mt-6 pt-4 flex justify-between items-center text-[10px] font-mono text-slate-400">
+                        <div className="border-t border-slate-100 mt-6 pt-4 flex flex-col sm:flex-row sm:justify-between items-center gap-2 text-[10px] font-mono text-slate-400">
                           <p>© Mekdela Amba University Registrar's Directorate • All Rights Reserved</p>
                           <p>Verification Code: VERIFY-MAU-771 • Tulu Awlia, Ethiopia</p>
                         </div>
@@ -1382,10 +1384,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 className="space-y-6"
               >
                 <div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">
+                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                     Outstanding Semester Fees
                   </h2>
-                  <p className="text-slate-500 text-sm">
+                  <p className="text-slate-500 text-xs sm:text-sm">
                     Review your tuition balance and verify online card payments directly.
                   </p>
                 </div>
@@ -1424,7 +1426,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     )}
                   </div>
 
-                  <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-3 col-span-2 text-xs">
+                  <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-3 md:col-span-2 text-xs">
                     <h4 className="font-display font-bold text-slate-800 text-sm">
                       Payment Methods & Instructions
                     </h4>
@@ -1571,7 +1573,96 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         </main>
       </div>
 
-      {/* Exam Results Modal — opened after submission or when student clicks "View Results" */}
+      {/* ACTIVE EXAM OVERLAY — mobile-responsive */}
+      {currentExam && (
+        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh] border border-slate-200">
+            <div className="university-gradient text-white p-4 sm:p-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-b border-amber-500/20">
+              <div className="flex items-center space-x-3 min-w-0">
+                <UniversitySeal className="w-8 h-8 sm:w-10 sm:h-10 shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-[10px] sm:text-xs font-mono text-amber-300 tracking-widest uppercase font-bold truncate">{currentExam.courseTitle}</p>
+                  <h3 className="text-base sm:text-xl font-display font-bold mt-0.5 text-slate-100 truncate">{currentExam.examTitle}</h3>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2 bg-slate-900/80 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-amber-500/30 self-start sm:self-auto shrink-0">
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
+                <span className="font-mono text-base sm:text-lg font-bold text-amber-400">{formatTime(examTimeRemaining)}</span>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-8 overflow-y-auto space-y-5 sm:space-y-8 flex-1">
+              <div className="bg-amber-50/80 border border-amber-200 text-amber-950 p-3 sm:p-4 rounded-xl flex items-start space-x-3">
+                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5 text-amber-600" />
+                <p className="text-xs sm:text-sm">
+                  <strong>Academic Testing Instructions:</strong>{" "}
+                  {currentExam.instructions || "Do not refresh the page. The exam will submit automatically upon expiration."}
+                </p>
+              </div>
+
+              {currentExam.questions.map((q, qIdx) => (
+                <div key={qIdx} className="border-b border-slate-100 pb-5 sm:pb-6 space-y-3 sm:space-y-4">
+                  <div className="flex justify-between items-start gap-2">
+                    <h4 className="text-sm sm:text-base font-semibold text-slate-800 flex-1">
+                      Question {qIdx + 1}: <span className="font-normal text-slate-700">{q.questionText}</span>
+                    </h4>
+                    <span className="text-[10px] sm:text-xs font-mono bg-slate-100 px-2 py-1 rounded-md text-slate-600 font-bold border border-slate-200 shrink-0">
+                      {q.marks} Marks
+                    </span>
+                  </div>
+
+                  {q.questionType === "short_answer" ? (
+                    <textarea
+                      rows={3}
+                      className="w-full border border-slate-200 focus:border-primary-600 focus:ring-2 focus:ring-primary-600/20 rounded-xl p-3 text-xs sm:text-sm"
+                      placeholder="Type your academic response and justification here..."
+                      value={examAnswers[qIdx] || ""}
+                      onChange={(e) => handleSelectAnswer(qIdx, e.target.value)}
+                    />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {q.options.map((opt, optIdx) => (
+                        <button
+                          key={optIdx}
+                          onClick={() => handleSelectAnswer(qIdx, opt)}
+                          className={`flex items-center space-x-3 p-3 sm:p-3.5 rounded-xl border text-left text-xs sm:text-sm font-medium transition ${
+                            examAnswers[qIdx] === opt
+                              ? "bg-blue-50 border-primary-600 text-primary-700 shadow-xs"
+                              : "border-slate-200 hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
+                              examAnswers[qIdx] === opt ? "border-primary bg-primary text-white" : "border-slate-300"
+                            }`}
+                          >
+                            {examAnswers[qIdx] === opt && <Check className="w-3 h-3" />}
+                          </div>
+                          <span>{opt}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-50 border-t border-slate-200/80 px-4 sm:px-8 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <span className="text-xs text-slate-500 font-mono">
+                Answered <strong className="text-slate-800">{Object.keys(examAnswers).length}</strong> of{" "}
+                {currentExam.questions.length} questions
+              </span>
+              <button
+                onClick={submitExamManual}
+                className="university-gradient hover:opacity-95 text-white px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition shadow-md border border-amber-400/20 w-full sm:w-auto"
+              >
+                Submit Exam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ExamResultsModal
         exam={exams.find((e) => e.id === viewingAttempt?.examId) ?? null}
         attempt={viewingAttempt}
