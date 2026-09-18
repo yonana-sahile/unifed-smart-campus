@@ -20,7 +20,8 @@ import {
   Filter,
   Check,
   Clock,
-  Layers
+  Layers,
+  X
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -31,12 +32,12 @@ interface LibraryStaffDashboardProps {
 
 export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardProps) {
   const [activeTab, setActiveTab] = useState<"catalog" | "upload" | "analytics" | "reports">("catalog");
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [resources, setResources] = useState<LibraryResource[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [selectedType, setSelectedType] = useState<string>("ALL");
 
-  // Upload Form State
   const [newTitle, setNewTitle] = useState("");
   const [newAuthor, setNewAuthor] = useState("");
   const [newIsbn, setNewIsbn] = useState("");
@@ -47,14 +48,12 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
   const [uploadFileName, setUploadFileName] = useState("");
   const [uploading, setUploading] = useState(false);
 
-  // Preview / Details Modal State
   const [previewResource, setPreviewResource] = useState<LibraryResource | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  // ✅ FIXED: Async data loading with proper error handling
   const loadData = async () => {
     try {
       const resourcesData = await CampusDatabase.getLibraryResources();
@@ -65,7 +64,6 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
     }
   };
 
-  // ✅ FIXED: Async upload handler
   const handleUploadResource = async (e: FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newAuthor) {
@@ -107,7 +105,6 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
 
       alert(`Resource "${newTitle}" successfully added to the University Digital Repository!`);
 
-      // Reset form
       setNewTitle("");
       setNewAuthor("");
       setNewIsbn("");
@@ -122,7 +119,6 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
     }
   };
 
-  // ✅ FIXED: Async delete handler
   const handleDeleteResource = async (resourceId: string, title: string) => {
     if (window.confirm(`Are you sure you want to remove "${title}" from the digital library catalog?`)) {
       try {
@@ -146,7 +142,6 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
     }
   };
 
-  // ✅ FIXED: Async download handler
   const handleDownloadResource = async (resourceId: string, title: string, fileSize: string) => {
     try {
       const updated = resources.map((r) =>
@@ -173,6 +168,18 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
 
   const totalDownloads = Array.isArray(resources) ? resources.reduce((sum, r) => sum + r.downloadsCount, 0) : 0;
 
+  const navItems = [
+    { id: "catalog", label: "E-Resource Catalog", shortLabel: "Catalog", Icon: BookOpen },
+    { id: "upload", label: "Upload Book / Video", shortLabel: "Upload", Icon: Upload },
+    { id: "analytics", label: "Repository Analytics", shortLabel: "Analytics", Icon: BarChart2 },
+    { id: "reports", label: "Dissemination Reports", shortLabel: "Reports", Icon: FileText },
+  ] as const;
+
+  const goToTab = (id: string) => {
+    setActiveTab(id as any);
+    setIsMobileNavOpen(false);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#071526] flex flex-col font-sans" id="library_dashboard_main">
       <UniversityTopBar
@@ -182,11 +189,103 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
         portalSubtitle="Directorate of Academic Learning Assets & Institutional Repositories"
         badgeText="LIBRARY STAFF"
         badgeType="faculty"
+        onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
+        isMobileNavOpen={isMobileNavOpen}
       />
 
-      <div className="flex-1 flex flex-col md:flex-row">
-        {/* Sidebar */}
-        <aside className="w-full md:w-64 bg-[#071526] text-slate-300 flex flex-col border-r border-slate-800/80 shrink-0">
+      {/* MOBILE SLIDE-OUT DRAWER */}
+      <AnimatePresence>
+        {isMobileNavOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileNavOpen(false)}
+              className="fixed inset-0 bg-slate-950/75 backdrop-blur-xs"
+            />
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", damping: 26, stiffness: 280 }}
+              className="fixed inset-y-0 left-0 w-72 max-w-[85vw] bg-[#071526] text-slate-300 shadow-2xl flex flex-col border-r border-slate-800 overflow-hidden"
+            >
+              <div className="p-4 border-b border-slate-800/80 flex items-center justify-between bg-slate-950/60">
+                <div className="flex items-center space-x-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold">
+                    {user.fullName.charAt(0)}
+                  </div>
+                  <div className="min-w-0">
+                    <h4 className="text-xs font-bold text-white truncate">{user.fullName}</h4>
+                    <p className="text-[10px] font-mono text-amber-400 font-bold">LIBRARY STAFF</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsMobileNavOpen(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition"
+                  aria-label="Close menu"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <nav className="p-3 flex-1 overflow-y-auto space-y-1">
+                <div className="pb-1 px-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Library Operations
+                  </span>
+                </div>
+
+                {navItems.map(({ id, label, Icon }) => (
+                  <button
+                    key={id}
+                    onClick={() => goToTab(id)}
+                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                      activeTab === id
+                        ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                        : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 text-amber-400" />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </nav>
+
+              <div className="p-3 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono text-slate-400">
+                <p>Staff ID: <span className="text-amber-400">{user.staffId || "LIB_091"}</span></p>
+                <p className="text-[10px] text-slate-500 pt-1 border-t border-slate-800/50">
+                  Storage: <span className="text-emerald-400">78.5 GB / 100 GB</span>
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MOBILE HORIZONTAL QUICK-NAV */}
+      <div className="md:hidden sticky top-[48px] sm:top-[57px] z-30 bg-[#071526] border-b border-slate-800/90 px-2 py-1.5 overflow-x-auto flex items-center space-x-1.5 shadow-md shrink-0 scrollbar-none">
+        {navItems.map(({ id, shortLabel, Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id as any)}
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
+              activeTab === id
+                ? "bg-primary text-white border border-amber-400/40 shadow-xs"
+                : "bg-slate-900/60 text-slate-300 hover:bg-slate-800 border border-slate-800"
+            }`}
+          >
+            <Icon className={`w-3.5 h-3.5 ${activeTab === id ? "text-amber-300" : "text-amber-400/80"}`} />
+            <span>{shortLabel}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="flex-1 flex min-w-0">
+        {/* DESKTOP SIDEBAR */}
+        <aside className="hidden md:flex md:w-64 bg-[#071526] text-slate-300 flex-col border-r border-slate-800/80 shrink-0">
           <div className="p-3.5 border-b border-slate-800/80 bg-slate-950/40">
             <span className="text-[10px] font-mono text-amber-400 font-bold uppercase tracking-widest">
               Library Operations
@@ -194,53 +293,20 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
           </div>
 
           <nav className="p-3.5 flex-1 space-y-1">
-            <button
-              onClick={() => setActiveTab("catalog")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "catalog"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span>E-Resource Catalog</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("upload")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "upload"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <Upload className="w-4 h-4 text-amber-400" />
-              <span>Upload Book / Video</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("analytics")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "analytics"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <BarChart2 className="w-4 h-4 text-amber-400" />
-              <span>Repository Analytics</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab("reports")}
-              className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                activeTab === "reports"
-                  ? "bg-primary text-white border border-amber-400/20 shadow-xs"
-                  : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-              }`}
-            >
-              <FileText className="w-4 h-4 text-amber-400" />
-              <span>Dissemination Reports</span>
-            </button>
+            {navItems.map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id as any)}
+                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                  activeTab === id
+                    ? "bg-primary text-white border border-amber-400/20 shadow-xs"
+                    : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
+                }`}
+              >
+                <Icon className="w-4 h-4 text-amber-400" />
+                <span>{label}</span>
+              </button>
+            ))}
           </nav>
 
           <div className="p-4 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono text-slate-400 space-y-1">
@@ -249,14 +315,13 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
           </div>
         </aside>
 
-        {/* Main Content Area */}
-        <main className="flex-1 p-6 md:p-8 overflow-y-auto space-y-6">
+        <main className="flex-1 p-3.5 sm:p-6 md:p-8 overflow-y-auto space-y-6 min-w-0">
           {/* TAB 1: E-RESOURCE CATALOG */}
           {activeTab === "catalog" && (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                  <h2 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
                     <BookOpen className="w-6 h-6 text-primary" />
                     <span>Digital Library Catalog & E-Resources</span>
                   </h2>
@@ -273,7 +338,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                 </button>
               </div>
 
-              {/* Filters & Search */}
+              {/* Filters */}
               <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="relative">
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
@@ -324,10 +389,10 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                     layout
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-primary/40 transition group"
+                    className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col justify-between hover:border-primary/40 transition group"
                   >
                     <div className="space-y-3">
-                      <div className="flex justify-between items-start">
+                      <div className="flex justify-between items-start gap-2">
                         <span
                           className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
                             res.resourceType === "BOOK"
@@ -339,7 +404,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                         >
                           {res.resourceType} • {res.fileSize}
                         </span>
-                        <span className="text-[10px] font-mono text-slate-400">
+                        <span className="text-[10px] font-mono text-slate-400 shrink-0">
                           {res.downloadsCount} DLs
                         </span>
                       </div>
@@ -364,7 +429,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                       )}
                     </div>
 
-                    <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+                    <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800 flex flex-wrap justify-between items-center gap-2 text-xs">
                       <button
                         onClick={() => setPreviewResource(res)}
                         className="text-primary hover:underline font-semibold flex items-center space-x-1"
@@ -373,7 +438,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                         <span>Inspect Metadata</span>
                       </button>
 
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-1">
                         <button
                           onClick={() => handleDownloadResource(res.id, res.title, res.fileSize)}
                           className="p-1.5 text-slate-600 dark:text-slate-300 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
@@ -400,7 +465,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
           {activeTab === "upload" && (
             <div className="max-w-2xl mx-auto space-y-6">
               <div>
-                <h2 className="text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                <h2 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
                   <Upload className="w-6 h-6 text-primary" />
                   <span>Upload & Catalog New Digital Asset</span>
                 </h2>
@@ -409,7 +474,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                 </p>
               </div>
 
-              <form onSubmit={handleUploadResource} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-sm space-y-4">
+              <form onSubmit={handleUploadResource} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
                     Resource Title *
@@ -516,7 +581,6 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                   />
                 </div>
 
-                {/* File Attachment selector */}
                 <div className="p-4 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-center space-y-2 bg-slate-50/50 dark:bg-slate-800/40">
                   <Upload className="w-8 h-8 text-primary mx-auto" />
                   <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
@@ -529,7 +593,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                         setUploadFileName(e.target.files[0].name);
                       }
                     }}
-                    className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer"
+                    className="text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 cursor-pointer w-full"
                   />
                   <p className="text-[10px] text-slate-400">PDF, EPUB, MP4, PPTX up to 500MB (PostgreSQL / File Storage)</p>
                 </div>
@@ -561,7 +625,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
           {activeTab === "analytics" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                <h2 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
                   <BarChart2 className="w-6 h-6 text-primary" />
                   <span>E-Resource Utilization & Analytics</span>
                 </h2>
@@ -570,50 +634,49 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
                   <span className="text-xs font-mono font-bold text-slate-400 uppercase">Total Catalog Items</span>
-                  <p className="text-3xl font-serif font-bold text-slate-900 dark:text-white mt-1">{resources.length}</p>
+                  <p className="text-2xl sm:text-3xl font-serif font-bold text-slate-900 dark:text-white mt-1">{resources.length}</p>
                   <span className="text-[11px] text-emerald-600 font-semibold">Across 5 departments</span>
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
                   <span className="text-xs font-mono font-bold text-slate-400 uppercase">Student Downloads</span>
-                  <p className="text-3xl font-serif font-bold text-primary mt-1">{totalDownloads}</p>
+                  <p className="text-2xl sm:text-3xl font-serif font-bold text-primary mt-1">{totalDownloads}</p>
                   <span className="text-[11px] text-slate-500 font-medium">Recorded semester total</span>
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
                   <span className="text-xs font-mono font-bold text-slate-400 uppercase">Storage Utilized</span>
-                  <p className="text-3xl font-serif font-bold text-slate-900 dark:text-white mt-1">78.5 GB</p>
+                  <p className="text-2xl sm:text-3xl font-serif font-bold text-slate-900 dark:text-white mt-1">78.5 GB</p>
                   <span className="text-[11px] text-amber-600 font-semibold">78.5% of 100 GB SSD</span>
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-xs">
                   <span className="text-xs font-mono font-bold text-slate-400 uppercase">Active Readers</span>
-                  <p className="text-3xl font-serif font-bold text-emerald-700 mt-1">845</p>
+                  <p className="text-2xl sm:text-3xl font-serif font-bold text-emerald-700 mt-1">845</p>
                   <span className="text-[11px] text-emerald-600 font-semibold">Concurrent active sessions</span>
                 </div>
               </div>
 
-              {/* Download Ranking Table */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xs space-y-4">
                 <h3 className="font-serif font-bold text-slate-900 dark:text-white text-base">Top Downloaded & Accessed Titles</h3>
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
                   {resources
                     .sort((a, b) => b.downloadsCount - a.downloadsCount)
                     .map((r, index) => (
-                      <div key={r.id} className="py-3 flex justify-between items-center text-xs">
-                        <div className="flex items-center space-x-3">
-                          <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-bold flex items-center justify-center text-xs">
+                      <div key={r.id} className="py-3 flex justify-between items-center gap-3 text-xs">
+                        <div className="flex items-center space-x-3 min-w-0">
+                          <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-mono font-bold flex items-center justify-center text-xs shrink-0">
                             {index + 1}
                           </span>
-                          <div>
-                            <strong className="text-slate-900 dark:text-white block text-sm">{r.title}</strong>
-                            <span className="text-slate-400 text-[11px]">{r.author} • {r.category}</span>
+                          <div className="min-w-0">
+                            <strong className="text-slate-900 dark:text-white block text-sm truncate">{r.title}</strong>
+                            <span className="text-slate-400 text-[11px] truncate block">{r.author} • {r.category}</span>
                           </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                           <span className="font-mono font-bold text-primary text-sm">{r.downloadsCount}</span>
                           <span className="text-slate-400 text-[11px] block">downloads</span>
                         </div>
@@ -628,7 +691,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
           {activeTab === "reports" && (
             <div className="max-w-3xl mx-auto space-y-6">
               <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
-                <h2 className="text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
+                <h2 className="text-xl sm:text-2xl font-serif font-bold text-slate-900 dark:text-white flex items-center space-x-2">
                   <FileText className="w-6 h-6 text-primary" />
                   <span>Library Dissemination & Audit Report</span>
                 </h2>
@@ -637,23 +700,23 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                 </p>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-xs space-y-6">
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-8 shadow-xs space-y-6">
                 <div className="text-center space-y-1 border-b border-slate-100 dark:border-slate-800 pb-4">
                   <p className="text-xs font-mono font-bold text-slate-500 uppercase tracking-widest">
                     Mekdela Amba University • Library Directorate
                   </p>
-                  <h3 className="font-serif font-bold text-lg text-slate-900 dark:text-white">
+                  <h3 className="font-serif font-bold text-base sm:text-lg text-slate-900 dark:text-white">
                     Semester II Digital Repository Summary Dossier
                   </h3>
                   <p className="text-[11px] text-slate-400 font-mono">Report Period: AY 2025/2026</p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 text-xs font-mono p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono p-4 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-100 dark:border-slate-800">
                   <div>
                     <p>TOTAL E-BOOKS: <span className="font-bold text-slate-800 dark:text-white">{Array.isArray(resources) ? resources.filter(r => r.resourceType === "BOOK").length : 0}</span></p>
                     <p>TOTAL VIDEO LECTURES: <span className="font-bold text-slate-800 dark:text-white">{Array.isArray(resources) ? resources.filter(r => r.resourceType === "VIDEO").length : 0}</span></p>
                   </div>
-                  <div className="text-right">
+                  <div className="sm:text-right">
                     <p>TOTAL DOWNLOADS: <span className="font-bold text-emerald-600">{totalDownloads}</span></p>
                     <p>ACTIVE ENROLLMENT REACH: <span className="font-bold text-slate-800 dark:text-white">100%</span></p>
                   </div>
@@ -682,7 +745,7 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
                         alert("Failed to generate report. Please try again.");
                       }
                     }}
-                    className="bg-primary hover:bg-primary/90 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs flex items-center space-x-2"
+                    className="bg-primary hover:bg-primary/90 text-white font-semibold text-xs px-5 py-2.5 rounded-xl shadow-xs flex items-center space-x-2 w-full sm:w-auto justify-center"
                   >
                     <Download className="w-4 h-4" />
                     <span>Download Report (PDF)</span>
@@ -697,10 +760,12 @@ export function LibraryStaffDashboard({ user, onLogout }: LibraryStaffDashboardP
       {/* Metadata Preview Modal */}
       {previewResource && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-6 border border-slate-200 dark:border-slate-800 space-y-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-md w-full p-4 sm:p-6 border border-slate-200 dark:border-slate-800 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start border-b border-slate-100 dark:border-slate-800 pb-3">
               <h3 className="font-serif font-bold text-slate-900 dark:text-white text-base">Resource Details</h3>
-              <button onClick={() => setPreviewResource(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+              <button onClick={() => setPreviewResource(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             <div className="space-y-2 text-xs">
