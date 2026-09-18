@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { User } from "../types";
 import { useTheme } from "../context/ThemeContext";
-import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon, UserCog, Camera, Edit3 } from "lucide-react";
+import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon, UserCog, Camera, Edit3, Menu, X } from "lucide-react";
 import { motion } from "motion/react";
 import mauLogoImg from "../assets/mau_university_log.jpg";
 import { UpdateProfileModal } from "./UpdateProfileModal";
@@ -44,33 +44,17 @@ export function EthiopianFlag({
         </defs>
 
         <g clipPath="url(#etFlagClip)">
-          {/* 1. Top Stripe - Green (#078930) */}
           <rect x="0" y="0" width="120" height="20" fill="#078930" />
-
-          {/* 2. Middle Stripe - Yellow (#FCDD09) */}
           <rect x="0" y="20" width="120" height="20" fill="#FCDD09" />
-
-          {/* 3. Bottom Stripe - Red (#DA121A) */}
           <rect x="0" y="40" width="120" height="20" fill="#DA121A" />
-
-          {/* 4. Center Emblem Disk - Official Blue (#0F47AF) */}
           <circle cx="60" cy="30" r="15" fill="#0F47AF" />
-
-          {/* 5. Radiant Golden Rays between Star points */}
           <g stroke="#FCDD09" strokeWidth="1.2" strokeLinecap="round">
-            {/* Ray 1: 36 deg */}
             <line x1="60" y1="30" x2="67.64" y2="19.48" />
-            {/* Ray 2: 108 deg */}
             <line x1="60" y1="30" x2="72.36" y2="34.02" />
-            {/* Ray 3: 180 deg */}
             <line x1="60" y1="30" x2="60" y2="43" />
-            {/* Ray 4: 252 deg */}
             <line x1="60" y1="30" x2="47.64" y2="34.02" />
-            {/* Ray 5: 324 deg */}
             <line x1="60" y1="30" x2="52.36" y2="19.48" />
           </g>
-
-          {/* 6. Central Pentagram Star (#FCDD09) */}
           <polygon
             points="
               60,19
@@ -227,28 +211,24 @@ export function UniversitySeal({
           xmlns="http://www.w3.org/2000/svg"
         >
         <defs>
-          {/* Cyan/Sky Blue Background Gradient */}
           <linearGradient id="mauSkyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#1cd0ff" />
             <stop offset="50%" stopColor="#00bdf7" />
             <stop offset="100%" stopColor="#00a3e0" />
           </linearGradient>
 
-          {/* Golden Wheat Gradient */}
           <linearGradient id="mauWheatGradient" x1="0%" y1="100%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#d97706" />
             <stop offset="50%" stopColor="#f59e0b" />
             <stop offset="100%" stopColor="#fde047" />
           </linearGradient>
 
-          {/* Gear / Mechanical Gradient */}
           <linearGradient id="mauGearGradient" x1="0%" y1="0%" x2="100%" y2="100%">
             <stop offset="0%" stopColor="#f1f5f9" />
             <stop offset="50%" stopColor="#cbd5e1" />
             <stop offset="100%" stopColor="#64748b" />
           </linearGradient>
 
-          {/* Flame Gradient */}
           <linearGradient id="mauFlameGradient" x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stopColor="#b91c1c" />
             <stop offset="35%" stopColor="#dc2626" />
@@ -256,24 +236,20 @@ export function UniversitySeal({
             <stop offset="100%" stopColor="#fbbf24" />
           </linearGradient>
 
-          {/* Mountain / Amba Terrain Gradient */}
           <linearGradient id="mauMountainGradient" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor="#854d0e" />
             <stop offset="40%" stopColor="#65a30d" />
             <stop offset="100%" stopColor="#4d7c0f" />
           </linearGradient>
 
-          {/* Diamond Clip Path */}
           <clipPath id="mauDiamondClip">
             <polygon points="100,6 194,100 100,194 6,100" />
           </clipPath>
 
-          {/* Text Paths along the diagonal diamond borders */}
           <path id="mauAmharicPath" d="M 28,95 L 94,29" />
           <path id="mauEnglishPath" d="M 106,29 L 174,97" />
         </defs>
 
-        {/* Outer Diamond Rhombus Background */}
         <polygon
           points="100,6 194,100 100,194 6,100"
           fill="url(#mauSkyGradient)"
@@ -281,7 +257,6 @@ export function UniversitySeal({
           strokeWidth="1.5"
         />
 
-        {/* Inner Diamond Border Accent */}
         <polygon
           points="100,10 190,100 100,190 10,100"
           fill="none"
@@ -290,19 +265,13 @@ export function UniversitySeal({
           strokeOpacity="0.4"
         />
 
-        {/* 1. Top Scientific Atomic Orbitals Symbol */}
         <g transform="translate(100, 36)" stroke="#0284c7" strokeWidth="1.8" fill="none">
-          {/* Vertical Ellipse */}
           <ellipse cx="0" cy="0" rx="6.5" ry="15" />
-          {/* Diagonal Ellipses */}
           <ellipse cx="0" cy="0" rx="6.5" ry="15" transform="rotate(60)" />
           <ellipse cx="0" cy="0" rx="6.5" ry="15" transform="rotate(-60)" />
-          {/* Central Nucleus Dot */}
           <circle cx="0" cy="0" r="2.2" fill="#0284c7" />
         </g>
 
-        {/* 2. Curved Institution Names (Bilingual) */}
-        {/* Left Side: Amharic - መቅደላ አምባ ዩኒቨርሲቲ */}
         <text
           fill="#dc2626"
           fontSize="11"
@@ -315,7 +284,6 @@ export function UniversitySeal({
           </textPath>
         </text>
 
-        {/* Right Side: English - Mekdela Amba University */}
         <text
           fill="#dc2626"
           fontSize="9.5"
@@ -329,14 +297,11 @@ export function UniversitySeal({
           </textPath>
         </text>
 
-        {/* 3. Mountain Landscape of Mekdela Amba Plateau & Historical Fortress */}
         <g clipPath="url(#mauDiamondClip)">
-          {/* Mountain Silhouette at bottom corner */}
           <path
             d="M 50,150 L 75,130 L 100,122 L 125,130 L 150,150 L 100,194 Z"
             fill="url(#mauMountainGradient)"
           />
-          {/* Sevastopol / Fortress Landmark Silhouette in background */}
           <path
             d="M 85,132 C 85,115 92,102 100,102 C 108,102 115,115 115,132 Z"
             fill="#0284c7"
@@ -345,16 +310,13 @@ export function UniversitySeal({
           <circle cx="100" cy="120" r="14" fill="#0369a1" fillOpacity="0.25" />
         </g>
 
-        {/* 4. Left Arch: Golden Wheat / Barley Ear (Agriculture & Growth) */}
         <g>
-          {/* Wheat Stem */}
           <path
             d="M 80,146 C 72,130 68,110 74,90 C 78,82 86,76 96,74"
             fill="none"
             stroke="#d97706"
             strokeWidth="1.8"
           />
-          {/* Wheat Grains */}
           {[
             { cx: 80, cy: 142, rx: 4, ry: 7, rot: -25 },
             { cx: 75, cy: 132, rx: 4.5, ry: 7.5, rot: -35 },
@@ -377,7 +339,6 @@ export function UniversitySeal({
               strokeWidth="0.6"
             />
           ))}
-          {/* Wheat awns / whiskers */}
           <path
             d="M 72,100 L 60,92 M 76,90 L 66,80 M 83,82 L 76,70 M 92,76 L 90,64"
             stroke="#d97706"
@@ -386,9 +347,7 @@ export function UniversitySeal({
           />
         </g>
 
-        {/* 5. Right Arch: Industrial Mechanical Gear / Cogwheel (Technology & Engineering) */}
         <g>
-          {/* Main Curved Gear Ring */}
           <path
             d="M 124,146 C 132,130 136,110 130,90 C 126,82 118,76 108,74"
             fill="none"
@@ -401,7 +360,6 @@ export function UniversitySeal({
             stroke="url(#mauGearGradient)"
             strokeWidth="2.5"
           />
-          {/* Outer Gear Teeth */}
           {[
             { x: 126, y: 142, angle: 25 },
             { x: 131, y: 132, angle: 35 },
@@ -427,72 +385,55 @@ export function UniversitySeal({
           ))}
         </g>
 
-        {/* 6. Central Flaming Torch of Enlightenment */}
         <g>
-          {/* Torch Cup / Chalice */}
           <path
             d="M 92,126 L 108,126 L 105,142 L 95,142 Z"
             fill="#0369a1"
             stroke="#075985"
             strokeWidth="0.8"
           />
-          {/* Torch Stem */}
           <line x1="100" y1="142" x2="100" y2="152" stroke="#0369a1" strokeWidth="3" strokeLinecap="round" />
 
-          {/* Torch Flames */}
-          {/* Outer Red Flame */}
           <path
             d="M 100,78 C 94,92 90,106 94,124 C 98,126 102,126 106,124 C 110,106 106,92 100,78 Z"
             fill="url(#mauFlameGradient)"
           />
-          {/* Inner Flame Tongue 1 (Left) */}
           <path
             d="M 97,88 C 93,98 92,108 96,122 C 98,114 96,104 97,88 Z"
             fill="#ef4444"
           />
-          {/* Inner Flame Tongue 2 (Right) */}
           <path
             d="M 103,88 C 107,98 108,108 104,122 C 102,114 104,104 103,88 Z"
             fill="#ea580c"
           />
-          {/* Center Golden Core */}
           <path
             d="M 100,94 C 97,104 97,112 100,123 C 103,112 103,104 100,94 Z"
             fill="#fde047"
           />
         </g>
 
-        {/* 7. Foreground Open Book of Knowledge */}
         <g transform="translate(100, 146)">
-          {/* Outer Cover Backing */}
           <path
             d="M -32,0 C -18,-5 -6,-2 0,2 C 6,-2 18,-5 32,0 L 32,16 C 18,11 6,14 0,18 C -6,14 -18,11 -32,16 Z"
             fill="#0f172a"
           />
-          {/* White Open Pages */}
           <path
             d="M -30,-1 C -16,-6 -5,-3 0,1 C 5,-3 16,-6 30,-1 L 30,14 C 16,9 5,12 0,16 C -5,12 -16,9 -30,14 Z"
             fill="#ffffff"
             stroke="#334155"
             strokeWidth="0.8"
           />
-          {/* Center Spine Line */}
           <line x1="0" y1="1" x2="0" y2="16" stroke="#0f172a" strokeWidth="1.2" />
 
-          {/* Inscribed Page Lines / Text Mockup */}
-          {/* Left Page Text */}
           <line x1="-24" y1="3" x2="-6" y2="1" stroke="#64748b" strokeWidth="0.8" />
           <line x1="-24" y1="6" x2="-6" y2="4" stroke="#64748b" strokeWidth="0.8" />
           <line x1="-24" y1="9" x2="-8" y2="7" stroke="#64748b" strokeWidth="0.8" />
-          {/* Right Page Text */}
           <line x1="6" y1="1" x2="24" y2="3" stroke="#64748b" strokeWidth="0.8" />
           <line x1="6" y1="4" x2="24" y2="6" stroke="#64748b" strokeWidth="0.8" />
           <line x1="8" y1="7" x2="24" y2="9" stroke="#64748b" strokeWidth="0.8" />
         </g>
 
-        {/* 8. Bottom "MAU" Acronym Banner with Yellow/Red Contrast */}
         <g transform="translate(100, 175)">
-          {/* Yellow Shadow / Glow Outline */}
           <text
             x="0"
             y="0"
@@ -508,7 +449,6 @@ export function UniversitySeal({
           >
             MAU
           </text>
-          {/* Bold Red Forefront Text */}
           <text
             x="0"
             y="0"
@@ -536,6 +476,8 @@ interface UniversityTopBarProps {
   portalSubtitle?: string;
   badgeText?: string;
   badgeType?: "student" | "instructor" | "admin" | "federal" | "faculty";
+  onToggleMobileNav?: () => void;
+  isMobileNavOpen?: boolean;
 }
 
 export function UniversityTopBar({
@@ -545,7 +487,9 @@ export function UniversityTopBar({
   portalTitle,
   portalSubtitle = "Mekdela Amba University • መቅደላ አምባ ዩኒቨርሲቲ",
   badgeText,
-  badgeType = "student"
+  badgeType = "student",
+  onToggleMobileNav,
+  isMobileNavOpen = false
 }: UniversityTopBarProps) {
   const [currentUser, setCurrentUser] = useState<User>(initialUser);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
@@ -585,15 +529,26 @@ export function UniversityTopBar({
 
   return (
     <>
-      <header className="university-gradient text-white border-b border-slate-700/80 sticky top-0 z-40 px-4 sm:px-6 py-2.5 sm:py-3 shadow-lg select-none font-sans">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Left Side: University Seal + Bilingual Title + National Flag Badge */}
-          <div className="flex items-center space-x-3 sm:space-x-3.5 min-w-0">
-            <UniversitySeal className="w-10 h-10 sm:w-11 sm:h-11 shrink-0 drop-shadow-md" />
-            <div className="border-l border-slate-700/80 pl-3 sm:pl-3.5 space-y-0.5 min-w-0">
-              <div className="flex items-center space-x-2">
-                <span className="font-display tracking-wider font-extrabold text-sm sm:text-base text-slate-100 uppercase truncate">
-                  Mekdela Amba University
+      <header className="university-gradient text-white border-b border-slate-700/80 sticky top-0 z-40 px-3 sm:px-6 py-2 sm:py-3 shadow-lg select-none font-sans">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-3">
+          {/* Left Side: Mobile Menu Button + University Seal + Bilingual Title + National Flag Badge */}
+          <div className="flex items-center space-x-2 sm:space-x-3.5 min-w-0 w-full md:w-auto">
+            {onToggleMobileNav && (
+              <button
+                type="button"
+                onClick={onToggleMobileNav}
+                className="md:hidden p-2 rounded-xl bg-slate-900/70 hover:bg-slate-800 text-amber-400 border border-slate-700/80 focus:outline-none transition shrink-0 active:scale-95"
+                title={isMobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+                aria-label="Toggle navigation menu"
+              >
+                {isMobileNavOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+              </button>
+            )}
+            <UniversitySeal className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 shrink-0 drop-shadow-md" />
+            <div className="border-l border-slate-700/80 pl-2 sm:pl-3.5 space-y-0.5 min-w-0 flex-1">
+              <div className="flex items-center space-x-1.5 sm:space-x-2">
+                <span className="font-display tracking-wider font-extrabold text-xs sm:text-base text-slate-100 uppercase truncate">
+                  Mekdela Amba Univ.
                 </span>
                 <span className="hidden sm:inline-block text-[10px] font-mono text-amber-400 font-bold bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/20 shrink-0">
                   መቅደላ አምባ
@@ -603,20 +558,22 @@ export function UniversityTopBar({
                   <span className="text-[10px] font-mono text-slate-300 font-bold">FDRE MoE</span>
                 </div>
               </div>
-              <p className="text-xs text-slate-300 font-medium flex items-center space-x-2 truncate">
-                <span className="text-amber-400 font-semibold shrink-0">{portalTitle}</span>
-                <span className="text-slate-500 hidden sm:inline">•</span>
-                <span className="text-slate-400 text-xs hidden sm:inline truncate">{portalSubtitle}</span>
+              <p className="text-[11px] sm:text-xs text-slate-300 font-medium flex items-center space-x-1.5 truncate">
+                <span className="text-amber-400 font-semibold truncate">{portalTitle}</span>
+                <span className="text-slate-500 hidden md:inline">•</span>
+                <span className="text-slate-400 text-xs hidden md:inline truncate">{portalSubtitle}</span>
               </p>
             </div>
           </div>
 
-          {/* Right Side: Digital Clock + Ethiopian Academic Calendar + Theme Toggle + User Profile + Logout */}
-          <div className="flex items-center justify-between md:justify-end space-x-2 sm:space-x-3 shrink-0">
-            {/* Live Digital Clock */}
-            <DigitalClock />
+          {/* Right Side: Digital Clock + Academic Calendar + Theme Toggle + User Profile + Logout */}
+          <div className="flex items-center justify-between md:justify-end space-x-1.5 sm:space-x-3 shrink-0 w-full md:w-auto">
+            {/* Live Digital Clock (hidden on tiny screens) */}
+            <div className="hidden sm:block">
+              <DigitalClock />
+            </div>
 
-            {/* Official Academic Calendar Pill with National Flag */}
+            {/* Official Academic Calendar Pill (desktop only) */}
             <div className="hidden lg:flex flex-col items-end text-right border-r border-slate-700/80 pr-3 leading-snug">
               <div className="flex items-center space-x-1.5 text-xs font-mono text-slate-200 font-semibold">
                 <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
@@ -628,15 +585,15 @@ export function UniversityTopBar({
             {/* Theme Toggle Button */}
             <ThemeToggle />
 
-            {/* User Profile Info with direct Edit Trigger */}
-            <div className="flex items-center space-x-2 pl-0.5">
+            {/* User Profile Info */}
+            <div className="flex items-center space-x-1 sm:space-x-2 pl-0.5">
               <button
                 type="button"
                 onClick={() => setIsProfileModalOpen(true)}
-                title="Click to edit profile, update name, password, or avatar • መገለጫዎን ለማዘመን ይጫኑ"
-                className="group flex items-center space-x-2 sm:space-x-2.5 p-1 rounded-xl hover:bg-white/10 transition text-left cursor-pointer border border-transparent hover:border-amber-400/40"
+                title="Click to edit profile • መገለጫዎን ለማዘመን ይጫኑ"
+                className="group flex items-center space-x-1.5 sm:space-x-2.5 p-1 rounded-xl hover:bg-white/10 transition text-left cursor-pointer border border-transparent hover:border-amber-400/40"
               >
-                <div className="text-right leading-tight hidden sm:block">
+                <div className="text-right leading-tight hidden md:block">
                   <div className="flex items-center justify-end space-x-1.5">
                     <span className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-amber-300 transition-colors truncate max-w-[130px]">
                       {currentUser.fullName}
@@ -662,10 +619,10 @@ export function UniversityTopBar({
                       src={currentUser.avatarUrl}
                       alt={currentUser.fullName}
                       referrerPolicy="no-referrer"
-                      className="w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-lg border border-amber-500/60 object-cover shadow-xs group-hover:border-amber-400 transition"
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-amber-500/60 object-cover shadow-xs group-hover:border-amber-400 transition"
                     />
                   ) : (
-                    <div className="w-8 h-8 sm:w-8.5 sm:h-8.5 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-display font-bold text-xs shadow-xs group-hover:border-amber-400 transition">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-display font-bold text-xs shadow-xs group-hover:border-amber-400 transition">
                       {currentUser.fullName.charAt(0)}
                     </div>
                   )}
@@ -675,7 +632,7 @@ export function UniversityTopBar({
                 </div>
               </button>
 
-              {/* Dedicated "Edit Profile" Button for instant visibility */}
+              {/* Dedicated "Edit Profile" Button (desktop only) */}
               <button
                 type="button"
                 onClick={() => setIsProfileModalOpen(true)}
@@ -693,9 +650,10 @@ export function UniversityTopBar({
             <button
               type="button"
               onClick={onLogout}
-              className="px-2.5 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/50 text-slate-200 hover:text-red-200 rounded-lg text-xs font-semibold transition duration-150 shadow-xs cursor-pointer shrink-0"
+              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/50 text-slate-200 hover:text-red-200 rounded-lg text-[11px] sm:text-xs font-semibold transition duration-150 shadow-xs cursor-pointer shrink-0"
             >
-              Sign Out
+              <span className="hidden sm:inline">Sign Out</span>
+              <span className="sm:hidden">Exit</span>
             </button>
           </div>
         </div>
@@ -748,4 +706,3 @@ export function AcademicFooter() {
     </footer>
   );
 }
-
