@@ -12,6 +12,8 @@ wheel==0.42.0
 gunicorn==21.2.0
 whitenoise==6.6.0
 dj-database-url==2.1.0
+
+# AI / Semantic Search Stack
 sentence-transformers==6.1.0
 numpy==2.5.3
 faiss-cpu==1.15.1
