@@ -15,7 +15,16 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.py[cod]
 db.sqlite3
+db.sqlite3-journal
+
+# Virtual environments
+unifed/
+venv/
+.venv/
+env/
+ENV/
 
 # Node
 node_modules/
@@ -25,3 +34,8 @@ dist/
 # Env
 .env
 .env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
