@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { User, StudentClearance, ClearanceDepartmentStatus } from "../types";
-import { CampusDatabase } from "../services/api"
+import type { User, StudentClearance } from "../types";
+import { CampusDatabase } from "../services/api";
 import { UniversitySeal } from "./UniversityHeader";
 import {
   FileCheck2,
@@ -15,9 +15,6 @@ import {
   Home,
   Cpu,
   GraduationCap,
-  Sparkles,
-  QrCode,
-  ArrowRight
 } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -26,20 +23,32 @@ interface SmartClearancePortalProps {
   isOfficerMode?: boolean;
 }
 
+// Helper to ensure we always work with a valid array
+const fetchClearancesArray = (): StudentClearance[] => {
+  const data = CampusDatabase.getClearances();
+  if (Array.isArray(data)) return data;
+  if (data && typeof data === "object" && "clearances" in data && Array.isArray((data as any).clearances)) {
+    return (data as any).clearances;
+  }
+  return [];
+};
+
 export function SmartClearancePortal({ user, isOfficerMode = false }: SmartClearancePortalProps) {
-  const [clearances, setClearances] = useState<StudentClearance[]>(CampusDatabase.getClearances());
-  const [selectedClearanceId, setSelectedClearanceId] = useState<string>(clearances[0]?.id || "CLR_01");
+  const [clearances, setClearances] = useState<StudentClearance[]>(() => fetchClearancesArray());
+  const [selectedClearanceId] = useState<string>(clearances[0]?.id || "CLR_01");
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
   const [officerRemarks, setOfficerRemarks] = useState<string>("");
 
   const refreshClearances = () => {
-    setClearances(CampusDatabase.getClearances());
+    setClearances(fetchClearancesArray());
   };
 
-  // Find clearance for active student or selected in officer mode
-  const activeClearance = isOfficerMode
-    ? clearances.find((c) => c.id === selectedClearanceId) || clearances[0]
-    : clearances.find((c) => c.studentId === user.id) || clearances[0];
+  // Safe search using Array.isArray check
+  const activeClearance = Array.isArray(clearances)
+    ? (isOfficerMode
+        ? clearances.find((c) => c.id === selectedClearanceId)
+        : clearances.find((c) => c.studentId === user?.id)) || clearances[0]
+    : undefined;
 
   const getStageIcon = (dept: string) => {
     switch (dept) {
@@ -106,8 +115,8 @@ export function SmartClearancePortal({ user, isOfficerMode = false }: SmartClear
     }
   };
 
-  const totalStages = activeClearance?.stages.length || 5;
-  const clearedCount = activeClearance?.stages.filter((s) => s.status === "CLEARED").length || 0;
+  const totalStages = activeClearance?.stages?.length || 5;
+  const clearedCount = activeClearance?.stages?.filter((s) => s.status === "CLEARED").length || 0;
   const progressPercent = Math.round((clearedCount / totalStages) * 100);
 
   return (
@@ -138,7 +147,7 @@ export function SmartClearancePortal({ user, isOfficerMode = false }: SmartClear
       </div>
 
       {/* Progress & Overview Card */}
-      {activeClearance && (
+      {activeClearance ? (
         <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
             <div>
@@ -188,64 +197,69 @@ export function SmartClearancePortal({ user, isOfficerMode = false }: SmartClear
             </div>
           </div>
         </div>
+      ) : (
+        <div className="p-8 text-center rounded-2xl bg-slate-100 dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800">
+          No clearance records found for this user.
+        </div>
       )}
 
       {/* Clearance Department Stages List */}
-      <div className="space-y-3">
-        <h4 className="font-serif font-bold text-base text-slate-900 dark:text-slate-100 flex items-center space-x-2">
-          <FileCheck2 className="w-5 h-5 text-primary" />
-          <span>Institutional Department Sign-Offs</span>
-        </h4>
+      {activeClearance?.stages && (
+        <div className="space-y-3">
+          <h4 className="font-serif font-bold text-base text-slate-900 dark:text-slate-100 flex items-center space-x-2">
+            <FileCheck2 className="w-5 h-5 text-primary" />
+            <span>Institutional Department Sign-Offs</span>
+          </h4>
 
-        <div className="grid grid-cols-1 gap-3">
-          {activeClearance?.stages.map((stage, idx) => (
-            <div
-              key={stage.department}
-              className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:border-slate-300 dark:hover:border-slate-700"
-            >
-              <div className="flex items-start space-x-3.5">
-                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 mt-0.5">
-                  {getStageIcon(stage.department)}
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
-                      {stage.departmentName}
-                    </span>
+          <div className="grid grid-cols-1 gap-3">
+            {activeClearance.stages.map((stage) => (
+              <div
+                key={stage.department}
+                className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 transition hover:border-slate-300 dark:hover:border-slate-700"
+              >
+                <div className="flex items-start space-x-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 mt-0.5">
+                    {getStageIcon(stage.department)}
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {stage.remarks || "Standard clearance review in progress."}
-                  </p>
-                  {stage.officerName && (
-                    <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono">
-                      Signed by: <span className="font-bold text-slate-900 dark:text-slate-200">{stage.officerName}</span> • {stage.clearedAt}
+                  <div className="space-y-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="font-bold text-sm text-slate-900 dark:text-slate-100">
+                        {stage.departmentName}
+                      </span>
                     </div>
-                  )}
-                  {stage.duesAmount !== undefined && stage.duesAmount > 0 && (
-                    <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                      Outstanding Fee: {stage.duesAmount} ETB
-                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {stage.remarks || "Standard clearance review in progress."}
+                    </p>
+                    {stage.officerName && (
+                      <div className="text-[11px] text-slate-600 dark:text-slate-400 font-mono">
+                        Signed by: <span className="font-bold text-slate-900 dark:text-slate-200">{stage.officerName}</span> - {stage.clearedAt}
+                      </div>
+                    )}
+                    {stage.duesAmount !== undefined && stage.duesAmount > 0 && (
+                      <div className="text-xs font-bold text-amber-600 dark:text-amber-400">
+                        Outstanding Fee: {stage.duesAmount} ETB
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-3 self-end md:self-center">
+                  {getStageStatusBadge(stage.status)}
+
+                  {isOfficerMode && stage.status !== "CLEARED" && (
+                    <button
+                      onClick={() => handleOfficerSignoff(stage.department)}
+                      className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs transition cursor-pointer shadow-xs"
+                    >
+                      Authorize Sign-Off
+                    </button>
                   )}
                 </div>
               </div>
-
-              <div className="flex items-center space-x-3 self-end md:self-center">
-                {getStageStatusBadge(stage.status)}
-
-                {/* Officer Direct Sign-Off Button */}
-                {isOfficerMode && stage.status !== "CLEARED" && (
-                  <button
-                    onClick={() => handleOfficerSignoff(stage.department)}
-                    className="px-3 py-1.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs transition cursor-pointer shadow-xs"
-                  >
-                    Authorize Sign-Off
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Certificate Modal */}
       {showCertificateModal && activeClearance && (

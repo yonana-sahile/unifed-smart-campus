@@ -31,6 +31,8 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://unifed-smart-campus.on
 
 const api = axios.create({
   baseURL: API_BASE,
+  // ✅ FIX: 60s timeout so Render free-tier cold starts don't hang the UI.
+  timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -60,13 +62,66 @@ api.interceptors.response.use(
 const unwrapList = <T>(raw: any): T[] =>
   Array.isArray(raw) ? raw : (raw?.results ?? []);
 
+// ✅ FIX: map Django snake_case → frontend camelCase.
+// Without this, `u.full_name` never becomes `u.fullName`, and
+// RegistrarDashboard crashes on `st.fullName.toLowerCase()`.
+const mapUser = (u: any): User => ({
+  id: `U_${u.id}`,
+  username: u.username || "",
+  // CRITICAL: fullName must ALWAYS be a string, never undefined/null.
+  fullName: u.full_name || u.fullName || u.username || "Unknown User",
+  email: u.email || "",
+  role: u.role || "STUDENT",
+  isActive: u.is_active ?? true,
+  avatarUrl: u.avatar_url ?? undefined,
+  phoneNumber: u.phone_number ?? undefined,
+
+  // Student fields (safe fallbacks so dashboards don't crash)
+  studentId: u.student_id ?? undefined,
+  academicYear: u.academic_year ?? undefined,
+  semester: u.semester ?? undefined,
+  program: u.program || undefined,
+  gpa: u.gpa != null ? Number(u.gpa) : undefined,
+  cgpa: u.cgpa != null ? Number(u.cgpa) : undefined,
+  outstandingFees: u.outstanding_fees != null ? Number(u.outstanding_fees) : 0,
+  costSharingBalance:
+    u.cost_sharing_balance != null ? Number(u.cost_sharing_balance) : 0,
+
+  // Instructor fields
+  instructorId: u.instructor_id ?? undefined,
+  department: u.department || undefined,
+  specialization: u.specialization ?? undefined,
+  officeHours: u.office_hours ?? undefined,
+
+  // Staff fields
+  staffId: u.staff_id ?? undefined,
+  librarySection: u.library_section ?? undefined,
+  officerId: u.officer_id ?? undefined,
+  bio: u.bio ?? undefined,
+} as User);
+
 // ---------- USERS ----------
+// ✅ FIX: apply mapUser to guarantee fullName is always a string.
 export const getUsers = (): Promise<User[]> =>
-  api.get('/users/').then(r => unwrapList<User>(r.data));
+  api.get('/users/').then(r =>
+    unwrapList<any>(r.data)
+      .filter(u => u && typeof u === 'object')  // drop malformed rows
+      .map(mapUser)
+  );
 export const saveUsers = (users: User[]): Promise<User[]> =>
   api.put('/users/', users).then(r => r.data);
 export const updateUser = (user: User): Promise<User> =>
   api.put(`/users/${user.id}/`, user).then(r => r.data);
+
+// ✅ NEW: real login via Django's JWT endpoint (/api/token/).
+// Call this from App.tsx if you want to authenticate "fanta" etc.
+export const login = async (username: string, password: string) => {
+  const { data } = await api.post('/token/', { username, password });
+  const token = data.access ?? data.token;
+  if (token) localStorage.setItem('access_token', token);
+  if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
+  return data;
+};
 
 // ---------- COURSES ----------
 export const getCourses = (): Promise<Course[]> =>
@@ -260,8 +315,13 @@ export const saveAuditLogs = (logs: AuditLog[]): Promise<AuditLog[]> =>
   api.put('/audit-logs/', logs).then(r => r.data);
 
 // ---------- SETTINGS ----------
+// ✅ FIX: defensively unwrap if Django paginates this singleton.
 export const getSettings = (): Promise<SystemSettings> =>
-  api.get('/settings/').then(r => r.data);
+  api.get('/settings/').then(r => {
+    const raw = r.data;
+    if (raw && Array.isArray(raw.results)) return raw.results[0] ?? raw;
+    return raw;
+  });
 export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> =>
   api.put('/settings/', settings).then(r => r.data);
 
@@ -313,6 +373,9 @@ export const addAuditLog = async (
 ): Promise<AuditLog | null> => {
   try {
     const res = await api.post('/audit-logs/', {
+      // ✅ FIX: send both `user` and `user_id` so we match whichever
+      // field name the Django serializer expects.
+      user: userId,
       user_id: userId,
       user_name: userName,
       user_role: userRole,
@@ -461,6 +524,8 @@ export const CampusDatabase = {
   getUsers,
   saveUsers,
   updateUser,
+  // ✅ NEW: expose login for real Django auth via /api/token/.
+  login,
   getCourses,
   saveCourses,
   updateCourse,

@@ -1,6 +1,6 @@
 import { useState, FormEvent } from "react";
 import type { User, FacilityBooking } from "../types";
-import { CampusDatabase } from "../services/api"
+import { CampusDatabase } from "../services/api";
 import {
   Building2,
   Calendar,
@@ -25,7 +25,12 @@ interface SmartCampusFacilitiesProps {
 }
 
 export function SmartCampusFacilities({ user }: SmartCampusFacilitiesProps) {
-  const [bookings, setBookings] = useState<FacilityBooking[]>(CampusDatabase.getFacilityBookings());
+  // Safe initialization: guarantees bookings is always an array
+  const [bookings, setBookings] = useState<FacilityBooking[]>(() => {
+    const initialData = CampusDatabase.getFacilityBookings();
+    return Array.isArray(initialData) ? initialData : [];
+  });
+
   const [selectedCampus, setSelectedCampus] = useState<"ALL" | "Tulu Awulia (Main)" | "Masha Campus">("ALL");
   const [showBookingModal, setShowBookingModal] = useState<boolean>(false);
   const [selectedPass, setSelectedPass] = useState<FacilityBooking | null>(null);
@@ -118,13 +123,16 @@ export function SmartCampusFacilities({ user }: SmartCampusFacilitiesProps) {
       `Reserved ${facilityName} for ${bookingDate} (${startTime} - ${endTime}).`
     );
 
-    setBookings(CampusDatabase.getFacilityBookings());
+    const updatedData = CampusDatabase.getFacilityBookings();
+    setBookings(Array.isArray(updatedData) ? updatedData : []);
     setShowBookingModal(false);
     setPurpose("");
     setSelectedPass(newBooking);
   };
 
-  const filteredBookings = bookings.filter((b) => {
+  // Safe Guarded Filter: avoids TypeError if bookings is not an array
+  const safeBookings = Array.isArray(bookings) ? bookings : [];
+  const filteredBookings = safeBookings.filter((b) => {
     if (selectedCampus === "ALL") return true;
     return b.campus === selectedCampus;
   });
