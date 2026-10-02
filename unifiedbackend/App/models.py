@@ -43,6 +43,14 @@ class User(AbstractUser):
 
     bio = models.TextField(blank=True, null=True)
 
+    # ✅ FIX: convert empty string IDs to NULL so UNIQUE constraints
+    # don't fire when multiple users leave those fields blank.
+    def save(self, *args, **kwargs):
+        for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
+            if getattr(self, field) == '':
+                setattr(self, field, None)
+        super().save(*args, **kwargs)
+
     @property
     def full_name(self):
         """Return the user's full name."""
