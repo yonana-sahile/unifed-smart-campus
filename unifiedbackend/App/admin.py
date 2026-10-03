@@ -6,15 +6,15 @@ from .models import *  # ✅ Imports all models from App/models.py
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display = ['id', 'username', 'full_name', 'email', 'role', 'is_active', 'phone_number']
-    search_fields = ['username', 'full_name', 'email', 'student_id', 'instructor_id', 'staff_id']
-    list_filter = ['role', 'is_active', 'academic_year', 'semester']
+    search_fields = ['username', 'full_name', 'email']
+    list_filter = ['role', 'is_active']
     readonly_fields = ['last_login', 'date_joined']
     fieldsets = (
         ('Personal Information', {
             'fields': ('full_name', 'email', 'phone_number', 'avatar_url', 'bio')
         }),
         ('Account Credentials', {
-            'fields': ('username', 'password', 'is_active', 'is_staff', 'is_superuser')
+            'fields': ('username', 'is_active', 'is_staff', 'is_superuser')
         }),
         ('Role & Academic', {
             'fields': ('role', 'student_id', 'instructor_id', 'staff_id', 'officer_id')
@@ -26,10 +26,6 @@ class UserAdmin(admin.ModelAdmin):
         }),
         ('Instructor Details', {
             'fields': ('department', 'specialization', 'office_hours'),
-            'classes': ('collapse',)
-        }),
-        ('Permissions', {
-            'fields': ('groups', 'user_permissions'),
             'classes': ('collapse',)
         }),
     )
