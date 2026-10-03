@@ -1,38 +1,45 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
+from django.contrib.auth.forms import UserCreationForm, UserChangeForm
 from .models import *  # ✅ Imports all models from App/models.py
 
 
 # ---------- USER ----------
+class CustomUserCreationForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ('username', 'email')
+
+
+class CustomUserChangeForm(UserChangeForm):
+    class Meta(UserChangeForm.Meta):
+        model = User
+        fields = '__all__'
+
+
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(BaseUserAdmin):
+    form = CustomUserChangeForm
+    add_form = CustomUserCreationForm
+    
     list_display = ['id', 'username', 'email', 'role', 'is_active']
     search_fields = ['username', 'email']
     list_filter = ['role', 'is_active']
-    readonly_fields = ['last_login', 'date_joined']
+    ordering = ['username']
     
     fieldsets = (
-        ('Account Credentials', {
-            'fields': ('username', 'password', 'is_active', 'is_staff', 'is_superuser')
-        }),
-        ('Personal Information', {
-            'fields': ('full_name', 'email', 'phone_number')
-        }),
-        ('Role & Details', {
-            'fields': ('role', 'student_id', 'instructor_id', 'staff_id', 'department')
-        }),
-        ('Important Dates', {
-            'fields': ('last_login', 'date_joined'),
-            'classes': ('collapse',)
+        (None, {'fields': ('username', 'password')}),
+        ('Personal Info', {'fields': ('full_name', 'email', 'phone_number')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Important dates', {'fields': ('last_login', 'date_joined')}),
+        ('Campus Details', {'fields': ('role', 'student_id', 'instructor_id', 'staff_id', 'department')}),
+    )
+    add_fieldsets = (
+        (None, {
+            'classes': ('wide',),
+            'fields': ('username', 'email', 'password1', 'password2'),
         }),
     )
-
-    def save_model(self, request, obj, form, change):
-        password = form.cleaned_data.get('password')
-        if password:
-            if not change or password != User.objects.get(pk=obj.pk).password:
-                if not password.startswith('pbkdf2_'):
-                    obj.set_password(password)
-        super().save_model(request, obj, form, change)
 
 
 # ---------- COURSE ----------
