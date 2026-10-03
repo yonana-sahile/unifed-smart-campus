@@ -6,9 +6,7 @@ from .models import *  # ✅ Imports all models from App/models.py
 # ---------- USER ----------
 @admin.register(User)
 class UserAdmin(BaseUserAdmin):
-    list_display = ['id', 'username', 'email', 'role', 'is_active']
-    search_fields = ['username', 'email']
-    list_filter = ['role', 'is_active']
+    pass
 
 
 # ---------- COURSE ----------
