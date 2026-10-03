@@ -43,12 +43,15 @@ class User(AbstractUser):
 
     bio = models.TextField(blank=True, null=True)
 
-    # ✅ FIX: convert empty string IDs to NULL so UNIQUE constraints
-    # don't fire when multiple users leave those fields blank.
-    def save(self, *args, **kwargs):
+    # ✅ FIX: Normalize empty string IDs to NULL before validation and save to prevent unique constraint crashes
+    def clean(self):
+        super().clean()
         for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
             if getattr(self, field) == '':
                 setattr(self, field, None)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
         super().save(*args, **kwargs)
 
     @property
@@ -97,7 +100,6 @@ class CourseMaterial(models.Model):
     description = models.TextField()
     uploaded_at = models.DateTimeField(auto_now_add=True)
 
-    # ✅ NEW: File attachment metadata for PDF/DOCX uploads
     file_name = models.CharField(max_length=255, blank=True, null=True)
     file_size = models.CharField(max_length=50, blank=True, null=True)
     file_data = models.TextField(blank=True, null=True)  # base64 Data URL
@@ -110,8 +112,6 @@ class CourseMaterial(models.Model):
 
 # ---------- ANNOUNCEMENT ----------
 class Announcement(models.Model):
-    # ✅ FIX: campus-wide news has no course; allow null so
-    # POST /api/announcements/ with { "course": null } succeeds.
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
@@ -119,7 +119,6 @@ class Announcement(models.Model):
         null=True,
         blank=True,
     )
-    # ✅ FIX: course_title optional for campus-wide bulletins
     course_title = models.CharField(max_length=200, blank=True)
     title = models.CharField(max_length=200)
     content = models.TextField()
@@ -217,7 +216,6 @@ class Exam(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # ✅ NEW: Push portal fields for live exam distribution to students
     is_pushed = models.BooleanField(default=False)
     pushed_at = models.DateTimeField(blank=True, null=True)
     created_by = models.CharField(max_length=100, blank=True, null=True)
@@ -667,7 +665,7 @@ class CampusAlert(models.Model):
         return self.title
 
 
-# ✅ ---------- CAMPUS MEDIA POST (UPDATED WITH FILE UPLOAD) ----------
+# ---------- CAMPUS MEDIA POST ----------
 class CampusMediaPost(models.Model):
     CATEGORY_CHOICES = (
         ('CAMPUS_NEWS', 'Campus News'),
@@ -682,7 +680,6 @@ class CampusMediaPost(models.Model):
     description = models.TextField()
     category = models.CharField(max_length=30, choices=CATEGORY_CHOICES)
 
-    # ✅ Support for both URL-based and file-based videos
     video_file = models.FileField(upload_to='videos/%Y/%m/%d/', blank=True, null=True)
     video_url = models.URLField(max_length=500, blank=True, null=True)
 
@@ -701,7 +698,6 @@ class CampusMediaPost(models.Model):
 
     @property
     def video_source(self):
-        """Return the video URL if video_file exists, otherwise return video_url."""
         if self.video_file:
             return self.video_file.url
         return self.video_url
@@ -750,7 +746,6 @@ class ZoomClassSession(models.Model):
     recording_url = models.URLField(max_length=500, blank=True, null=True)
     recording_duration = models.CharField(max_length=20, blank=True, null=True)
 
-    # JSON fields for ephemeral state — avoids creating separate tables
     active_attendees = models.JSONField(default=list, blank=True)
     chat_messages = models.JSONField(default=list, blank=True)
 
