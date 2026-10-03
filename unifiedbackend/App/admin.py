@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import *  # ✅ Imports all models from App/models.py
+from .models import *  # ✅ Imports all models from App/models.py[cite: 4]
 
 
 # ---------- USER ----------
@@ -9,12 +9,13 @@ class UserAdmin(admin.ModelAdmin):
     search_fields = ['username', 'full_name', 'email']
     list_filter = ['role', 'is_active']
     readonly_fields = ['last_login', 'date_joined']
+    
     fieldsets = (
+        ('Account Credentials', {
+            'fields': ('username', 'password', 'is_active', 'is_staff', 'is_superuser')
+        }),
         ('Personal Information', {
             'fields': ('full_name', 'email', 'phone_number', 'avatar_url', 'bio')
-        }),
-        ('Account Credentials', {
-            'fields': ('username', 'is_active', 'is_staff', 'is_superuser')
         }),
         ('Role & Academic', {
             'fields': ('role', 'student_id', 'instructor_id', 'staff_id', 'officer_id')
@@ -28,7 +29,20 @@ class UserAdmin(admin.ModelAdmin):
             'fields': ('department', 'specialization', 'office_hours'),
             'classes': ('collapse',)
         }),
+        ('Important Dates', {
+            'fields': ('last_login', 'date_joined'),
+            'classes': ('collapse',)
+        }),
     )
+
+    def save_model(self, request, obj, form, change):
+        # Automatically hash the password if it's provided or modified
+        password = form.cleaned_data.get('password')
+        if password:
+            if not change or password != User.objects.get(pk=obj.pk).password:
+                if not password.startswith('pbkdf2_'):
+                    obj.set_password(password)
+        super().save_model(request, obj, form, change)
 
 
 # ---------- COURSE ----------
