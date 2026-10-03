@@ -6,7 +6,7 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
-DEBUG = os.getenv('DJANGO_DEBUG', 'False') == 'True'
+DEBUG = True  # Temporarily forced to True to reveal the traceback
 
 # Allow Render domain, wildcard domain, localhost, and custom hostnames
 ALLOWED_HOSTS = [
