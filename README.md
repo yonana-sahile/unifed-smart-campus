@@ -1,5 +1,6 @@
 <div align="center">
 
+
 # 🎓 Mekdela Amba University — Unified Smart Campus Management System
 
 **USCMS** · A full-stack digital campus platform for academic, administrative, and student services.
