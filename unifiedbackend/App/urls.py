@@ -7,6 +7,7 @@ router.register(r'auth', views.AuthViewSet, basename='auth')
 router.register(r'users', views.UserViewSet)
 router.register(r'courses', views.CourseViewSet)
 router.register(r'materials', views.CourseMaterialViewSet)
+router.register(r'questions', views.QuestionViewSet)
 router.register(r'announcements', views.AnnouncementViewSet)
 router.register(r'assignments', views.AssignmentViewSet)
 router.register(r'submissions', views.SubmissionViewSet)
@@ -32,5 +33,6 @@ router.register(r'zoom-sessions', views.ZoomClassSessionViewSet)
 router.register(r'ai', views.AIViewSet, basename='ai')
 
 urlpatterns = [
+    path('ai/chat/', views.ai_chat, name='ai-chat'),   # ✅ ADDED: Groq AI chat endpoint
     path('', include(router.urls)),
 ]

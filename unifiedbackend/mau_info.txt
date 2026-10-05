@@ -1,0 +1,506 @@
+================================================================================
+MEKDELA AMBA UNIVERSITY — UNIFIED SMART CAMPUS MANAGEMENT SYSTEM
+Complete Project Knowledge Base
+================================================================================
+
+This document is the single source of truth for the Mekdela Amba University
+Unified Smart Campus Management System (USCMS). The AI Academic Assistant
+reads this entire file to answer student, instructor, and staff questions
+accurately.
+
+================================================================================
+SECTION 1 — UNIVERSITY OVERVIEW
+================================================================================
+
+Name: Mekdela Amba University (MAU)
+Amharic: መቅደላ አምባ ዩኒቨርሲቲ
+Location: South Wollo Zone, Amhara Region, Ethiopia
+Accreditation: HEIRA Accredited
+Registrar Phone: +251 33 222 0120
+ICT Helpdesk Phone: +251 33 222 0100
+ICT Email: ict.support@mau.edu.et
+System Version: USCMS v4.9.2
+
+Campuses:
+- Tulu Awliya (Main Campus) — Central Administration, College of Technology &
+  Engineering, College of Natural & Computational Sciences, Central Stadium.
+- Masha Campus — Agricultural Science, Forestry, Natural Resource Management,
+  High-Altitude Eco-Research.
+
+================================================================================
+SECTION 2 — SYSTEM ROLES AND ACCESS
+================================================================================
+
+The system supports the following user roles:
+
+1. STUDENT — Courses, materials, exams, grades, transcripts, finance,
+   clearance, AI assistant.
+2. INSTRUCTOR — Course management, exam creation and push, grade entry,
+   materials upload, Zoom classroom, AI assistant.
+3. REGISTRAR — Transcript generation, certificate issuance, student records,
+   MoE admissions.
+4. DEPARTMENT_HEAD — Course outlines, evaluations, department oversight.
+5. ADMIN — Full system access, user management, system settings.
+6. DEAN — Academic oversight, faculty-level reporting.
+7. AUDITOR — Read-only access to audit logs and reports.
+8. LIBRARY_STAFF — Library resources, digital library management.
+9. FINANCE_OFFICER — Payments, scholarships, cost-sharing, clearance.
+
+Login Flow:
+- Username + Password → POST /api/token/
+- Returns: { "refresh": "...", "access": "...", "user": {...} }
+- The token is stored in browser localStorage as "access_token".
+- Sent on every API request as "Authorization: Bearer <token>".
+
+================================================================================
+SECTION 3 — STUDENT WORKFLOWS
+================================================================================
+
+3.1 ACADEMIC DASHBOARD
+Shows: Degree progress, CGPA, completed credit hours, academic standing,
+campus node, active alerts.
+Progress: X/180 CH completed, percentage toward graduation.
+Academic Standing: Good Standing / Warning / Probation / Dismissal.
+
+3.2 COURSE REGISTRATION (Browse & Register)
+Steps:
+1. Log in to student dashboard.
+2. Click "Browse & Register" in the sidebar.
+3. Search for courses by code or title.
+4. Click "Enroll" next to the desired course.
+5. Confirm registration. The course appears in "My Courses."
+
+Rules:
+- Late registration incurs a penalty after the deadline.
+- Course capacity limits enrollment; if full, enroll fails.
+- Prerequisites must be satisfied before enrolling.
+- Cost-sharing balance must be cleared before exam registration.
+- Maximum course load: 18 credit hours without department head approval.
+- Add/drop window: 2 weeks after classes begin.
+
+3.3 COURSE MATERIALS
+- Browse materials per enrolled course.
+- File types: PDF, Video, Document, Slide.
+- Organized by chapter/week.
+- Download directly from the portal.
+
+3.4 ZOOM CLASSROOM
+- Live sessions shown with "LIVE" badge.
+- Click "Join" to enter the session (uses join URL + passcode).
+- Recordings posted after the session ends.
+- Status values: UPCOMING, LIVE, COMPLETED, CANCELLED.
+
+3.5 ONLINE EXAMINATIONS
+- Exams displayed with "LIVE PUSHED" badge when active.
+- "Start Examination" opens a full-screen modal with a live countdown timer.
+- Auto-save is enabled for all answers.
+- Submit via "Submit Exam" button.
+- The exam attempt is recorded with the score and timestamp.
+
+Exam submission flow:
+POST /api/exam-attempts/ with:
+{
+  "exam": <exam_id>,
+  "student": <student_user_id>,
+  "answers": { "<question_id>": "<selected_option>", ... },
+  "score": <computed_score>,
+  "status": "SUBMITTED",
+  "submitted_at": "ISO timestamp"
+}
+
+3.6 GRADES & ASSESSMENTS
+Assessment structure (50/20/30):
+- Continuous Assessment: 50% (quizzes, labs, assignments, projects)
+- Midterm Exam: 20%
+- Final Exam: 30%
+- Total: 100%
+
+Letter grades:
+- A: 90–100 (grade point 4.0)
+- B: 80–89 (grade point 3.0)
+- C: 70–79 (grade point 2.0)
+- D: 60–69 (grade point 1.0)
+- F: < 60 (grade point 0.0)
+
+3.7 OFFICIAL TRANSCRIPT
+- Request from "Official Transcript" in the sidebar.
+- Generated with a unique verification code.
+- Requires approval from the registrar.
+- Includes cumulative GPA and total credits.
+
+3.8 FINANCE & TUITION
+Payment methods: Telebirr, CBE Birr, Awash Bank, Bank Transfer.
+Payment types: Tuition, Cost Sharing, Dormitory, ID Card, Registration.
+Payment statuses: VERIFIED, PENDING, REJECTED.
+View outstanding balance under "Finance & Tuition" in the portal.
+
+3.9 DIGITAL CLEARANCE
+Workflow:
+1. Submit clearance request from the "Digital Clearance" portal.
+2. Departmental verification in this order:
+   a. Library — return books, clear overdue fines
+   b. Department Head — return lab kits, equipment, submit capstone thesis
+   c. Student Service & Proctor — return dorm inventory and keys
+   d. Registrar & Finance — settle fees, request transcript
+3. Once all departments approve, a cryptographically signed Exit Certificate
+   with a verifiable QR code is generated instantly.
+
+Clearance reasons: GRADUATION, END_OF_YEAR, WITHDRAWAL, TRANSFER.
+Overall statuses: IN_PROGRESS, APPROVED, BLOCKED.
+Timeline: 3–7 working days if all departments clear.
+
+3.10 SMART CAMPUS HUB
+Features:
+- Campus news and announcements
+- AI Copilot (24/7 academic assistant)
+- Digital Clearance portal
+- Smart Labs & Facilities booking
+- Campus Alerts (ACADEMIC, EMERGENCY, WEATHER, FACILITY, FINANCE)
+- Campus Media (video posts)
+
+================================================================================
+SECTION 4 — GRADING AND HONORS
+================================================================================
+
+4.1 Assessment Model (50/20/30)
+- Continuous Assessment: 50%
+- Midterm Exam: 20%
+- Final Exam: 30%
+
+4.2 Graduation Distinctions (based on CGPA)
+- Very Great Distinction (Gold Medal): CGPA ≥ 3.75 (no grade below B)
+- Great Distinction: CGPA 3.50 – 3.74
+- Distinction: CGPA 3.00 – 3.49
+- Pass: CGPA 2.00 – 2.99
+
+4.3 Academic Probation
+- Semester GPA < 1.75 triggers an academic warning.
+- Continued low performance results in probation, then dismissal.
+
+4.4 Grade Appeal
+- Request within 10 days of grade posting.
+- Instructor responds within 5 working days.
+- Escalate to Department Head, then Dean if unresolved.
+
+================================================================================
+SECTION 5 — EXAMS AND ASSESSMENTS
+================================================================================
+
+5.1 MoE Higher Education Exit Exam (HEEE)
+- Eligibility: All graduating final-year undergraduate students.
+- Pass mark: 50% cumulative aggregate score.
+- Format: 100 standardized Multiple Choice Questions, 3 hours.
+- Blueprint: Prepared by the Ministry of Education, covering department core
+  competencies.
+
+Sample curriculum breakdown (Software Engineering):
+- Architecture: 25%
+- Algorithms: 20%
+- Databases: 20%
+- Networks & Security: 15%
+- QA & Testing: 10%
+- Project Ethics: 10%
+
+5.2 University Midterm and Final Exams
+- Created by instructors via the Exam Management portal.
+- Question types: MCQ, True/False, Short Answer.
+- Pushed live to students via the "Push Exam" action.
+- Timer runs in real-time during the exam.
+- Continuous auto-save during the exam.
+
+5.3 Exam Attendance Rules
+- Arrive 15 minutes before the exam starts.
+- No phones or smart devices in the exam hall.
+- Only permitted materials allowed (calculator for math, etc.).
+- Missing final exam = 0 unless excused with documentation within 5 days.
+
+================================================================================
+SECTION 6 — INSTRUCTOR WORKFLOWS
+================================================================================
+
+6.1 Course Management
+- Create and edit courses (code, title, credit hours, capacity).
+- Set prerequisites, semester, academic year.
+- View enrolled student count.
+
+6.2 Exam Creation
+- Build exams with title, date, duration, total marks, instructions.
+- Add questions (MCQ, TF, short answer).
+- Set correct answers and marks per question.
+- Push exam live to students (status DRAFT → ACTIVE).
+
+6.3 Grade Entry
+- Enter continuous assessment, midterm, final scores.
+- System auto-computes total grade and letter grade.
+- Submit for approval.
+
+6.4 Course Materials Upload
+- Upload PDF, video, documents, slides.
+- Assign chapter/week.
+- Optional description per file.
+
+6.5 Zoom Classroom
+- Create scheduled live sessions.
+- Start/end live sessions.
+- Provide recordings after sessions end.
+
+================================================================================
+SECTION 7 — AI ACADEMIC ASSISTANT
+================================================================================
+
+7.1 Purpose
+The MAU AI Academic Assistant is a 24/7 bilingual (English/Amharic) chat
+assistant that answers questions about:
+- MoE Exit Exam
+- Grading and honors
+- Digital clearance workflow
+- Campuses and facilities
+- Course registration
+- Fees and payments
+- Student services (dorm, cafe, health center, library)
+- Any other university policy
+
+7.2 Technology
+- Backend: Django + Google Gemini (gemini-flash-latest)
+- Knowledge: Long-context prompting using this document
+- Frontend: React chat widget, floating bottom-right on every page
+
+7.3 Response Style
+- Concise, factual, and helpful.
+- Replies in the same language as the user (English or Amharic).
+- Cites sources when answers come from the context.
+- Suggests contacting the registrar when unsure.
+
+7.4 Example Questions the AI Can Answer
+- "How do I register for a course?"
+- "What is the exit exam pass mark?"
+- "How does the digital clearance workflow work?"
+- "Explain the 50/20/30 grading system."
+- "What are the graduation distinction levels?"
+- "Where is the Tulu Awliya campus?"
+- "What are the cafe hours?"
+- "How do I pay my tuition?"
+- "What is academic probation?"
+
+================================================================================
+SECTION 8 — SYSTEM ARCHITECTURE
+================================================================================
+
+8.1 Backend
+- Django 4.2
+- Django REST Framework
+- SimpleJWT for authentication
+- PostgreSQL database
+- Google Gemini API for AI chat
+- Long-context prompting with mau_info.txt
+
+8.2 Frontend
+- React 18 + TypeScript
+- Vite build tool
+- Tailwind CSS
+- Motion (Framer Motion) for animations
+- Lucide React icons
+
+8.3 Key API Endpoints
+- POST /api/token/ — Login (JWT)
+- POST /api/token/refresh/ — Refresh token
+- GET /api/users/ — List users
+- GET /api/courses/ — List courses
+- POST /api/courses/ — Create course
+- POST /api/courses/{id}/enroll/ — Enroll
+- GET /api/materials/ — Course materials
+- GET /api/exams/ — List exams
+- POST /api/exams/ — Create exam
+- POST /api/exams/{id}/push/ — Push exam live
+- POST /api/exam-attempts/ — Submit exam attempt
+- GET /api/grades/ — List grades
+- GET /api/transcripts/ — List transcripts
+- GET /api/clearances/ — List clearances
+- GET /api/payments/ — List payments
+- GET /api/scholarships/ — List scholarships
+- GET /api/zoom-sessions/ — List zoom sessions
+- POST /api/ai/chat/ — AI chat (Gemini)
+
+8.4 Environment Variables
+- DJANGO_SECRET_KEY
+- DJANGO_DEBUG
+- DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_NAME
+- GEMINI_API_KEY
+- CORS_ALLOWED_ORIGINS
+- DJANGO_ALLOWED_HOSTS
+
+================================================================================
+SECTION 9 — CAMPUS SERVICES
+================================================================================
+
+9.1 Student Dining (Cafe)
+- Breakfast: 6:30 AM – 8:30 AM
+- Lunch: 11:30 AM – 1:30 PM
+- Dinner: 5:30 PM – 7:30 PM
+- Managed via digital meal card.
+
+9.2 Dormitories
+- Blocks 1–12 at Tulu Awliya campus.
+- 24/7 proctor oversight.
+- High-speed campus Wi-Fi.
+- Curfew: 10:00 PM (Sun–Thu), 11:00 PM (Fri–Sat).
+- Visitors only in common areas, not rooms.
+
+9.3 Health Center
+- 24/7 Student Clinic.
+- Emergency medical response.
+- Counseling services.
+
+9.4 Digital Library
+- 45,000+ open-access e-books.
+- IEEE journals.
+- MoE past exit exams.
+- Study carrel reservations.
+- Physical book availability check.
+- Loan period: 14 days.
+- Overdue fine: 5 birr per day per book.
+
+================================================================================
+SECTION 10 — FACILITY BOOKINGS
+================================================================================
+
+Facility types: LAB, AUDITORIUM, SEMINAR_ROOM, LIBRARY_CUBICLE.
+Campuses: Tulu Awulia (Main), Masha Campus.
+Booking statuses: CONFIRMED, PENDING, CANCELLED.
+Equipment: projectors, computers, whiteboards, etc. per facility.
+
+================================================================================
+SECTION 11 — SCHOLARSHIPS AND FINANCIAL AID
+================================================================================
+
+Scholarship types:
+- MERIT_BASED
+- NEED_BASED
+- MOE_SPECIAL_GRANT
+- FEMALE_INCENTIVE
+
+Application statuses: ISSUED, APPLIED.
+Fields: student, scholarship type, amount, semester, academic year,
+issued date.
+
+================================================================================
+SECTION 12 — CERTIFICATES AND DOCUMENTS
+================================================================================
+
+Certificate types:
+- COMPLETION
+- ENROLLMENT
+- DEAN_HONOR_ROLL
+- DEGREE_ATTESTATION
+
+Each certificate includes a unique verification code.
+Issuance requires registrar approval.
+
+================================================================================
+SECTION 13 — ACADEMIC CALENDAR (2025/26)
+================================================================================
+
+Semester I:
+- Registration: Sept 1–15, 2025
+- Classes begin: Sept 16, 2025
+- Midterm exams: Nov 3–14, 2025
+- Final exams: Jan 5–16, 2026
+- Grade submission: Jan 23, 2026
+- Semester break: Jan 24 – Feb 8, 2026
+
+Semester II:
+- Registration: Feb 9–20, 2026
+- Classes begin: Feb 23, 2026
+- Midterm exams: Apr 13–24, 2026
+- Final exams: Jun 8–19, 2026
+- Grade submission: Jun 26, 2026
+- Graduation: July 5, 2026
+
+Holidays:
+- Ethiopian New Year: Sept 11
+- Meskel: Sept 27
+- Genna (Christmas): Jan 7
+- Timkat: Jan 19
+- Adwa Victory Day: Mar 2
+- Ethiopian Good Friday: April
+- Easter: April
+- Labour Day: May 1
+- Patriots' Day: May 5
+
+Key Deadlines:
+- Add/drop: 2 weeks after classes begin
+- Late registration fee: after registration week
+- Grade appeal: 10 days after grade posting
+- Exit exam registration: 6 weeks before graduation
+
+================================================================================
+SECTION 14 — POLICIES AND RULES
+================================================================================
+
+14.1 Attendance Policy
+- Minimum 80% attendance per course to sit for final exam.
+- Medical excuses submitted within 5 days.
+- 3 unexcused absences = warning; 5 = academic penalty.
+
+14.2 Academic Integrity
+- Plagiarism = automatic F for the assignment.
+- Repeated plagiarism = academic probation or dismissal.
+- Exams are proctored; cheating = immediate disqualification.
+
+14.3 Exam Rules
+- Arrive 15 minutes before the exam starts.
+- No phones or smart devices in the exam hall.
+- Only permitted materials allowed (calculator for math, etc.).
+
+14.4 Dormitory Rules
+- Curfew: 10:00 PM (Sun–Thu), 11:00 PM (Fri–Sat).
+- Visitors only in common areas, not rooms.
+- Overnight guests require proctor approval.
+
+14.5 Library Rules
+- Silent zones enforced.
+- Books can be borrowed for 14 days.
+- Overdue fine: 5 birr per day per book.
+
+14.6 Grade Appeal Process
+1. Request a re-evaluation within 10 days of grade posting.
+2. Instructor responds within 5 working days.
+3. If unresolved, escalate to Department Head.
+4. Final appeal to the Dean.
+
+14.7 Student Code of Conduct
+- Respect for all students, staff, and property.
+- No harassment, discrimination, or violence.
+- Violations result in disciplinary hearings.
+
+================================================================================
+SECTION 15 — CONTACT DIRECTORY
+================================================================================
+
+Registrar Office: +251 33 222 0120 — registrar@mau.edu.et
+ICT Helpdesk: +251 33 222 0100 — ict.support@mau.edu.et
+Finance Office: finance@mau.edu.et
+Library: library@mau.edu.et
+Student Services: students@mau.edu.et
+
+================================================================================
+SECTION 16 — GLOSSARY
+================================================================================
+
+CGPA — Cumulative Grade Point Average
+GPA — Grade Point Average
+CH — Credit Hours
+MoE — Ministry of Education
+HEEE — Higher Education Exit Exam
+USCMS — Unified Smart Campus Management System
+JWT — JSON Web Token
+RAG — Retrieval-Augmented Generation
+LMS — Learning Management System
+MCQ — Multiple Choice Question
+TF — True/False
+SE — Software Engineering
+CS — Computer Science
+
+================================================================================
+END OF DOCUMENT
+================================================================================

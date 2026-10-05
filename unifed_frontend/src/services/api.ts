@@ -31,7 +31,6 @@ const API_BASE = import.meta.env.VITE_API_URL || 'https://unifed-smart-campus.on
 
 const api = axios.create({
   baseURL: API_BASE,
-  // ✅ FIX: 60s timeout so Render free-tier cold starts don't hang the UI.
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });
@@ -62,21 +61,17 @@ api.interceptors.response.use(
 const unwrapList = <T>(raw: any): T[] =>
   Array.isArray(raw) ? raw : (raw?.results ?? []);
 
-// ✅ FIX: map Django snake_case → frontend camelCase.
-// Without this, `u.full_name` never becomes `u.fullName`, and
-// RegistrarDashboard crashes on `st.fullName.toLowerCase()`.
+// ---------- MAPPERS (Django snake_case → frontend camelCase) ----------
+
 const mapUser = (u: any): User => ({
   id: `U_${u.id}`,
   username: u.username || "",
-  // CRITICAL: fullName must ALWAYS be a string, never undefined/null.
   fullName: u.full_name || u.fullName || u.username || "Unknown User",
   email: u.email || "",
   role: u.role || "STUDENT",
   isActive: u.is_active ?? true,
   avatarUrl: u.avatar_url ?? undefined,
   phoneNumber: u.phone_number ?? undefined,
-
-  // Student fields (safe fallbacks so dashboards don't crash)
   studentId: u.student_id ?? undefined,
   academicYear: u.academic_year ?? undefined,
   semester: u.semester ?? undefined,
@@ -84,37 +79,146 @@ const mapUser = (u: any): User => ({
   gpa: u.gpa != null ? Number(u.gpa) : undefined,
   cgpa: u.cgpa != null ? Number(u.cgpa) : undefined,
   outstandingFees: u.outstanding_fees != null ? Number(u.outstanding_fees) : 0,
-  costSharingBalance:
-    u.cost_sharing_balance != null ? Number(u.cost_sharing_balance) : 0,
-
-  // Instructor fields
+  costSharingBalance: u.cost_sharing_balance != null ? Number(u.cost_sharing_balance) : 0,
   instructorId: u.instructor_id ?? undefined,
   department: u.department || undefined,
   specialization: u.specialization ?? undefined,
   officeHours: u.office_hours ?? undefined,
-
-  // Staff fields
   staffId: u.staff_id ?? undefined,
   librarySection: u.library_section ?? undefined,
   officerId: u.officer_id ?? undefined,
   bio: u.bio ?? undefined,
 } as User);
 
+const mapCourse = (c: any): Course => ({
+  id: String(c.id),
+  courseCode: c.course_code ?? c.courseCode ?? '',
+  courseTitle: c.course_title ?? c.courseTitle ?? '',
+  creditHours: c.credit_hours ?? c.creditHours ?? 0,
+  description: c.description ?? '',
+  department: c.department ?? '',
+  instructorId: String(c.instructor ?? c.instructorId ?? ''),
+  instructorName: c.instructor_name ?? c.instructorName ?? '',
+  semester: c.semester ?? '',
+  academicYear: c.academic_year ?? c.academicYear ?? 0,
+  capacity: c.capacity ?? 0,
+  enrolledStudentsCount: c.enrolled_students_count ?? c.enrolledStudentsCount ?? 0,
+  prerequisites: Array.isArray(c.prerequisites) ? c.prerequisites : [],
+} as Course);
+
+const mapMaterial = (m: any): CourseMaterial => ({
+  id: String(m.id),
+  courseId: String(m.course ?? m.courseId ?? ''),
+  title: m.title ?? '',
+  fileType: m.file_type ?? m.fileType ?? 'Document',
+  fileName: m.file_name ?? m.fileName ?? '',
+  fileSize: m.file_size ?? m.fileSize ?? '',
+  fileData: m.file_data ?? m.fileData ?? undefined,
+  chapterWeek: m.chapter_week ?? m.chapterWeek ?? '',
+  instructorName: m.instructor_name ?? m.instructorName ?? '',
+  uploadedAt: m.uploaded_at ?? m.uploadedAt ?? new Date().toISOString(),
+  description: m.description ?? '',
+} as CourseMaterial);
+
+const mapAnnouncement = (a: any): Announcement => ({
+  id: String(a.id),
+  courseId: a.course ? String(a.course) : '',
+  courseTitle: a.course_title ?? a.courseTitle ?? '',
+  title: a.title ?? '',
+  content: a.content ?? '',
+  postedBy: a.posted_by ?? a.postedBy ?? '',
+  postedAt: a.posted_at ?? a.postedAt ?? new Date().toISOString(),
+} as Announcement);
+
+const mapAssignment = (a: any): Assignment => ({
+  id: String(a.id),
+  courseId: String(a.course ?? a.courseId ?? ''),
+  title: a.title ?? '',
+  dueDate: a.due_date ?? a.dueDate ?? new Date().toISOString(),
+  maxScore: a.max_score ?? a.maxScore ?? 100,
+  description: a.description ?? '',
+} as Assignment);
+
+const mapSubmission = (s: any): Submission => ({
+  id: String(s.id),
+  assignmentId: String(s.assignment ?? s.assignmentId ?? ''),
+  assignmentTitle: s.assignment_title ?? s.assignmentTitle ?? '',
+  courseId: String(s.course ?? s.courseId ?? ''),
+  studentId: String(s.student ?? s.studentId ?? ''),
+  studentName: s.student_name ?? s.studentName ?? '',
+  submittedAt: s.submitted_at ?? s.submittedAt ?? new Date().toISOString(),
+  fileUrl: s.file_url ?? s.fileUrl ?? undefined,
+  fileName: s.file_name ?? s.fileName ?? '',
+  score: s.score ?? undefined,
+  feedback: s.feedback ?? undefined,
+  status: s.status ?? 'PENDING',
+} as Submission);
+
+const mapExam = (e: any): Exam => ({
+  id: String(e.id),
+  courseId: String(e.course ?? e.courseId ?? ''),
+  courseTitle: e.course_title ?? e.courseTitle ?? '',
+  examTitle: e.exam_title ?? e.examTitle ?? '',
+  examDate: e.exam_date ?? e.examDate ?? new Date().toISOString(),
+  durationMinutes: e.duration_minutes ?? e.durationMinutes ?? 60,
+  totalMarks: e.total_marks ?? e.totalMarks ?? 100,
+  instructions: e.instructions ?? '',
+  questions: (e.questions || []).map((q: any) => ({
+    questionText: q.question_text ?? q.questionText ?? "",
+    questionType: q.question_type ?? q.questionType ?? "MCQ",
+    options: q.options ?? [],
+    correctAnswer: q.correct_answer ?? q.correctAnswer ?? "",
+    marks: q.marks ?? 5,
+  })),
+  status: e.status ?? 'DRAFT',
+  isPushed: e.is_pushed ?? e.isPushed ?? false,
+  pushedAt: e.pushed_at ?? e.pushedAt ?? undefined,
+  createdBy: e.created_by ?? e.createdBy ?? '',
+  category: e.category ?? 'EXAM',
+} as Exam);
+
+const mapExamAttempt = (a: any): ExamAttempt => ({
+  id: String(a.id),
+  examId: String(a.exam ?? a.examId ?? ''),
+  examTitle: a.exam_title ?? a.examTitle ?? '',
+  studentId: String(a.student ?? a.studentId ?? ''),
+  studentName: a.student_name ?? a.studentName ?? '',
+  answers: a.answers ?? {},
+  score: a.score ?? 0,
+  status: a.status ?? 'IN_PROGRESS',
+  startedAt: a.started_at ?? a.startedAt ?? new Date().toISOString(),
+  submittedAt: a.submitted_at ?? a.submittedAt ?? undefined,
+} as ExamAttempt);
+
+const mapGrade = (g: any): Grade => ({
+  id: String(g.id),
+  studentId: String(g.student ?? g.studentId ?? ''),
+  studentName: g.student_name ?? g.studentName ?? '',
+  courseId: String(g.course ?? g.courseId ?? ''),
+  courseTitle: g.course_title ?? g.courseTitle ?? '',
+  courseCode: g.course_code ?? g.courseCode ?? '',
+  creditHours: g.credit_hours ?? g.creditHours ?? 0,
+  continuousAssessmentScore: g.continuous_assessment_score ?? g.continuousAssessmentScore ?? 0,
+  midExamScore: g.mid_exam_score ?? g.midExamScore ?? 0,
+  finalExamScore: g.final_exam_score ?? g.finalExamScore ?? 0,
+  totalGrade: g.total_grade ?? g.totalGrade ?? 0,
+  letterGrade: g.letter_grade ?? g.letterGrade ?? '',
+  gradePoint: g.grade_point ?? g.gradePoint ?? 0,
+  semester: g.semester ?? '',
+  status: g.status ?? 'CALCULATED',
+  comments: g.comments ?? undefined,
+} as Grade);
+
 // ---------- USERS ----------
-// ✅ FIX: apply mapUser to guarantee fullName is always a string.
 export const getUsers = (): Promise<User[]> =>
   api.get('/users/').then(r =>
-    unwrapList<any>(r.data)
-      .filter(u => u && typeof u === 'object')  // drop malformed rows
-      .map(mapUser)
+    unwrapList<any>(r.data).filter(u => u && typeof u === 'object').map(mapUser)
   );
 export const saveUsers = (users: User[]): Promise<User[]> =>
   api.put('/users/', users).then(r => r.data);
 export const updateUser = (user: User): Promise<User> =>
   api.put(`/users/${user.id}/`, user).then(r => r.data);
 
-// ✅ NEW: real login via Django's JWT endpoint (/api/token/).
-// Call this from App.tsx if you want to authenticate "fanta" etc.
 export const login = async (username: string, password: string) => {
   const { data } = await api.post('/token/', { username, password });
   const token = data.access ?? data.token;
@@ -125,50 +229,38 @@ export const login = async (username: string, password: string) => {
 
 // ---------- COURSES ----------
 export const getCourses = (): Promise<Course[]> =>
-  api.get('/courses/').then(r => unwrapList<Course>(r.data));
+  api.get('/courses/').then(r => unwrapList<any>(r.data).map(mapCourse));
 export const saveCourses = (courses: Course[]): Promise<Course[]> =>
   api.put('/courses/', courses).then(r => r.data);
-// per-item update (DRF-405 safe)
 export const updateCourse = (id: string, course: any): Promise<Course> =>
   api.patch(`/courses/${id}/`, course).then(r => r.data);
+export const addCourse = (course: any): Promise<Course> =>
+  api.post('/courses/', course).then(r => mapCourse(r.data));
 
 // ---------- MATERIALS ----------
 export const getMaterials = (): Promise<CourseMaterial[]> =>
-  api.get('/materials/').then(r => unwrapList<CourseMaterial>(r.data));
+  api.get('/materials/').then(r => unwrapList<any>(r.data).map(mapMaterial));
 export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMaterial[]> =>
   api.put('/materials/', materials).then(r => r.data);
-
-// create one material via POST (matches DRF ModelViewSet)
 export const addMaterial = (material: any): Promise<CourseMaterial> =>
-  api.post('/materials/', material).then(r => r.data);
-
+  api.post('/materials/', material).then(r => mapMaterial(r.data));
 export const updateMaterial = (id: string, material: any): Promise<CourseMaterial> =>
-  api.patch(`/materials/${id}/`, material).then(r => r.data);
-
+  api.patch(`/materials/${id}/`, material).then(r => mapMaterial(r.data));
 export const deleteMaterial = (id: string): Promise<void> =>
   api.delete(`/materials/${id}/`).then(() => undefined);
 
 // ---------- ANNOUNCEMENTS ----------
 export const getAnnouncements = (): Promise<Announcement[]> =>
-  api.get('/announcements/').then(r => unwrapList<Announcement>(r.data));
+  api.get('/announcements/').then(r => unwrapList<any>(r.data).map(mapAnnouncement));
 
 export const createAnnouncement = (announcement: any): Promise<any> => {
   const payload: any = {
     course: announcement.course ?? null,
-    course_title:
-      announcement.courseTitle ??
-      announcement.course_title ??
-      "Campus News & Announcements",
+    course_title: announcement.courseTitle ?? announcement.course_title ?? "Campus News & Announcements",
     title: announcement.title,
     content: announcement.content,
-    posted_by:
-      announcement.postedBy ??
-      announcement.posted_by ??
-      "University Media Directorate",
-    posted_at:
-      announcement.postedAt ??
-      announcement.posted_at ??
-      new Date().toISOString(),
+    posted_by: announcement.postedBy ?? announcement.posted_by ?? "University Media Directorate",
+    posted_at: announcement.postedAt ?? announcement.posted_at ?? new Date().toISOString(),
   };
   return api.post('/announcements/', payload).then(r => r.data);
 };
@@ -176,20 +268,11 @@ export const createAnnouncement = (announcement: any): Promise<any> => {
 export const updateAnnouncement = (id: string, announcement: any): Promise<any> => {
   const payload: any = {
     course: announcement.course ?? null,
-    course_title:
-      announcement.courseTitle ??
-      announcement.course_title ??
-      "Campus News & Announcements",
+    course_title: announcement.courseTitle ?? announcement.course_title ?? "Campus News & Announcements",
     title: announcement.title,
     content: announcement.content,
-    posted_by:
-      announcement.postedBy ??
-      announcement.posted_by ??
-      "University Media Directorate",
-    posted_at:
-      announcement.postedAt ??
-      announcement.posted_at ??
-      new Date().toISOString(),
+    posted_by: announcement.postedBy ?? announcement.posted_by ?? "University Media Directorate",
+    posted_at: announcement.postedAt ?? announcement.posted_at ?? new Date().toISOString(),
   };
   return api.put(`/announcements/${id}/`, payload).then(r => r.data);
 };
@@ -199,60 +282,55 @@ export const deleteAnnouncement = (id: string): Promise<void> =>
 
 // ---------- ASSIGNMENTS ----------
 export const getAssignments = (): Promise<Assignment[]> =>
-  api.get('/assignments/').then(r => unwrapList<Assignment>(r.data));
+  api.get('/assignments/').then(r => unwrapList<any>(r.data).map(mapAssignment));
 export const saveAssignments = (assignments: Assignment[]): Promise<Assignment[]> =>
   api.put('/assignments/', assignments).then(r => r.data);
 export const addAssignment = (assignment: any): Promise<Assignment> =>
-  api.post('/assignments/', assignment).then(r => r.data);
+  api.post('/assignments/', assignment).then(r => mapAssignment(r.data));
 export const deleteAssignment = (id: string): Promise<void> =>
   api.delete(`/assignments/${id}/`).then(() => undefined);
 
 // ---------- SUBMISSIONS ----------
 export const getSubmissions = (): Promise<Submission[]> =>
-  api.get('/submissions/').then(r => unwrapList<Submission>(r.data));
+  api.get('/submissions/').then(r => unwrapList<any>(r.data).map(mapSubmission));
 export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]> =>
   api.put('/submissions/', submissions).then(r => r.data);
 export const addSubmission = (submission: any): Promise<Submission> =>
-  api.post('/submissions/', submission).then(r => r.data);
+  api.post('/submissions/', submission).then(r => mapSubmission(r.data));
 export const updateSubmission = (id: string, submission: any): Promise<Submission> =>
-  api.patch(`/submissions/${id}/`, submission).then(r => r.data);
+  api.patch(`/submissions/${id}/`, submission).then(r => mapSubmission(r.data));
 
 // ---------- EXAMS ----------
 export const getExams = (): Promise<Exam[]> =>
-  api.get('/exams/').then(r => unwrapList<Exam>(r.data));
-
+  api.get('/exams/').then(r => unwrapList<any>(r.data).map(mapExam));
+export const addQuestion = (question: any): Promise<any> =>
+  api.post('/questions/', question).then(r => r.data);
 export const createExam = (exam: any): Promise<Exam> =>
-  api.post('/exams/', exam).then(r => r.data);
-
+  api.post('/exams/', exam).then(r => mapExam(r.data));
 export const updateExam = (id: string, exam: any): Promise<Exam> =>
-  api.patch(`/exams/${id}/`, exam).then(r => r.data);
-
+  api.patch(`/exams/${id}/`, exam).then(r => mapExam(r.data));
 export const pushExam = (examId: string, isPushed: boolean): Promise<Exam> =>
-  api.post(`/exams/${examId}/push/`, { is_pushed: isPushed }).then(r => r.data);
-
+  api.post(`/exams/${examId}/push/`, { is_pushed: isPushed }).then(r => mapExam(r.data));
 export const deleteExam = (id: string): Promise<void> =>
   api.delete(`/exams/${id}/`).then(() => undefined);
-
-// Legacy compatibility — DRF disallows bulk PUT on /exams/ (405).
 export const saveExams = (exams: Exam[]): Promise<Exam[]> =>
   api.put('/exams/', exams).then(r => r.data);
 
 // ---------- EXAM ATTEMPTS ----------
 export const getExamAttempts = (): Promise<ExamAttempt[]> =>
-  api.get('/exam-attempts/').then(r => unwrapList<ExamAttempt>(r.data));
+  api.get('/exam-attempts/').then(r => unwrapList<any>(r.data).map(mapExamAttempt));
 export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> =>
   api.put('/exam-attempts/', attempts).then(r => r.data);
-
 export const createExamAttempt = (attempt: any): Promise<ExamAttempt> =>
-  api.post('/exam-attempts/', attempt).then(r => r.data);
+  api.post('/exam-attempts/', attempt).then(r => mapExamAttempt(r.data));
 
 // ---------- GRADES ----------
 export const getGrades = (): Promise<Grade[]> =>
-  api.get('/grades/').then(r => unwrapList<Grade>(r.data));
+  api.get('/grades/').then(r => unwrapList<any>(r.data).map(mapGrade));
 export const saveGrades = (grades: Grade[]): Promise<Grade[]> =>
   api.put('/grades/', grades).then(r => r.data);
 export const updateGrade = (id: string, grade: any): Promise<Grade> =>
-  api.patch(`/grades/${id}/`, grade).then(r => r.data);
+  api.patch(`/grades/${id}/`, grade).then(r => mapGrade(r.data));
 
 // ---------- TRANSCRIPTS ----------
 export const getTranscripts = (): Promise<Transcript[]> =>
@@ -296,6 +374,29 @@ export const getEvaluations = (): Promise<InstructorEvaluation[]> =>
 export const saveEvaluations = (evaluations: InstructorEvaluation[]): Promise<InstructorEvaluation[]> =>
   api.put('/evaluations/', evaluations).then(r => r.data);
 
+// ✅ NEW: Create a single evaluation via POST (uses DRF's create action)
+export const addEvaluation = (evaluation: any): Promise<any> => {
+  // Map camelCase → snake_case for Django
+  const payload: any = {
+    student: parseInt(String(evaluation.studentId).replace(/\D/g, "")) || evaluation.studentId,
+    student_name: evaluation.studentName || "",
+    instructor: parseInt(String(evaluation.instructorId).replace(/\D/g, "")) || evaluation.instructorId,
+    instructor_name: evaluation.instructorName || "",
+    course: evaluation.courseId
+      ? parseInt(String(evaluation.courseId).replace(/\D/g, "")) || evaluation.courseId
+      : null,
+    course_code: evaluation.courseCode || "",
+    clarity: evaluation.clarity ?? 0,
+    punctuality: evaluation.punctuality ?? 0,
+    helpfulness: evaluation.helpfulness ?? 0,
+    assessment_fairness: evaluation.assessmentFairness ?? 0,
+    overall_rating: evaluation.overallRating ?? 0,
+    comments: evaluation.comments || "",
+    semester: evaluation.semester || "",
+  };
+  return api.post('/evaluations/', payload).then(r => r.data);
+};
+
 // ---------- MOE ADMISSIONS ----------
 export const getMoEAdmissions = (): Promise<MoEAdmissionRecord[]> =>
   api.get('/moe-admissions/').then(r => unwrapList<MoEAdmissionRecord>(r.data));
@@ -315,7 +416,6 @@ export const saveAuditLogs = (logs: AuditLog[]): Promise<AuditLog[]> =>
   api.put('/audit-logs/', logs).then(r => r.data);
 
 // ---------- SETTINGS ----------
-// ✅ FIX: defensively unwrap if Django paginates this singleton.
 export const getSettings = (): Promise<SystemSettings> =>
   api.get('/settings/').then(r => {
     const raw = r.data;
@@ -326,15 +426,13 @@ export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> 
   api.put('/settings/', settings).then(r => r.data);
 
 // ---------- AI ----------
-// Backend returns snake_case; remap to camelCase for the dashboards.
 export const predictStudentRisk = async (studentId: string): Promise<AIRiskPrediction> => {
   const raw: any = await api.post('/ai/predict-risk/', { studentId }).then(r => r.data);
   return {
     classification: raw.classification,
     dropoutProbability: raw.dropout_probability ?? raw.dropoutProbability ?? 0,
     attendancePercentage: raw.attendance_percentage ?? raw.attendancePercentage ?? 0,
-    continuousAssessmentAvg:
-      raw.continuous_assessment_avg ?? raw.continuousAssessmentAvg ?? 0,
+    continuousAssessmentAvg: raw.continuous_assessment_avg ?? raw.continuousAssessmentAvg ?? 0,
     cgpa: raw.cgpa ?? 0,
     keyRiskFactors: raw.key_risk_factors ?? raw.keyRiskFactors ?? [],
     recommendedAction: raw.recommended_action ?? raw.recommendedAction ?? '',
@@ -358,10 +456,14 @@ export const getCourseAdvisor = (data: {
 }): Promise<{ summary: string; recommendations: any[] }> =>
   api.post('/ai/course-advisor/', data).then(r => r.data);
 
+// ---------- AI CHAT (Groq) ----------
+export const sendChatMessage = (payload: {
+  message: string;
+  history?: { role: "user" | "assistant"; content: string }[];
+}): Promise<{ reply: string }> =>
+  api.post('/ai/chat/', payload).then(r => r.data);
+
 // ---------- AUDIT LOG HELPER (non-fatal) ----------
-// Sends snake_case keys to match Django's AuditLog model fields.
-// Wrapped in try/catch so a failed audit write never breaks the
-// calling action (announcement post, material upload, exam push, etc.).
 export const addAuditLog = async (
   userId: string,
   userName: string,
@@ -371,10 +473,13 @@ export const addAuditLog = async (
   entityId: string,
   description: string
 ): Promise<AuditLog | null> => {
+  const token = localStorage.getItem('access_token');
+  if (!token) {
+    return null;
+  }
+
   try {
     const res = await api.post('/audit-logs/', {
-      // ✅ FIX: send both `user` and `user_id` so we match whichever
-      // field name the Django serializer expects.
       user: userId,
       user_id: userId,
       user_name: userName,
@@ -387,8 +492,6 @@ export const addAuditLog = async (
     });
     return res.data;
   } catch (err: any) {
-    // Log to console for debugging, but don't throw — audit logging
-    // must never block the primary user action.
     console.warn(
       '[audit-log] write failed (non-fatal):',
       err?.response?.status,
@@ -506,16 +609,11 @@ const fromZoomSnakeCase = (raw: any) => ({
 });
 
 export const getZoomSessions = (): Promise<any[]> =>
-  api.get('/zoom-sessions/').then(r =>
-    unwrapList<any>(r.data).map(fromZoomSnakeCase)
-  );
-
+  api.get('/zoom-sessions/').then(r => unwrapList<any>(r.data).map(fromZoomSnakeCase));
 export const addZoomSession = (data: any): Promise<any> =>
   api.post('/zoom-sessions/', toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
-
 export const updateZoomSession = (id: string, data: any): Promise<any> =>
   api.patch(`/zoom-sessions/${id}/`, toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
-
 export const deleteZoomSession = (id: string): Promise<void> =>
   api.delete(`/zoom-sessions/${id}/`).then(() => undefined);
 
@@ -524,11 +622,11 @@ export const CampusDatabase = {
   getUsers,
   saveUsers,
   updateUser,
-  // ✅ NEW: expose login for real Django auth via /api/token/.
   login,
   getCourses,
   saveCourses,
   updateCourse,
+  addCourse,
   getMaterials,
   saveMaterials,
   addMaterial,
@@ -547,6 +645,7 @@ export const CampusDatabase = {
   addSubmission,
   updateSubmission,
   getExams,
+  addQuestion,
   createExam,
   updateExam,
   pushExam,
@@ -572,6 +671,7 @@ export const CampusDatabase = {
   saveCourseOutlines,
   getEvaluations,
   saveEvaluations,
+  addEvaluation,              // ✅ NEW
   getMoEAdmissions,
   saveMoEAdmissions,
   getCertificates,
@@ -583,6 +683,7 @@ export const CampusDatabase = {
   predictStudentRisk,
   generateExamQuestions,
   getCourseAdvisor,
+  sendChatMessage,
   addAuditLog,
   getClearances,
   saveClearances,

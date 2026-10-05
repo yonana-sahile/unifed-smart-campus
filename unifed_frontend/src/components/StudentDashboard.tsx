@@ -9,7 +9,7 @@ import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { ExamResultsModal } from "./ExamResultsModal";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
-  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X
+  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
@@ -36,6 +36,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<any>(null);
 
+  // ✅ Instructors for evaluation dropdown
+  const [instructors, setInstructors] = useState<User[]>([]);
+  // ✅ Course chosen for the evaluation
+  const [evaluationCourseId, setEvaluationCourseId] = useState<string>("");
+
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
@@ -54,6 +59,15 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [draggingAssignmentId, setDraggingAssignmentId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<{ [assignmentId: string]: string }>({});
 
+  const [courseSearch, setCourseSearch] = useState("");
+  const [materialSearch, setMaterialSearch] = useState("");
+  const [assignmentSearch, setAssignmentSearch] = useState("");
+  const [downloadProgress, setDownloadProgress] = useState<{ [id: string]: number }>({});
+
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogSort, setCatalogSort] = useState<"code" | "title" | "credits" | "enrollment">("code");
+  const [catalogDept, setCatalogDept] = useState("ALL");
+
   useEffect(() => {
     loadData();
   }, []);
@@ -70,6 +84,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         examAttemptsData,
         gradesData,
         settingsData,
+        usersData,           // ✅ NEW
       ] = await Promise.all([
         CampusDatabase.getCourses(),
         CampusDatabase.getMaterials(),
@@ -80,6 +95,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         CampusDatabase.getExamAttempts(),
         CampusDatabase.getGrades(),
         CampusDatabase.getSettings(),
+        CampusDatabase.getUsers(),  // ✅ NEW
       ]);
 
       setCourses(Array.isArray(coursesData) ? coursesData : []);
@@ -91,6 +107,17 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setExamAttempts(Array.isArray(examAttemptsData) ? examAttemptsData : []);
       setGrades(Array.isArray(gradesData) ? gradesData : []);
       setSettings(settingsData || null);
+
+      // ✅ Filter users to instructors only
+      const allUsers: User[] = Array.isArray(usersData) ? usersData : [];
+      setInstructors(
+        allUsers.filter(
+          (u) =>
+            u.role === "INSTRUCTOR" ||
+            u.role === "DEPARTMENT_HEAD" ||
+            u.role === "DEAN"
+        )
+      );
     } catch (error) {
       console.error("Failed to load student data:", error);
       setCourses([]);
@@ -102,6 +129,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setExamAttempts([]);
       setGrades([]);
       setSettings(null);
+      setInstructors([]);
     }
   };
 
@@ -123,31 +151,50 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     };
   }, [currentExam, examTimeRemaining]);
 
-  const handleEnroll = async (course: Course) => {
-    if (course.prerequisites && course.prerequisites.length > 0) {
-      const missingPrereqs: string[] = [];
-      course.prerequisites.forEach((p) => {
-        const prereqCode = p.split(" ")[0];
-        const passedPrereq = grades.some(
-          (g) => g.studentId === user.id && g.courseCode === prereqCode && g.totalGrade >= 50
-        );
-        if (!passedPrereq) missingPrereqs.push(p);
-      });
+  const isAlreadyRegistered = (courseId: string) =>
+    grades.some((g) => g.studentId === user.id && g.courseId === courseId);
 
-      if (missingPrereqs.length > 0) {
-        alert(`Enrollment Denied (BR-01): You have not completed the required prerequisite: ${missingPrereqs.join(", ")}`);
+  const checkPrerequisites = (course: Course): { ok: boolean; missing: string[] } => {
+    if (!course.prerequisites || course.prerequisites.length === 0) {
+      return { ok: true, missing: [] };
+    }
+    const missing: string[] = [];
+    course.prerequisites.forEach((p) => {
+      const prereqCode = p.split(" ")[0];
+      const passed = grades.some(
+        (g) => g.studentId === user.id && g.courseCode === prereqCode && g.totalGrade >= 50
+      );
+      if (!passed) missing.push(p);
+    });
+    return { ok: missing.length === 0, missing };
+  };
+
+  const handleEnroll = async (course: Course, force = false) => {
+    if (isAlreadyRegistered(course.id)) {
+      alert(`You are already registered for ${course.courseCode}.`);
+      return;
+    }
+
+    if (!force) {
+      const prereqCheck = checkPrerequisites(course);
+      if (!prereqCheck.ok) {
+        const proceed = window.confirm(
+          `Enrollment Denied (BR-01): You have not completed the required prerequisite: ${prereqCheck.missing.join(", ")}.\n\n` +
+          `Do you want to override (DEV ONLY) and enroll anyway?`
+        );
+        if (!proceed) return;
+        force = true;
+      }
+
+      if (user.outstandingFees && user.outstandingFees > 1000) {
+        alert(`Enrollment Blocked: You must clear outstanding fee balances exceeding 1000 ETB. Current balance: ${user.outstandingFees} ETB.`);
         return;
       }
-    }
 
-    if (user.outstandingFees && user.outstandingFees > 1000) {
-      alert(`Enrollment Blocked: You must clear outstanding fee balances exceeding 1000 ETB. Current balance: ${user.outstandingFees} ETB.`);
-      return;
-    }
-
-    if (course.enrolledStudentsCount >= course.capacity) {
-      alert("Course is full. Adding to waitlist.");
-      return;
+      if (course.enrolledStudentsCount >= course.capacity) {
+        alert("Course is full. Adding to waitlist.");
+        return;
+      }
     }
 
     try {
@@ -161,9 +208,28 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       };
       setCourses((prev) => prev.map((c) => (c.id === course.id ? normalized : c)));
 
+      const newGrade: Grade = {
+        id: "G_" + Date.now(),
+        studentId: user.id,
+        studentName: user.fullName,
+        courseId: course.id,
+        courseTitle: course.courseTitle,
+        courseCode: course.courseCode,
+        creditHours: course.creditHours,
+        continuousAssessmentScore: 0,
+        midExamScore: 0,
+        finalExamScore: 0,
+        totalGrade: 0,
+        letterGrade: "-",
+        gradePoint: 0,
+        semester: course.semester,
+        status: "CALCULATED",
+      };
+      setGrades((prev) => [...prev, newGrade]);
+
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Enroll Course", "Course", course.id,
-        `Student registered for course: ${course.courseCode} - ${course.courseTitle}`
+        `Student registered for course: ${course.courseCode} - ${course.courseTitle}${force ? " (dev override)" : ""}`
       );
 
       alert(`Successfully registered for ${course.courseCode}!`);
@@ -212,11 +278,20 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     };
 
     try {
+      const matchedAssignment = assignments.find(
+        (a) => String(a.id) === String(assignmentId)
+      );
+
       const created: any = await CampusDatabase.addSubmission({
-        assignment: assignmentId,
-        student: user.id,
+        assignment:
+          parseInt(String(assignmentId).replace(/\D/g, "")) || assignmentId,
+        assignment_title:
+          matchedAssignment?.title || newSubmission.assignmentTitle || "Assignment",
+        course:
+          matchedAssignment?.courseId || newSubmission.courseId || 1,
+        student:
+          parseInt(String(user.id).replace(/\D/g, "")) || user.id,
         student_name: user.fullName,
-        submitted_at: newSubmission.submittedAt,
         file_name: fileName,
         status: "PENDING",
       });
@@ -234,7 +309,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       alert(`Successfully uploaded and submitted ${fileName}!`);
     } catch (err: any) {
       console.error(err);
-      alert("Submission failed: " + (err?.message || "Unknown error"));
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      alert("Submission failed: " + detail);
     }
   };
 
@@ -339,13 +417,60 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  const submitInstructorEvaluation = () => {
-    if (!evaluatorInstructorId) return;
-    alert(
-      `Thank you for submitting your evaluation! Rating: ${evaluationRating}/5. Your feedback has been stored anonymously for department head review.`
-    );
-    setEvaluatorInstructorId(null);
-    setEvaluationFeedback("");
+  // ✅ FIXED: sends real course + course_code + semester
+  const submitInstructorEvaluation = async () => {
+    if (!evaluatorInstructorId) {
+      alert("Please select an instructor.");
+      return;
+    }
+    if (!evaluationCourseId) {
+      alert("Please select a course.");
+      return;
+    }
+    if (!evaluationFeedback.trim()) {
+      alert("Please write your feedback.");
+      return;
+    }
+
+    const instructor = instructors.find((i) => i.id === evaluatorInstructorId);
+    const course = courses.find((c) => String(c.id) === String(evaluationCourseId));
+
+    try {
+      await CampusDatabase.addEvaluation({
+        studentId: user.id,
+        studentName: user.fullName,
+        instructorId: evaluatorInstructorId,
+        instructorName: instructor?.fullName || "Unknown",
+        courseId: evaluationCourseId,
+        courseCode: course?.courseCode || "",
+        clarity: evaluationRating,
+        punctuality: evaluationRating,
+        helpfulness: evaluationRating,
+        assessmentFairness: evaluationRating,
+        overallRating: evaluationRating,
+        comments: evaluationFeedback,
+        semester: course?.semester || "1",
+      });
+
+      await CampusDatabase.addAuditLog(
+        user.id, user.fullName, "STUDENT", "Submit Evaluation", "InstructorEvaluation", evaluatorInstructorId,
+        `Submitted evaluation for ${instructor?.fullName || "instructor"} — ${evaluationRating}/5`
+      );
+
+      alert(
+        `Thank you for submitting your evaluation of ${instructor?.fullName || "the instructor"}! Rating: ${evaluationRating}/5. Your feedback has been stored anonymously for department head review.`
+      );
+      setEvaluatorInstructorId(null);
+      setEvaluationCourseId("");
+      setEvaluationFeedback("");
+      setEvaluationRating(5);
+    } catch (err: any) {
+      console.error(err);
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      alert("Evaluation submission failed: " + detail);
+    }
   };
 
   const handlePayment = async () => {
@@ -379,6 +504,145 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   };
 
   const getMyGrades = () => grades.filter((g) => g.studentId === user.id);
+
+  const getCourseProgress = (courseId: string) => {
+    const courseAssignments = assignments.filter((a) => a.courseId === courseId);
+    if (courseAssignments.length === 0) return 100;
+    const submittedCount = courseAssignments.filter((a) =>
+      submissions.some((s) => s.assignmentId === a.id && s.studentId === user.id)
+    ).length;
+    return Math.round((submittedCount / courseAssignments.length) * 100);
+  };
+
+  const handleRealDownload = async (material: CourseMaterial) => {
+    const materialId = material.id;
+    setDownloadProgress((prev) => ({ ...prev, [materialId]: 0 }));
+
+    try {
+      if (material.fileData && material.fileData.startsWith("data:")) {
+        let progress = 0;
+        const timer = setInterval(() => {
+          progress += 20;
+          setDownloadProgress((prev) => ({ ...prev, [materialId]: Math.min(progress, 100) }));
+          if (progress >= 100) clearInterval(timer);
+        }, 80);
+
+        await new Promise((r) => setTimeout(r, 500));
+
+        const a = document.createElement("a");
+        a.href = material.fileData;
+        a.download = material.fileName || material.title;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else if (material.fileData) {
+        const response = await fetch(material.fileData);
+        const contentLength = response.headers.get("content-length");
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+
+        if (!response.body || !response.ok) {
+          throw new Error("No file data available");
+        }
+
+        const reader = response.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let received = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          if (total > 0) {
+            setDownloadProgress((prev) => ({
+              ...prev,
+              [materialId]: Math.round((received / total) * 100),
+            }));
+          }
+        }
+
+        const blob = new Blob(chunks as BlobPart[]);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = material.fileName || material.title;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } else {
+        alert(`No file data attached to "${material.title}". Contact your instructor.`);
+        setDownloadProgress((prev) => {
+          const copy = { ...prev };
+          delete copy[materialId];
+          return copy;
+        });
+        return;
+      }
+
+      setDownloadProgress((prev) => ({ ...prev, [materialId]: 100 }));
+      setTimeout(() => {
+        setDownloadProgress((prev) => {
+          const copy = { ...prev };
+          delete copy[materialId];
+          return copy;
+        });
+      }, 1500);
+    } catch (err: any) {
+      console.error("Download failed:", err);
+      alert("Download failed: " + (err?.message || "Unknown error"));
+      setDownloadProgress((prev) => {
+        const copy = { ...prev };
+        delete copy[materialId];
+        return copy;
+      });
+    }
+  };
+
+  const filteredCourses = courses.filter((c) =>
+    courseSearch === "" ||
+    c.courseCode?.toLowerCase().includes(courseSearch.toLowerCase()) ||
+    c.courseTitle?.toLowerCase().includes(courseSearch.toLowerCase()) ||
+    c.instructorName?.toLowerCase().includes(courseSearch.toLowerCase())
+  );
+
+  const filteredMaterials = materials.filter((m) =>
+    materialSearch === "" ||
+    m.title?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+    m.description?.toLowerCase().includes(materialSearch.toLowerCase()) ||
+    m.fileType?.toLowerCase().includes(materialSearch.toLowerCase())
+  );
+
+  const filteredAssignments = assignments.filter((a) =>
+    assignmentSearch === "" ||
+    a.title?.toLowerCase().includes(assignmentSearch.toLowerCase()) ||
+    a.description?.toLowerCase().includes(assignmentSearch.toLowerCase())
+  );
+
+  const catalogDepartments = ["ALL", ...Array.from(new Set(courses.map((c) => c.department).filter(Boolean)))];
+
+  const catalogCourses = courses
+    .filter((c) => catalogDept === "ALL" || c.department === catalogDept)
+    .filter((c) =>
+      catalogSearch === "" ||
+      c.courseCode?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      c.courseTitle?.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+      c.instructorName?.toLowerCase().includes(catalogSearch.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (catalogSort === "code") return (a.courseCode || "").localeCompare(b.courseCode || "");
+      if (catalogSort === "title") return (a.courseTitle || "").localeCompare(b.courseTitle || "");
+      if (catalogSort === "credits") return (b.creditHours || 0) - (a.creditHours || 0);
+      if (catalogSort === "enrollment")
+        return (b.enrolledStudentsCount / b.capacity) - (a.enrolledStudentsCount / a.capacity);
+      return 0;
+    });
+
+  const totalCreditsRequired = 180;
+  const creditsEarned = getMyGrades()
+    .filter((g) => g.totalGrade >= 50)
+    .reduce((sum, g) => sum + (g.creditHours || 0), 0);
+  const degreeProgressPercent = Math.min(100, Math.round((creditsEarned / totalCreditsRequired) * 100));
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -588,6 +852,27 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
             ))}
           </nav>
 
+          <div className="p-3.5 border-t border-slate-800/80 bg-slate-950/60 space-y-2">
+            <div className="flex justify-between items-center">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 font-bold">
+                Degree Progress
+              </span>
+              <span className="text-[10px] font-mono font-bold text-amber-400">
+                {creditsEarned}/{totalCreditsRequired} CH
+              </span>
+            </div>
+            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-amber-400 to-amber-600 transition-all duration-500"
+                style={{ width: `${degreeProgressPercent}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center text-[10px] font-mono">
+              <span className="text-slate-500">COMPLETED</span>
+              <span className="text-amber-300 font-bold">{degreeProgressPercent}%</span>
+            </div>
+          </div>
+
           <div className="p-4 border-t border-slate-800/80 bg-slate-950/60 text-xs font-mono text-slate-400 space-y-1">
             <div className="flex justify-between items-center text-[10px]">
               <span className="text-slate-500">CURRICULUM</span>
@@ -666,31 +951,87 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 space-y-6">
                     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm">
-                      <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
-                        <BookOpen className="w-5 h-5 text-primary" />
-                        <span>Registered Courses</span>
-                      </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <h3 className="text-lg font-display font-bold text-slate-800 flex items-center space-x-2">
+                          <BookOpen className="w-5 h-5 text-primary" />
+                          <span>Registered Courses</span>
+                        </h3>
+                        <div className="relative w-full sm:w-64">
+                          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search courses..."
+                            value={courseSearch}
+                            onChange={(e) => setCourseSearch(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                      </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {courses.map((c) => (
-                          <div key={c.id} className="border border-slate-100 rounded-lg p-4 hover:shadow-md transition">
-                            <span className="text-xs font-mono font-bold text-primary bg-blue-50 px-2 py-0.5 rounded">
-                              {c.courseCode}
-                            </span>
-                            <h4 className="font-semibold text-slate-800 mt-2 line-clamp-1">{c.courseTitle}</h4>
-                            <p className="text-xs text-slate-500 mt-1">Instructor: {c.instructorName}</p>
-                            <p className="text-xs text-slate-400 mt-2">{c.creditHours} Credit Hours</p>
+                        {filteredCourses.map((c) => {
+                          const progress = getCourseProgress(c.id);
+                          return (
+                            <div key={c.id} className="border border-slate-100 rounded-lg p-4 hover:shadow-md transition">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-mono font-bold text-primary bg-blue-50 px-2 py-0.5 rounded">
+                                  {c.courseCode}
+                                </span>
+                                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                                  progress === 100 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                                }`}>
+                                  {progress === 100 ? "✓ Complete" : `${progress}%`}
+                                </span>
+                              </div>
+                              <h4 className="font-semibold text-slate-800 mt-2 line-clamp-1">{c.courseTitle}</h4>
+                              <p className="text-xs text-slate-500 mt-1">Instructor: {c.instructorName}</p>
+                              <p className="text-xs text-slate-400 mt-1">{c.creditHours} Credit Hours</p>
+
+                              <div className="mt-3 space-y-1">
+                                <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                                  <span>Course Progress</span>
+                                  <span>{progress}%</span>
+                                </div>
+                                <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all duration-500 ${
+                                      progress === 100
+                                        ? "bg-gradient-to-r from-emerald-400 to-emerald-600"
+                                        : "bg-gradient-to-r from-blue-400 to-blue-600"
+                                    }`}
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {filteredCourses.length === 0 && (
+                          <div className="col-span-full text-center py-8 text-slate-400 text-xs">
+                            No courses match "{courseSearch}"
                           </div>
-                        ))}
+                        )}
                       </div>
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm">
-                      <h3 className="text-lg font-display font-bold text-slate-800 mb-4 flex items-center space-x-2">
-                        <FileText className="w-5 h-5 text-primary" />
-                        <span>Upcoming Assignments & File Upload</span>
-                      </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <h3 className="text-lg font-display font-bold text-slate-800 flex items-center space-x-2">
+                          <FileText className="w-5 h-5 text-primary" />
+                          <span>Upcoming Assignments & File Upload</span>
+                        </h3>
+                        <div className="relative w-full sm:w-64">
+                          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search assignments..."
+                            value={assignmentSearch}
+                            onChange={(e) => setAssignmentSearch(e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-primary"
+                          />
+                        </div>
+                      </div>
                       <div className="space-y-4">
-                        {assignments.map((as) => {
+                        {filteredAssignments.map((as) => {
                           const isSubmitted = submissions.some(
                             (sub) => sub.assignmentId === as.id && sub.studentId === user.id
                           );
@@ -751,6 +1092,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             </div>
                           );
                         })}
+                        {filteredAssignments.length === 0 && (
+                          <div className="text-center py-8 text-slate-400 text-xs">
+                            No assignments match "{assignmentSearch}"
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -813,11 +1159,87 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </p>
                 </div>
 
+                <div className="bg-gradient-to-r from-amber-50 via-white to-emerald-50 border border-amber-200 rounded-xl p-4 sm:p-5 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-11 h-11 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700">
+                        <Award className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h4 className="font-display font-bold text-slate-800 text-sm">Degree Progress</h4>
+                        <p className="text-xs text-slate-500">
+                          {creditsEarned} of {totalCreditsRequired} credit hours completed
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-2xl font-display font-bold text-amber-700">{degreeProgressPercent}%</span>
+                      <p className="text-[10px] font-mono text-slate-500 uppercase">Complete</p>
+                    </div>
+                  </div>
+                  <div className="w-full h-2.5 bg-white border border-amber-100 rounded-full overflow-hidden mt-3">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-400 to-amber-600 transition-all duration-500"
+                      style={{ width: `${degreeProgressPercent}%` }}
+                    />
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="relative md:col-span-1">
+                      <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search by code, title, or instructor..."
+                        value={catalogSearch}
+                        onChange={(e) => setCatalogSearch(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <select
+                        value={catalogDept}
+                        onChange={(e) => setCatalogDept(e.target.value)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:border-primary"
+                      >
+                        {catalogDepartments.map((d) => (
+                          <option key={d} value={d}>
+                            {d === "ALL" ? "All Departments" : d}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <select
+                        value={catalogSort}
+                        onChange={(e) => setCatalogSort(e.target.value as any)}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-white focus:outline-none focus:border-primary"
+                      >
+                        <option value="code">Sort by Course Code</option>
+                        <option value="title">Sort by Title</option>
+                        <option value="credits">Sort by Credit Hours (high to low)</option>
+                        <option value="enrollment">Sort by Popularity</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 font-mono mt-3">
+                    <span>{catalogCourses.length} course{catalogCourses.length !== 1 ? "s" : ""} found</span>
+                    <span>Total credits available: {catalogCourses.reduce((s, c) => s + c.creditHours, 0)}</span>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {courses.map((c) => {
+                  {catalogCourses.map((c) => {
                     const isFull = c.enrolledStudentsCount >= c.capacity;
+                    const alreadyIn = isAlreadyRegistered(c.id);
+                    const prereqCheck = checkPrerequisites(c);
+                    const enrollPercent = Math.round((c.enrolledStudentsCount / c.capacity) * 100);
+
                     return (
-                      <div key={c.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col h-full">
+                      <div key={c.id} className={`bg-white border rounded-xl overflow-hidden shadow-sm flex flex-col h-full ${
+                        alreadyIn ? "border-emerald-300" : "border-slate-200"
+                      }`}>
                         <div className="p-6 flex-1 space-y-4">
                           <div className="flex justify-between items-center">
                             <span className="text-xs font-mono font-bold bg-blue-50 text-primary px-2.5 py-1 rounded">
@@ -840,34 +1262,66 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                 Prerequisites
                               </span>
                               <div className="flex flex-wrap gap-1.5">
-                                {c.prerequisites.map((p, pIdx) => (
-                                  <span key={pIdx} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded font-medium">
-                                    {p}
-                                  </span>
-                                ))}
+                                {c.prerequisites.map((p, pIdx) => {
+                                  const met = !prereqCheck.missing.includes(p);
+                                  return (
+                                    <span key={pIdx} className={`text-[10px] px-2 py-0.5 rounded font-medium flex items-center space-x-1 ${
+                                      met ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"
+                                    }`}>
+                                      {met ? <Check className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                                      <span>{p}</span>
+                                    </span>
+                                  );
+                                })}
                               </div>
                             </div>
                           )}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                              <span>Enrollment</span>
+                              <span>{c.enrolledStudentsCount}/{c.capacity}</span>
+                            </div>
+                            <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-500 ${
+                                  enrollPercent >= 90 ? "bg-red-500" : enrollPercent >= 60 ? "bg-amber-500" : "bg-emerald-500"
+                                }`}
+                                style={{ width: `${enrollPercent}%` }}
+                              />
+                            </div>
+                          </div>
                         </div>
                         <div className="bg-slate-50 border-t border-slate-100 px-6 py-4 flex items-center justify-between">
                           <span className="text-xs font-mono text-slate-500">
                             Enrolled: {c.enrolledStudentsCount}/{c.capacity}
                           </span>
-                          <button
-                            onClick={() => handleEnroll(c)}
-                            disabled={isFull}
-                            className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
-                              isFull
-                                ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                                : "bg-primary hover:bg-primary-600 text-white shadow-sm"
-                            }`}
-                          >
-                            {isFull ? "Course Full" : "Register / Enroll"}
-                          </button>
+                          {alreadyIn ? (
+                            <span className="inline-flex items-center space-x-1 px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Registered</span>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleEnroll(c)}
+                              disabled={isFull}
+                              className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${
+                                isFull
+                                  ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                  : "bg-primary hover:bg-primary-600 text-white shadow-sm"
+                              }`}
+                            >
+                              {isFull ? "Course Full" : "Register / Enroll"}
+                            </button>
+                          )}
                         </div>
                       </div>
                     );
                   })}
+                  {catalogCourses.length === 0 && (
+                    <div className="col-span-full text-center py-12 text-slate-400 text-xs bg-white border border-slate-200 rounded-xl">
+                      No courses match your filters.
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -880,19 +1334,33 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
               >
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
-                    Learning Materials & Handouts
-                  </h2>
-                  <p className="text-slate-500 text-xs sm:text-sm">
-                    Access lecture syllabus slides, digital books, and stream video content shared by instructors.
-                  </p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
+                      Learning Materials & Handouts
+                    </h2>
+                    <p className="text-slate-500 text-xs sm:text-sm">
+                      Access lecture syllabus slides, digital books, and stream video content shared by instructors.
+                    </p>
+                  </div>
+                  <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by title, type, or description..."
+                      value={materialSearch}
+                      onChange={(e) => setMaterialSearch(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-xs focus:outline-none focus:border-primary"
+                    />
+                  </div>
                 </div>
 
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                   <div className="divide-y divide-slate-100">
-                    {materials.map((m) => {
+                    {filteredMaterials.map((m) => {
                       const associatedCourse = courses.find((c) => c.id === m.courseId);
+                      const progress = downloadProgress[m.id];
+                      const isDownloading = progress !== undefined && progress < 100;
                       return (
                         <div
                           key={m.id}
@@ -909,32 +1377,49 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             </div>
                             <h3 className="font-semibold text-slate-800 text-sm md:text-base">{m.title}</h3>
                             <p className="text-xs text-slate-500 line-clamp-2">{m.description}</p>
+                            {isDownloading && (
+                              <div className="w-full max-w-[200px] h-1 bg-slate-100 rounded-full overflow-hidden mt-2">
+                                <div
+                                  className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
                           <div className="flex items-center space-x-3 flex-shrink-0 w-full md:w-auto">
                             <span className="text-xs font-semibold px-3 py-1 rounded bg-slate-100 text-slate-600 font-mono">
                               {m.fileType}
                             </span>
                             <button
-                              onClick={() => {
-                                if (m.fileData) {
-                                  const a = document.createElement("a");
-                                  a.href = m.fileData;
-                                  a.download = m.fileName || m.title;
-                                  document.body.appendChild(a);
-                                  a.click();
-                                  document.body.removeChild(a);
-                                } else {
-                                  alert(`No file data attached to "${m.title}". Contact your instructor.`);
-                                }
-                              }}
-                              className="bg-primary hover:bg-primary-600 text-white p-2.5 rounded-lg flex items-center justify-center transition shadow-sm"
+                              onClick={() => handleRealDownload(m)}
+                              disabled={isDownloading}
+                              className="bg-primary hover:bg-primary-600 disabled:opacity-70 text-white p-2.5 rounded-lg flex items-center justify-center transition shadow-sm min-w-[44px] relative overflow-hidden"
                             >
-                              <Download className="w-4 h-4" />
+                              {progress !== undefined ? (
+                                <span className="text-[10px] font-mono font-bold relative z-10">
+                                  {progress < 100 ? `${progress}%` : "✓"}
+                                </span>
+                              ) : (
+                                <Download className="w-4 h-4 relative z-10" />
+                              )}
+                              {isDownloading && (
+                                <div
+                                  className="absolute inset-0 bg-emerald-500/60 transition-all"
+                                  style={{ width: `${progress}%` }}
+                                />
+                              )}
                             </button>
                           </div>
                         </div>
                       );
                     })}
+                    {filteredMaterials.length === 0 && (
+                      <div className="text-center py-12 text-slate-400 text-xs">
+                        {materials.length === 0
+                          ? "No materials available yet."
+                          : `No materials match "${materialSearch}"`}
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>
@@ -1109,6 +1594,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </div>
 
                   <div className="space-y-6">
+                    {/* ✅ FIXED: real instructors + course dropdown + working submit */}
                     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                       <div className="flex items-center space-x-2 text-primary">
                         <Star className="w-5 h-5 fill-current" />
@@ -1120,14 +1606,83 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         Submit feedback regarding course teaching quality. Your feedback assists the department in quality auditing.
                       </p>
                       <div className="space-y-3 pt-2">
-                        <label className="block text-xs font-medium text-slate-700">Select Instructor</label>
+                        <label className="block text-xs font-medium text-slate-700">
+                          Select Instructor{" "}
+                          {instructors.length > 0 && (
+                            <span className="text-slate-400 font-normal">
+                              ({instructors.length} available)
+                            </span>
+                          )}
+                        </label>
                         <select
-                          className="w-full border border-slate-200 rounded-lg p-2.5 text-xs bg-white"
-                          onChange={(e) => setEvaluatorInstructorId(e.target.value)}
+                          value={evaluatorInstructorId || ""}
+                          className="w-full border border-slate-200 rounded-lg p-2.5 text-xs bg-white focus:outline-none focus:border-primary"
+                          onChange={(e) => {
+                            setEvaluatorInstructorId(e.target.value);
+                            setEvaluationCourseId("");
+                          }}
                         >
                           <option value="">-- Choose Instructor --</option>
-                          <option value="U_IN01">Chalachew M (Software Engineering)</option>
+                          {instructors.length === 0 ? (
+                            <option value="" disabled>
+                              No instructors available
+                            </option>
+                          ) : (
+                            instructors.map((inst) => (
+                              <option key={inst.id} value={inst.id}>
+                                {inst.fullName}
+                                {inst.department ? ` (${inst.department})` : ""}
+                                {inst.role === "DEPARTMENT_HEAD"
+                                  ? " — Dept. Head"
+                                  : inst.role === "DEAN"
+                                  ? " — Dean"
+                                  : ""}
+                              </option>
+                            ))
+                          )}
                         </select>
+                        {instructors.length === 0 && (
+                          <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                            No instructors found in the system. Contact ICT if this is unexpected.
+                          </p>
+                        )}
+
+                        {/* ✅ Course dropdown appears after instructor is picked */}
+                        {evaluatorInstructorId && (
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 mb-1 mt-2">
+                              Select Course
+                            </label>
+                            <select
+                              value={evaluationCourseId}
+                              className="w-full border border-slate-200 rounded-lg p-2.5 text-xs bg-white focus:outline-none focus:border-primary"
+                              onChange={(e) => setEvaluationCourseId(e.target.value)}
+                            >
+                              <option value="">-- Choose Course --</option>
+                              {courses
+                                .filter((c) =>
+                                  String(c.instructorId) ===
+                                  String(evaluatorInstructorId).replace(/\D/g, "")
+                                )
+                                .map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.courseCode} — {c.courseTitle}
+                                  </option>
+                                ))}
+                              {courses.filter(
+                                (c) =>
+                                  String(c.instructorId) ===
+                                  String(evaluatorInstructorId).replace(/\D/g, "")
+                              ).length === 0 &&
+                                courses.map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.courseCode} — {c.courseTitle}
+                                  </option>
+                                ))}
+                            </select>
+                          </div>
+                        )}
+
                         <div className="space-y-1">
                           <label className="block text-xs font-medium text-slate-700">
                             Rating: {evaluationRating}/5
@@ -1136,6 +1691,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             {[1, 2, 3, 4, 5].map((num) => (
                               <button
                                 key={num}
+                                type="button"
                                 onClick={() => setEvaluationRating(num)}
                                 className="p-1 text-warning focus:outline-none"
                               >
@@ -1153,7 +1709,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         />
                         <button
                           onClick={submitInstructorEvaluation}
-                          disabled={!evaluatorInstructorId || !evaluationFeedback}
+                          disabled={
+                            !evaluatorInstructorId ||
+                            !evaluationCourseId ||
+                            !evaluationFeedback
+                          }
                           className="w-full bg-primary hover:bg-primary-600 disabled:bg-slate-200 disabled:text-slate-400 text-white py-2 rounded-lg text-xs font-semibold transition"
                         >
                           Submit Anonymous Evaluation
@@ -1436,19 +1996,19 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     <div className="border-t border-slate-100 pt-3 space-y-2">
                       <div className="flex justify-between py-1">
                         <span className="text-slate-400 font-mono">Account Bank</span>
-                        <strong className="text-slate-800">Pinnacle National Bank, N.A.</strong>
+                        <strong className="text-slate-800">Commercial Bank of Ethiopia</strong>
                       </div>
                       <div className="flex justify-between py-1">
                         <span className="text-slate-400 font-mono">Account Name</span>
-                        <strong className="text-slate-800">Thornfield Capital Partners IV, L.P.</strong>
+                        <strong className="text-slate-800">Mekdela Amba University</strong>
                       </div>
                       <div className="flex justify-between py-1">
                         <span className="text-slate-400 font-mono">Routing Number (ABA)</span>
-                        <strong className="text-slate-800 font-mono">021000322</strong>
+                        <strong className="text-slate-800 font-mono">CBETETAA</strong>
                       </div>
                       <div className="flex justify-between py-1">
                         <span className="text-slate-400 font-mono">Account Number</span>
-                        <strong className="text-slate-800 font-mono">8834-5521-0076</strong>
+                        <strong className="text-slate-800 font-mono">1000-2345-6789-01</strong>
                       </div>
                     </div>
                   </div>
@@ -1573,7 +2133,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         </main>
       </div>
 
-      {/* ACTIVE EXAM OVERLAY — mobile-responsive */}
+      {/* ACTIVE EXAM OVERLAY */}
       {currentExam && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh] border border-slate-200">
@@ -1600,7 +2160,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 </p>
               </div>
 
-              {currentExam.questions.map((q, qIdx) => (
+              {(currentExam.questions || []).map((q, qIdx) => (
                 <div key={qIdx} className="border-b border-slate-100 pb-5 sm:pb-6 space-y-3 sm:space-y-4">
                   <div className="flex justify-between items-start gap-2">
                     <h4 className="text-sm sm:text-base font-semibold text-slate-800 flex-1">
@@ -1621,7 +2181,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     />
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {q.options.map((opt, optIdx) => (
+                      {(q.options || []).map((opt, optIdx) => (
                         <button
                           key={optIdx}
                           onClick={() => handleSelectAnswer(qIdx, opt)}

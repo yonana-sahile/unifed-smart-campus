@@ -21,9 +21,11 @@ import {
   ChevronDown,
   ChevronRight,
   Flame,
-  Award
+  Award,
+  AlertCircle,
 } from "lucide-react";
 import type { User } from "../types";
+import { sendChatMessage } from "../services/api";
 
 interface FloatingAIAssistantProps {
   currentUser?: User | null;
@@ -37,29 +39,149 @@ interface Message {
   category?: "ACADEMIC" | "CLEARANCE" | "EXIT_EXAM" | "CAMPUS_LIFE" | "GENERAL";
 }
 
+interface QuickPrompt {
+  label: string;
+  amharic: string;
+  query: string;
+  category?: string;
+}
+
+// ---------------------------------------------------------------------------
+// LOCAL FAST-PATH ANSWERS
+// Used only when the backend is unreachable, so the user still gets *something*.
+// ---------------------------------------------------------------------------
+const LOCAL_FALLBACKS: { keywords: string[]; reply: string }[] = [
+  {
+    keywords: ["exit exam", "heee", "national exam", "ብሔራዊ ፈተና"],
+    reply: `📌 MoE Exit Exam (HEEE) — key facts:
+
+• Eligibility: All graduating final-year undergraduates.
+• Pass mark: 50% cumulative aggregate score.
+• Format: 100 MCQs, 3 hours.
+
+For your program-specific blueprint, contact your department head.`,
+  },
+  {
+    keywords: ["cgpa", "gpa", "grading", "ውጤት"],
+    reply: `🎓 Grading at MAU:
+
+• 50% Continuous Assessment
+• 20% Midterm Exam
+• 30% Final Exam
+
+Honors: Distinction 3.00–3.49 | Great 3.50–3.74 | Very Great ≥ 3.75`,
+  },
+  {
+    keywords: ["clearance", "ማጣሪያ", "ክሊራንስ"],
+    reply: `📑 Digital Clearance workflow:
+
+1. Submit request from "Digital Clearance".
+2. Library → Department Head → Dorm Proctor → Registrar & Finance.
+3. Exit Certificate with QR code generated automatically.`,
+  },
+  {
+    keywords: ["register", "registration", "enroll", "ምዝገባ"],
+    reply: `📝 Course Registration:
+
+1. Log in to student dashboard.
+2. Click "Browse & Register".
+3. Search for the course.
+4. Click "Enroll".
+5. Confirm. Course appears in "My Courses".`,
+  },
+  {
+    keywords: ["campus", "tulu", "masha", "የት ይገኛል"],
+    reply: `🏛️ Campuses:
+
+• Tulu Awliya (Main) — South Wollo, Amhara Region.
+• Masha — Sheka Zone, Southwest Ethiopia.
+
+Registrar: +251 33 222 0120`,
+  },
+  {
+    keywords: ["fee", "tuition", "payment", "finance", "ክፍያ"],
+    reply: `💰 Finance & Tuition:
+
+Methods: Telebirr, CBE Birr, Awash Bank, Bank Transfer.
+View balance under "Finance & Tuition" in the portal.`,
+  },
+];
+
+function getLocalFallback(query: string): string | null {
+  const lower = query.toLowerCase();
+  for (const entry of LOCAL_FALLBACKS) {
+    for (const kw of entry.keywords) {
+      if (lower.includes(kw)) return entry.reply;
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// MARKDOWN RENDERER (bold only)
+// ---------------------------------------------------------------------------
+const renderMarkdown = (text: string) => {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} className="font-bold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+};
+
+// ---------------------------------------------------------------------------
+// COMPONENT
+// ---------------------------------------------------------------------------
 export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ currentUser }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputQuery, setInputQuery] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showAllPrompts, setShowAllPrompts] = useState(false);
+  const [lastFailedQuery, setLastFailedQuery] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const initialGreeting = currentUser
     ? `Selam ${currentUser.fullName.split(" ")[0]}! I am your Mekdela Amba University AI Academic Assistant & Advisor. How can I assist your ${currentUser.role.replace("_", " ").toLowerCase()} journey today?`
     : `Selam! Welcome to Mekdela Amba University (Tulu Awliya & Masha Campuses). I am your 24/7 AI Campus Guide & Academic Assistant. How can I help you today? (እንደምን አደሩ/ዋሉ! እንዴት ልርዳዎት?)`;
 
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "msg_init",
-      sender: "ai",
-      text: initialGreeting,
-      timestamp: "Just now",
-      category: "GENERAL"
+  // ---------- RESTORE FROM LOCALSTORAGE ON MOUNT ----------
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = localStorage.getItem("mau_ai_chat_history");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      /* ignore */
     }
-  ]);
+    return [
+      {
+        id: "msg_init",
+        sender: "ai",
+        text: initialGreeting,
+        timestamp: "Just now",
+        category: "GENERAL",
+      },
+    ];
+  });
 
-  // Update greeting when user changes
+  // ---------- PERSIST TO LOCALSTORAGE ----------
+  useEffect(() => {
+    try {
+      localStorage.setItem("mau_ai_chat_history", JSON.stringify(messages.slice(-50)));
+    } catch {
+      /* ignore quota errors */
+    }
+  }, [messages]);
+
   useEffect(() => {
     if (messages.length === 1 && messages[0].id === "msg_init") {
       setMessages([
@@ -68,10 +190,11 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
           sender: "ai",
           text: initialGreeting,
           timestamp: "Just now",
-          category: "GENERAL"
-        }
+          category: "GENERAL",
+        },
       ]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser]);
 
   const scrollToBottom = () => {
@@ -79,9 +202,7 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
   };
 
   useEffect(() => {
-    if (isOpen && !isMinimized) {
-      scrollToBottom();
-    }
+    if (isOpen && !isMinimized) scrollToBottom();
   }, [messages, isOpen, isMinimized]);
 
   const handleCopy = (id: string, text: string) => {
@@ -91,18 +212,25 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
   };
 
   const handleClearChat = () => {
-    setMessages([
+    const fresh: Message[] = [
       {
         id: "msg_" + Date.now(),
         sender: "ai",
         text: `Chat history cleared. How else can I assist you with Mekdela Amba University resources?`,
         timestamp: "Just now",
-        category: "GENERAL"
-      }
-    ]);
+        category: "GENERAL",
+      },
+    ];
+    setMessages(fresh);
+    try {
+      localStorage.removeItem("mau_ai_chat_history");
+    } catch {
+      /* ignore */
+    }
   };
 
-  const handleSendMessage = (textToSend?: string) => {
+  // ---------- SEND MESSAGE ----------
+  const handleSendMessage = async (textToSend?: string) => {
     const query = textToSend || inputQuery;
     if (!query.trim()) return;
 
@@ -110,58 +238,86 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
       id: "u_" + Date.now(),
       sender: "user",
       text: query.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
 
     setMessages((prev) => [...prev, userMsg]);
     if (!textToSend) setInputQuery("");
     setIsTyping(true);
+    setLastFailedQuery(null);
 
-    setTimeout(() => {
-      let aiResponseText = "";
-      const lower = query.toLowerCase();
+    const history = messages
+      .filter((m) => m.id !== "msg_init")
+      .map((m) => ({
+        role: m.sender === "user" ? ("user" as const) : ("assistant" as const),
+        content: m.text,
+      }));
 
-      if (lower.includes("exit exam") || lower.includes("heee") || lower.includes("national exam") || lower.includes("ብሔራዊ ፈተና")) {
-        aiResponseText = `📌 **Ministry of Education (MoE) Higher Education Exit Exam (HEEE) Blueprint:**\n\n• **Eligibility:** All graduating final-year undergraduate students.\n• **Pass Mark:** 50% cumulative aggregate score.\n• **Curriculum Breakdown:** 100 standardized Multiple Choice Questions testing core departmental competencies (e.g., Software Engineering covers Architecture 25%, Algorithms 20%, Databases 20%, Networks & Security 15%, QA & Testing 10%, Project Ethics 10%).\n• **Resources:** Check the Digital Library or Department Head notices for mock trial exam schedules.`;
-      } else if (lower.includes("cgpa") || lower.includes("gpa") || lower.includes("grading") || lower.includes("ውጤት") || lower.includes("distinction")) {
-        aiResponseText = `🎓 **Mekdela Amba University Grading & Honors Policy:**\n\n• **Assessment Model (50/20/30):** 50% Continuous Quizzes/Labs/Projects + 20% Midterm Exam + 30% Final Exam.\n• **Graduation Honors:**\n  - *Very Great Distinction (Gold Medal):* CGPA ≥ 3.75 (no grade below B)\n  - *Great Distinction:* CGPA 3.50 – 3.74\n  - *Distinction:* CGPA 3.00 – 3.49\n  - *Pass:* CGPA 2.00 – 2.99\n• **Academic Probation:** Semester GPA < 1.75 triggers an academic warning.`;
-      } else if (lower.includes("clearance") || lower.includes("ማጣሪያ") || lower.includes("ዲጂታል ክሊራንስ") || lower.includes("kostima")) {
-        aiResponseText = `📑 **Digital Clearance (ክሊራንስ) Workflow:**\n\n1. **Submit Request:** Log in as a student and navigate to the "Digital Clearance" portal.\n2. **Departmental Verification:**\n   - Library (Returned books & no overdue fines)\n   - Department Head (Lab kits, equipment & capstone thesis)\n   - Student Service & Proctor (Dorm inventory & key return)\n   - Registrar & Finance (Fee settlements & transcript processing)\n3. **QR Certificate:** Once all 6 departments approve, a cryptographically signed University Exit Certificate with a verifiable QR code is generated instantly.`;
-      } else if (lower.includes("campus") || lower.includes("location") || lower.includes("tulu awliya") || lower.includes("masha") || lower.includes("የት ይገኛል")) {
-        aiResponseText = `🏛️ **Mekdela Amba University Campuses & Geography:**\n\n• **Main Campus (Tulu Awliya):** Located in South Wollo Zone, Amhara Region, Ethiopia. Houses the Central Administration, College of Technology & Engineering, College of Natural & Computational Sciences, and Central Stadium.\n• **Masha Campus:** Located in Sheka Zone, Southwest Ethiopia Peoples' Region. Specializes in Agricultural Science, Forestry, Natural Resource Management, and High-Altitude Eco-Research.\n• **Liaison Office:** Ministry of Education Compound, Addis Ababa.`;
-      } else if (lower.includes("dorm") || lower.includes("cafe") || lower.includes("food") || lower.includes("ካፌ") || lower.includes("ዶርም") || lower.includes("ምግብ")) {
-        aiResponseText = `🏢 **Student Services & Campus Facilities:**\n\n• **Student Dining (ካፌ):** Breakfast (6:30 AM - 8:30 AM), Lunch (11:30 AM - 1:30 PM), Dinner (5:30 PM - 7:30 PM). Managed via digital meal card.\n• **Dormitories:** Block 1-12 (Tulu Awliya) with 24/7 proctor oversight and high-speed campus Wi-Fi.\n• **Health Center:** 24/7 Student Clinic with emergency medical response and counseling services.`;
-      } else if (lower.includes("library") || lower.includes("መጽሐፍ") || lower.includes("research") || lower.includes("digital library")) {
-        aiResponseText = `📚 **Digital Library & E-Learning Access:**\n\n• The university digital library provides 45,000+ open-access e-books, IEEE journals, and MoE past exit exams.\n• Students and faculty can reserve study carrels and check physical book availability directly through the Library Staff Portal.`;
-      } else if (lower.includes("selam") || lower.includes("hi") || lower.includes("hello") || lower.includes("ሰላም") || lower.includes("hey")) {
-        aiResponseText = `ሰላም! (Selam!) How may I assist your academic endeavors at Mekdela Amba University today? You can ask me about course schedules, exam blueprints, clearance status, university regulations, or campus navigation!`;
-      } else {
-        aiResponseText = `🤖 **Mekdela Amba University AI Intelligence:**\n\nI have received your query regarding "${query}".\n\n• **Institutional Knowledge Base:** All university operations adhere to the FDRE Ministry of Education Guidelines and Mekdela Amba Senate Legislation.\n• **Quick Help Options:** You can explore the **Portal Help**, check **Campus Facilities**, or navigate through your assigned role dashboard. Is there a specific regulation, departmental contact, or academic procedure you would like me to clarify?`;
-      }
-
+    try {
+      const { reply } = await sendChatMessage({ message: query.trim(), history });
       const aiMsg: Message = {
         id: "ai_" + Date.now(),
         sender: "ai",
-        text: aiResponseText,
+        text: reply,
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        category: "GENERAL"
+        category: "GENERAL",
       };
-
       setMessages((prev) => [...prev, aiMsg]);
+    } catch (err: any) {
+      const errDetail =
+        err?.response?.data?.error ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Unknown error";
+
+      // Try local fallback for known topics
+      const local = getLocalFallback(query);
+
+      const aiMsg: Message = {
+        id: "ai_err_" + Date.now(),
+        sender: "ai",
+      text: local
+  ? `${local}\n\n— (Offline answer — live AI temporarily unavailable.)`
+  : `⚠️ I couldn't reach the AI service. Please try again.\n\nDetails: ${errDetail}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        category: "GENERAL",
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+
+      if (!local) setLastFailedQuery(query.trim());
+    } finally {
       setIsTyping(false);
-    }, 650);
+    }
   };
 
-  const quickPrompts = [
-    { label: "MoE Exit Exam Blueprint", amharic: "የብሔራዊ ፈተና መመሪያ", query: "What is the MoE Exit Exam blueprint and pass mark?" },
-    { label: "Grading & Honors Policy", amharic: "የውጤትና ምረቃ ደረጃዎች", query: "Explain the university grading 50/20/30 and graduation distinction levels." },
-    { label: "Digital Clearance Process", amharic: "የዲጂታል ክሊራንስ ቅደም-ተከተል", query: "How does the digital student clearance workflow work?" },
-    { label: "Campuses & Facilities", amharic: "ካምፓሶችና አድራሻ", query: "Tell me about Tulu Awliya and Masha campuses." }
+  const retryLast = () => {
+    if (lastFailedQuery) {
+      setLastFailedQuery(null);
+      handleSendMessage(lastFailedQuery);
+    }
+  };
+
+  // ---------- QUICK PROMPTS ----------
+  const allQuickPrompts: QuickPrompt[] = [
+    { label: "MoE Exit Exam Blueprint", amharic: "የብሔራዊ ፈተና መመሪያ", query: "What is the MoE Exit Exam blueprint and pass mark?", category: "EXIT_EXAM" },
+    { label: "Grading & Honors", amharic: "የውጤትና ምረቃ ደረጃዎች", query: "Explain the university grading 50/20/30 and graduation distinction levels.", category: "ACADEMIC" },
+    { label: "Digital Clearance", amharic: "የዲጂታል ክሊራንስ", query: "How does the digital student clearance workflow work?", category: "CLEARANCE" },
+    { label: "Campuses & Facilities", amharic: "ካምፓሶችና አድራሻ", query: "Tell me about Tulu Awliya and Masha campuses.", category: "CAMPUS_LIFE" },
+    { label: "Course Registration", amharic: "የኮርስ ምዝገባ", query: "How do I register for a course?", category: "ACADEMIC" },
+    { label: "Tuition & Payments", amharic: "ክፍያ", query: "How do I pay my tuition fees?", category: "ACADEMIC" },
+    { label: "Academic Probation", amharic: "የአካዳሚክ ጥንቃቄ", query: "What is academic probation and when is it triggered?", category: "ACADEMIC" },
+    { label: "Library Rules", amharic: "የቤተ መጻሕፍት ሕጎች", query: "What are the library loan rules and overdue fines?", category: "CAMPUS_LIFE" },
+    { label: "Dorm Rules", amharic: "የዶርም ሕጎች", query: "What are the dormitory curfew and visitor rules?", category: "CAMPUS_LIFE" },
+    { label: "Cafe Hours", amharic: "የካፌ ሰዓት", query: "What are the cafe dining hours?", category: "CAMPUS_LIFE" },
+    { label: "Grade Appeal", amharic: "የውጤት ቅሬታ", query: "How do I appeal a grade?", category: "ACADEMIC" },
+    { label: "Scholarships", amharic: "ስኮላርሺፕ", query: "What scholarship types are available?", category: "ACADEMIC" },
   ];
+
+  const visiblePrompts = showAllPrompts ? allQuickPrompts : allQuickPrompts.slice(0, 5);
 
   return (
     <>
-      {/* FLOATING TRIGGER BUTTON (Icon + Text in One Single Button, visible when closed) */}
+      {/* FLOATING TRIGGER BUTTON */}
       <AnimatePresence>
         {!isOpen && (
           <div className="fixed bottom-6 right-6 z-50">
@@ -178,16 +334,11 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
               className="relative flex items-center space-x-2.5 px-4 py-2.5 sm:px-4.5 sm:py-3 rounded-full shadow-2xl transition-all duration-300 cursor-pointer border border-amber-400/40 backdrop-blur-md bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-600 text-slate-950 hover:shadow-amber-500/40 group"
               title="Open Mekdela Amba University AI Assistant"
             >
-              {/* Subtle Outer Glow */}
               <div className="absolute inset-0 rounded-full bg-amber-400/30 animate-pulse blur-md -z-10" />
-
-              {/* Bot Icon with pencil badge */}
               <div className="relative w-8 h-8 rounded-full bg-slate-950/15 flex items-center justify-center shrink-0">
                 <Bot className="w-5 h-5 text-slate-950 group-hover:scale-110 transition-transform" />
                 <Pencil className="w-3 h-3 text-slate-950 absolute -top-0.5 -right-0.5" />
               </div>
-
-              {/* Text & Status Inside the Single Button */}
               <div className="flex flex-col items-start text-left leading-tight pr-1">
                 <div className="flex items-center space-x-1.5">
                   <span className="font-display font-extrabold text-xs sm:text-sm text-slate-950 tracking-tight">
@@ -204,7 +355,7 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
         )}
       </AnimatePresence>
 
-      {/* EXPANDABLE RIGHT-SIDE AI CHAT DRAWER */}
+      {/* CHAT DRAWER */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -260,10 +411,9 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
               </div>
             </div>
 
-            {/* Chat Body (Only if not minimized) */}
+            {/* Body */}
             {!isMinimized && (
               <div className="flex-1 flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950/70">
-                {/* Messages List */}
                 <div className="flex-1 p-4 overflow-y-auto space-y-3.5 text-xs sm:text-sm">
                   {messages.map((msg) => (
                     <div
@@ -277,11 +427,12 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
                             : "bg-white dark:bg-slate-850 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700/80 rounded-bl-xs"
                         }`}
                       >
-                        {/* Sender Label & Category Badge */}
                         <div className="flex items-center justify-between gap-2 mb-1">
                           <span
                             className={`text-[10px] font-bold font-mono ${
-                              msg.sender === "user" ? "text-amber-200" : "text-amber-600 dark:text-amber-400"
+                              msg.sender === "user"
+                                ? "text-amber-200"
+                                : "text-amber-600 dark:text-amber-400"
                             }`}
                           >
                             {msg.sender === "user" ? "You" : "MAU AI Advisor"}
@@ -295,12 +446,10 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
                           </span>
                         </div>
 
-                        {/* Message Text with Markdown formatting */}
                         <div className="whitespace-pre-line text-xs">
-                          {msg.text}
+                          {renderMarkdown(msg.text)}
                         </div>
 
-                        {/* Copy Button */}
                         {msg.sender === "ai" && (
                           <button
                             onClick={() => handleCopy(msg.id, msg.text)}
@@ -318,7 +467,6 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
                     </div>
                   ))}
 
-                  {/* Typing Indicator */}
                   {isTyping && (
                     <div className="flex items-center space-x-2 text-slate-400 text-xs p-2">
                       <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center">
@@ -333,24 +481,50 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
                     </div>
                   )}
 
+                  {lastFailedQuery && !isTyping && (
+                    <div className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl p-2.5">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="text-amber-800 dark:text-amber-200 flex-1">
+                        Couldn't reach the AI.
+                      </span>
+                      <button
+                        onClick={retryLast}
+                        className="px-2 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-[10px] font-bold cursor-pointer"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  )}
+
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Quick Prompts Chips */}
-                <div className="p-2.5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800/80 overflow-x-auto scrollbar-none flex items-center space-x-1.5">
-                  <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
-                  {quickPrompts.map((item, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleSendMessage(item.query)}
-                      className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 border border-slate-200 dark:border-slate-700 text-[10px] font-medium whitespace-nowrap transition cursor-pointer flex items-center space-x-1 shrink-0"
-                    >
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
+                {/* Quick prompts */}
+                <div className="p-2.5 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800/80 overflow-x-auto scrollbar-none">
+                  <div className="flex items-center space-x-1.5">
+                    <Flame className="w-3.5 h-3.5 text-amber-500 shrink-0 ml-1" />
+                    {visiblePrompts.map((item, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handleSendMessage(item.query)}
+                        title={item.amharic}
+                        className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-slate-700 dark:text-slate-300 hover:text-amber-700 dark:hover:text-amber-400 border border-slate-200 dark:border-slate-700 text-[10px] font-medium whitespace-nowrap transition cursor-pointer shrink-0"
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                    {allQuickPrompts.length > 5 && (
+                      <button
+                        onClick={() => setShowAllPrompts((s) => !s)}
+                        className="px-2 py-1 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 text-[10px] font-bold whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        {showAllPrompts ? "Less" : `+${allQuickPrompts.length - 5} more`}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Input Form */}
+                {/* Input */}
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -381,4 +555,5 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
     </>
   );
 };
+
 export default FloatingAIAssistant;

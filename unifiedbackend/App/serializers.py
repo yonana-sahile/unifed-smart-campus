@@ -91,12 +91,17 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 # ---------- EXAM ----------
-# ✅ FIXED: `questions` is now writable so the instructor's Exam Builder
-# can POST the full exam (title + duration + all questions) in a single
-# request. Custom create/update handle the nested Question creation and
-# M2M linking.
+# Write: POST/PUT/PATCH accepts  "question_ids": [1, 2, 3]
+# Read:  GET returns            "questions": [ {full object}, ... ]
 class ExamSerializer(serializers.ModelSerializer):
-    questions = QuestionSerializer(many=True, required=False)
+    questions = QuestionSerializer(many=True, read_only=True)
+    question_ids = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Question.objects.all(),
+        required=False,
+        write_only=True,
+        source='questions',
+    )
 
     class Meta:
         model = Exam
@@ -110,36 +115,34 @@ class ExamSerializer(serializers.ModelSerializer):
             'status': {'required': False},
         }
 
-    def create(self, validated_data):
-        questions_data = validated_data.pop('questions', [])
-        exam = Exam.objects.create(**validated_data)
-        for q_data in questions_data:
-            # Remove DRF-injected non-model keys if present
-            q_data.pop('id', None)
-            q = Question.objects.create(**q_data)
-            exam.questions.add(q)
-        return exam
-
-    def update(self, instance, validated_data):
-        questions_data = validated_data.pop('questions', None)
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        if questions_data is not None:
-            instance.questions.clear()
-            for q_data in questions_data:
-                q_data.pop('id', None)
-                q = Question.objects.create(**q_data)
-                instance.questions.add(q)
-        return instance
-
 
 # ---------- EXAM ATTEMPT ----------
+# FIXED: exam_title and student_name are auto-filled from the related
+# exam/student objects when the frontend does not send them.
 class ExamAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamAttempt
         fields = '__all__'
         read_only_fields = ['id', 'started_at']
+        extra_kwargs = {
+            'exam_title': {'required': False, 'allow_blank': True},
+            'student_name': {'required': False, 'allow_blank': True},
+            'submitted_at': {'required': False, 'allow_null': True},
+            'score': {'required': False, 'allow_null': True},
+            'status': {'required': False},
+        }
+
+    def create(self, validated_data):
+        exam = validated_data.get('exam')
+        student = validated_data.get('student')
+
+        if exam and not validated_data.get('exam_title'):
+            validated_data['exam_title'] = exam.exam_title
+
+        if student and not validated_data.get('student_name'):
+            validated_data['student_name'] = student.full_name or student.username
+
+        return super().create(validated_data)
 
 
 # ---------- GRADE ----------

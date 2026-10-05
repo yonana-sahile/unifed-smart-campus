@@ -130,7 +130,6 @@ export default function App() {
   const [showForgotPasswordModal, setShowForgotPasswordModal] = useState(false);
 
   useEffect(() => {
-    // Check if session exists in localStorage
     const savedUser = localStorage.getItem("uscms_current_user");
     if (savedUser) {
       try {
@@ -141,50 +140,118 @@ export default function App() {
     }
   }, []);
 
-  // ✅ FIXED: Async handleLogin with await
+  // ✅ FIXED: real Django auth via /api/token/, then DEMO_USERS fallback
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
-    try {
-      const users = await CampusDatabase.getUsers(); // ✅ Now awaiting the Promise
+    // ✅ FIX 1: aggressively trim + lowercase username to defeat mobile autocorrect
+    const usernameOrEmail = emailInput.trim().toLowerCase().replace(/\s+/g, "");
+    // ✅ FIX 1b: trim password (keep case-sensitive for security)
+    const cleanPassword = passwordInput.trim();
 
-      // Pre-seed search by email or username
-      const foundUser = users.find(
-        (u) =>
-          (u.email.toLowerCase() === emailInput.toLowerCase() || u.username.toLowerCase() === emailInput.toLowerCase()) &&
-          passwordInput === "password" // Default password for demo simplicity
+    if (!usernameOrEmail || !cleanPassword) {
+      setErrorMessage("Please enter both username/email and password.");
+      return;
+    }
+
+    // ── 1️⃣ Try real Django auth via /api/token/ ──
+    try {
+      const tokenResp = await fetch("http://127.0.0.1:8000/api/token/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: usernameOrEmail,
+          password: cleanPassword,
+        }),
+      });
+
+      if (!tokenResp.ok) {
+        const errBody = await tokenResp.text();
+        console.warn("[login] /api/token/ rejected:", tokenResp.status, errBody);
+        throw new Error("bad credentials");
+      }
+
+      const tokenData = await tokenResp.json();
+      if (tokenData.access) localStorage.setItem("access_token", tokenData.access);
+      if (tokenData.refresh) localStorage.setItem("refresh_token", tokenData.refresh);
+
+      // Fetch users to find the logged-in profile
+      const usersResp = await fetch("http://127.0.0.1:8000/api/users/");
+      const usersData = await usersResp.json();
+      const userList = usersData.results || usersData;
+
+      const meRaw = userList.find(
+        (u: any) =>
+          u.username?.toLowerCase() === usernameOrEmail ||
+          u.email?.toLowerCase() === usernameOrEmail
       );
 
-      if (foundUser) {
-        if (!foundUser.isActive) {
-          setErrorMessage("This institutional account is currently deactivated by the University Registrar.");
-          return;
-        }
-
-        localStorage.setItem("uscms_current_user", JSON.stringify(foundUser));
-        setCurrentUser(foundUser);
-        CampusDatabase.addAuditLog(
-          foundUser.id,
-          foundUser.fullName,
-          foundUser.role,
-          "Institutional Login",
-          "User",
-          foundUser.id,
-          `User logged in successfully through the University Credentials Gateway.`
-        );
-      } else {
-        setErrorMessage("Invalid university credentials. You can click any of the authorized demo profiles below to sign in instantly.");
+      if (!meRaw) {
+        setErrorMessage("Login succeeded but user profile not found.");
+        return;
       }
-    } catch (error) {
-      console.error("Login failed:", error);
-      setErrorMessage("Unable to connect to the server. Please ensure the backend is running.");
+
+      const me: User = {
+        id: String(meRaw.id),
+        username: meRaw.username,
+        fullName: meRaw.full_name || meRaw.username,
+        email: meRaw.email,
+        role: meRaw.role || "STUDENT",
+        isActive: meRaw.is_active ?? true,
+        avatarUrl: meRaw.avatar_url,
+        phoneNumber: meRaw.phone_number,
+        studentId: meRaw.student_id,
+        academicYear: meRaw.academic_year,
+        semester: meRaw.semester,
+        program: meRaw.program,
+        gpa: meRaw.gpa,
+        cgpa: meRaw.cgpa,
+        outstandingFees: parseFloat(meRaw.outstanding_fees) || 0,
+        instructorId: meRaw.instructor_id,
+        department: meRaw.department,
+        specialization: meRaw.specialization,
+        officeHours: meRaw.office_hours,
+        staffId: meRaw.staff_id,
+        librarySection: meRaw.library_section,
+        officerId: meRaw.officer_id,
+        bio: meRaw.bio,
+      };
+
+      if (!me.isActive) {
+        setErrorMessage("This institutional account is currently deactivated by the University Registrar.");
+        return;
+      }
+
+      localStorage.setItem("uscms_current_user", JSON.stringify(me));
+      setCurrentUser(me);
+      return;
+    } catch (err) {
+      console.warn("Token auth failed, trying demo users:", err);
     }
+
+    // ── 2️⃣ Fallback to DEMO_USERS ──
+    const demo = DEMO_USERS.find(
+      (u) =>
+        (u.username.toLowerCase() === usernameOrEmail ||
+          u.email.toLowerCase() === usernameOrEmail) &&
+        cleanPassword === "password"
+    );
+
+    if (demo) {
+      localStorage.setItem("uscms_current_user", JSON.stringify(demo));
+      setCurrentUser(demo);
+      return;
+    }
+
+    setErrorMessage(
+      "Invalid university credentials. You can click any of the authorized demo profiles below to sign in instantly."
+    );
   };
 
   const handleLogout = () => {
     if (currentUser) {
-      CampusDatabase.addAuditLog(
+      void CampusDatabase.addAuditLog(
         currentUser.id,
         currentUser.fullName,
         currentUser.role,
@@ -195,24 +262,24 @@ export default function App() {
       );
     }
     localStorage.removeItem("uscms_current_user");
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
     setCurrentUser(null);
     setEmailInput("");
     setPasswordInput("");
   };
 
-  // ✅ UPDATED: Quick login with local fallback + async API call
+  // ✅ Quick login — unchanged behaviour
   const handleQuickLogin = async (email: string) => {
     setEmailInput(email);
     setPasswordInput("password");
 
-    // 1. Try local demo users first (no backend needed)
     const localUser = DEMO_USERS.find((u) => u.email === email);
     if (localUser) {
       localStorage.setItem("uscms_current_user", JSON.stringify(localUser));
       setCurrentUser(localUser);
-      // Optionally log audit (skip if backend unavailable)
       try {
-        CampusDatabase.addAuditLog(
+        void CampusDatabase.addAuditLog(
           localUser.id,
           localUser.fullName,
           localUser.role,
@@ -227,14 +294,13 @@ export default function App() {
       return;
     }
 
-    // 2. Fallback: try the backend API
     try {
-      const users = await CampusDatabase.getUsers(); // ✅ Now awaiting
+      const users = await CampusDatabase.getUsers();
       const found = users.find((u) => u.email === email);
       if (found) {
         localStorage.setItem("uscms_current_user", JSON.stringify(found));
         setCurrentUser(found);
-        CampusDatabase.addAuditLog(
+        void CampusDatabase.addAuditLog(
           found.id,
           found.fullName,
           found.role,
@@ -297,10 +363,9 @@ export default function App() {
     );
   }
 
-  // --- LOGIN PAGE (unchanged) ---
+  // --- LOGIN PAGE ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/80 dark:from-[#06111f] dark:via-[#071526] dark:to-[#0a1d35] flex flex-col font-sans relative selection:bg-amber-400 selection:text-slate-900 transition-colors duration-300">
-      {/* Background ambient lighting */}
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-400/10 dark:bg-blue-900/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-amber-400/10 dark:bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -450,6 +515,11 @@ export default function App() {
                     <input
                       type="text"
                       required
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="username"
+                      spellCheck={false}
+                      inputMode="text"
                       placeholder="studentId (e.g. U_ST01) or name@mau.edu.et"
                       className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
                       value={emailInput}
@@ -468,6 +538,10 @@ export default function App() {
                     <input
                       type="password"
                       required
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="current-password"
+                      spellCheck={false}
                       placeholder="••••••••"
                       className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
                       value={passwordInput}
@@ -495,7 +569,7 @@ export default function App() {
                 </button>
               </form>
 
-              {/* Quick Demo Role Selector Cards – unchanged */}
+              {/* Quick Demo Role Selector Cards */}
               <div className="bg-slate-50 dark:bg-slate-950/60 border-t border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 space-y-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] uppercase font-mono tracking-wider text-slate-500 dark:text-slate-400 font-bold">
@@ -652,14 +726,12 @@ export default function App() {
 
       <AnimatePresence>
         {showSecurityModal && (
-          // ... same as before (unchanged)
           <div></div>
         )}
       </AnimatePresence>
 
       <AnimatePresence>
         {showHelpModal && (
-          // ... same as before (unchanged)
           <div></div>
         )}
       </AnimatePresence>

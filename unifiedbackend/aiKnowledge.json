@@ -1,0 +1,30 @@
+{
+  "topics": [
+    {
+      "id": "exit_exam",
+      "keywords": ["exit exam", "heee", "national exam", "ብሔራዊ ፈተና"],
+      "reply": "MoE Exit Exam (HEEE):\n\n• Pass mark: 50%\n• Format: 100 MCQs, 3 hours\n• For your program blueprint, contact your department head."
+    },
+    {
+      "id": "grading",
+      "keywords": ["cgpa", "gpa", "grading", "ውጤት", "distinction"],
+      "reply": "Grading at MAU:\n\n• Continuous Assessment: 50%\n• Midterm: 20%\n• Final: 30%\n\nHonors: Distinction 3.00–3.49 | Great 3.50–3.74 | Very Great ≥ 3.75"
+    },
+    {
+      "id": "registration",
+      "keywords": ["register", "registration", "enroll", "ምዝገባ"],
+      "reply": "Course Registration:\n\n1. Log in to dashboard.\n2. Click \"Browse & Register\".\n3. Search the course.\n4. Click \"Enroll\".\n5. Confirm."
+    },
+    {
+      "id": "clearance",
+      "keywords": ["clearance", "ማጣሪያ", "ክሊራንስ"],
+      "reply": "Digital Clearance:\n\nLibrary → Department Head → Dorm Proctor → Registrar & Finance.\nThen Exit Certificate with QR code."
+    },
+    {
+      "id": "fees",
+      "keywords": ["fee", "tuition", "payment", "finance", "ክፍያ"],
+      "reply": "Finance & Tuition:\n\nMethods: Telebirr, CBE Birr, Awash Bank, Bank Transfer.\nView balance under \"Finance & Tuition\"."
+    }
+  ],
+  "fallback": "I don't have an offline answer for \"{query}\". Contact registrar: +251 33 222 0120."
+}

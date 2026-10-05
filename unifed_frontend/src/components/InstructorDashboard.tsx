@@ -33,7 +33,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const [grades, setGrades] = useState<Grade[]>([]);
   const [examAttempts, setExamAttempts] = useState<ExamAttempt[]>([]);
 
-  const [selectedCourseId, setSelectedCourseId] = useState<string>("C_SOFT401");
+  const [selectedCourseId, setSelectedCourseId] = useState<string>("");
 
   const [newMaterialTitle, setNewMaterialTitle] = useState("");
   const [newMaterialType, setNewMaterialType] = useState<"PDF" | "Video" | "Document" | "Slide">("PDF");
@@ -156,23 +156,53 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
   }, []);
 
-  const loadData = async () => {
+    const loadData = async () => {
+    // ✅ STEP 1: Load courses FIRST so the dropdown always populates
+    try {
+      const coursesData = await CampusDatabase.getCourses();
+      console.log("🔍 [loadData] coursesData =", coursesData);
+      console.log("🔍 [loadData] user.id =", user.id, "| typeof:", typeof user.id);
+
+      const allCourses = Array.isArray(coursesData) ? coursesData : [];
+      const myCourses = allCourses.filter(
+        (c) => String(c.instructorId) === String(user.id)
+      );
+      console.log("🔍 [loadData] myCourses =", myCourses.length, "| allCourses =", allCourses.length);
+
+      // Fallback: if no match (demo user), show all courses so the form works
+      const coursesToShow = myCourses.length > 0 ? myCourses : allCourses;
+      console.log("🔍 [loadData] coursesToShow =", coursesToShow);
+
+      setCourses(coursesToShow);
+
+      // Auto-select the first course
+      const firstCourse = coursesToShow[0];
+      if (firstCourse) {
+        console.log("🔍 [loadData] auto-selecting course:", firstCourse.id);
+        setSelectedCourseId(String(firstCourse.id));
+      } else {
+        console.warn("⚠️ [loadData] No courses to auto-select");
+      }
+    } catch (err) {
+      console.error("❌ [loadData] Failed to load courses:", err);
+      setCourses([]);
+    }
+
+    // ✅ STEP 2: Load everything else — each call fails independently
     try {
       const [
-        coursesData, materialsData, announcementsData, assignmentsData,
+        materialsData, announcementsData, assignmentsData,
         submissionsData, examsData, gradesData, attemptsData,
       ] = await Promise.all([
-        CampusDatabase.getCourses(),
-        CampusDatabase.getMaterials(),
-        CampusDatabase.getAnnouncements(),
-        CampusDatabase.getAssignments(),
-        CampusDatabase.getSubmissions(),
-        CampusDatabase.getExams(),
-        CampusDatabase.getGrades(),
-        CampusDatabase.getExamAttempts(),
+        CampusDatabase.getMaterials().catch(() => []),
+        CampusDatabase.getAnnouncements().catch(() => []),
+        CampusDatabase.getAssignments().catch(() => []),
+        CampusDatabase.getSubmissions().catch(() => []),
+        CampusDatabase.getExams().catch(() => []),
+        CampusDatabase.getGrades().catch(() => []),
+        CampusDatabase.getExamAttempts().catch(() => []),
       ]);
 
-      setCourses(Array.isArray(coursesData) ? coursesData.filter((c) => c.instructorId === user.id) : []);
       setMaterials(Array.isArray(materialsData) ? materialsData : []);
       setAnnouncements(Array.isArray(announcementsData) ? announcementsData : []);
       setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
@@ -181,18 +211,24 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       setGrades(Array.isArray(gradesData) ? gradesData : []);
       setExamAttempts(Array.isArray(attemptsData) ? attemptsData : []);
     } catch (err) {
-      console.error("Failed to load instructor data:", err);
+      console.error("❌ [loadData] Failed to load secondary data:", err);
     }
   };
-
   const getActiveCourse = () => {
-    return courses.find((c) => c.id === selectedCourseId) || courses[0];
+    return (
+      courses.find((c) => String(c.id) === String(selectedCourseId)) ||
+      courses[0] ||
+      undefined
+    );
   };
 
   const handlePostAnnouncement = async () => {
     if (!newAnnounceTitle || !newAnnounceContent) return;
     const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
+    if (!activeCourse) {
+      alert("No active course selected. Please pick a course from the sidebar dropdown.");
+      return;
+    }
 
     const created: any = await CampusDatabase.createAnnouncement({
       course: activeCourse.id,
@@ -284,7 +320,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       return;
     }
     const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
+    if (!activeCourse) {
+      alert("No active course selected. Please pick a course from the sidebar dropdown, or create one in Django admin first.");
+      return;
+    }
 
     const ext = newMaterialType === "PDF" ? "pdf" : newMaterialType === "Document" ? "docx" : "pptx";
     const generatedFileName = newMaterialFileName || `${newMaterialTitle.replace(/[^a-zA-Z0-9_-]/g, "_")}.${ext}`;
@@ -304,9 +343,17 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
 
     try {
+      // ✅ FIX: send snake_case matching Django's CourseMaterial model
       const created: any = await CampusDatabase.addMaterial({
-        ...newMat,
         course: activeCourse.id,
+        title: newMat.title,
+        file_type: newMat.fileType,
+        file_name: newMat.fileName,
+        file_size: newMat.fileSize,
+        file_data: newMat.fileData,
+        chapter_week: newMat.chapterWeek,
+        instructor_name: newMat.instructorName,
+        description: newMat.description,
       });
       const normalized: CourseMaterial = {
         id: String(created?.id ?? newMat.id),
@@ -342,7 +389,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       alert(`Resource "${normalized.title}" (${normalized.fileType}) uploaded successfully! Students can now download or preview this file.`);
     } catch (err: any) {
       console.error(err);
-      alert("Failed to upload material: " + (err?.message || "Unknown error"));
+      const detail = err?.response?.data ? JSON.stringify(err.response.data) : (err?.message || "Unknown error");
+      alert("Failed to upload material: " + detail);
     }
   };
 
@@ -433,84 +481,96 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       return;
     }
     const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
+    if (!activeCourse) {
+      alert("No active course selected. Please pick a course from the sidebar dropdown.");
+      return;
+    }
 
     const totalMarks = authorQuestions.reduce((sum, q) => sum + (q.marks || 5), 0);
 
-    const newExam: Exam = {
-      id: "EX_" + Date.now(),
-      courseId: activeCourse.id,
-      courseTitle: activeCourse.courseTitle,
-      examTitle: authorExamTitle,
-      examDate: new Date().toISOString(),
-      durationMinutes: authorExamDuration,
-      totalMarks: totalMarks,
-      instructions: authorExamInstructions,
-      questions: authorQuestions,
-      status: publishImmediately ? "ACTIVE" : "DRAFT",
-      isPushed: publishImmediately,
-      pushedAt: publishImmediately ? new Date().toISOString() : undefined,
-      createdBy: user.fullName,
-      category: authorExamCategory
-    };
-
     try {
+      // ✅ STEP 1: Create each question in the DB, collect numeric IDs
+      const questionIds: number[] = [];
+      for (const q of authorQuestions) {
+        const createdQ: any = await CampusDatabase.addQuestion({
+          question_text: q.questionText,
+          question_type: q.questionType,
+          options: q.options,
+          correct_answer: q.correctAnswer,
+          marks: q.marks || 5,
+        });
+        if (createdQ?.id) questionIds.push(Number(createdQ.id));
+      }
+
+      if (questionIds.length === 0) {
+        alert("Failed to create any questions. Please check the form.");
+        return;
+      }
+
+      // ✅ STEP 2: Create the exam using the question IDs
       const created: any = await CampusDatabase.createExam({
-        course: activeCourse.id,
+        course:
+          parseInt(String(activeCourse.id).replace(/\D/g, "")) ||
+          activeCourse.id,
         course_title: activeCourse.courseTitle,
         exam_title: authorExamTitle,
-        exam_date: newExam.examDate,
+        exam_date: new Date().toISOString(),
         duration_minutes: authorExamDuration,
         total_marks: totalMarks,
         instructions: authorExamInstructions,
-        questions: authorQuestions,
-        status: newExam.status,
+        questions: questionIds,
+        status: publishImmediately ? "ACTIVE" : "DRAFT",
         is_pushed: publishImmediately,
         created_by: user.fullName,
         category: authorExamCategory,
       });
+
       const normalized: Exam = {
-        id: String(created?.id ?? newExam.id),
-        courseId: created?.course ?? activeCourse.id,
+        id: String(created?.id ?? "EX_" + Date.now()),
+        courseId: String(created?.course ?? activeCourse.id),
         courseTitle: created?.course_title ?? activeCourse.courseTitle,
         examTitle: created?.exam_title ?? authorExamTitle,
-        examDate: created?.exam_date ?? newExam.examDate,
+        examDate: created?.exam_date ?? new Date().toISOString(),
         durationMinutes: created?.duration_minutes ?? authorExamDuration,
         totalMarks: created?.total_marks ?? totalMarks,
         instructions: created?.instructions ?? authorExamInstructions,
-        questions: created?.questions ?? authorQuestions,
-        status: created?.status ?? newExam.status,
+        questions: authorQuestions,
+        status: created?.status ?? (publishImmediately ? "ACTIVE" : "DRAFT"),
         isPushed: created?.is_pushed ?? publishImmediately,
-        pushedAt: created?.pushed_at ?? newExam.pushedAt,
+        pushedAt:
+          created?.pushed_at ??
+          (publishImmediately ? new Date().toISOString() : undefined),
         createdBy: created?.created_by ?? user.fullName,
         category: created?.category ?? authorExamCategory,
       };
       setExams((prev) => [normalized, ...prev]);
 
-      await CampusDatabase.addAuditLog(
+      void CampusDatabase.addAuditLog(
         user.id,
         user.fullName,
         "INSTRUCTOR",
         publishImmediately ? "Push Exam" : "Create Exam Draft",
         "Exam",
         normalized.id,
-        `${publishImmediately ? "Pushed live exam to students" : "Saved draft exam"}: ${authorExamTitle} (${authorExamDuration} mins) in ${activeCourse.courseCode}`
+        `${publishImmediately ? "Pushed live exam" : "Saved draft"}: ${authorExamTitle} (${authorExamDuration} mins)`
       );
 
       alert(
         publishImmediately
-          ? `🚀 Exam "${authorExamTitle}" has been pushed LIVE to students!\nDuration: ${authorExamDuration} ደቂቃ (Minutes).\nStudents can now take it immediately in their Online Examination portal!`
-          : `Exam draft saved successfully!`
+          ? `🚀 Exam "${authorExamTitle}" pushed LIVE!\n${questionIds.length} questions • ${authorExamDuration} ደቂቃ`
+          : `Exam draft saved with ${questionIds.length} questions.`
       );
 
       setAuthorExamTitle("");
       setExamSubTab("manage");
     } catch (err: any) {
       console.error(err);
-      alert("Failed to save exam: " + (err?.message || "Unknown error"));
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      alert("Failed to save exam: " + detail);
     }
   };
-
   const handleTogglePush = async (exam: Exam) => {
     const nextPushed = !exam.isPushed;
     try {
@@ -549,7 +609,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const handleAddAssignment = async () => {
     if (!newAssignTitle || !newAssignDesc) return;
     const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
+    if (!activeCourse) {
+      alert("No active course selected. Please pick a course from the sidebar dropdown.");
+      return;
+    }
 
     const newAs: Assignment = {
       id: "ASG_" + Date.now(),
@@ -658,7 +721,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
   const handleSubmitFinalGrade = async (gradeId: string) => {
     const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
+    if (!activeCourse) {
+      alert("No active course selected. Please pick a course from the sidebar dropdown.");
+      return;
+    }
 
     const gradeObj = grades.find((g) => g.id === gradeId);
     if (!gradeObj) return;
@@ -699,7 +765,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
 
     const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
+    if (!activeCourse) {
+      alert("No active course selected. Please pick a course from the sidebar dropdown.");
+      return;
+    }
 
     setGeneratingExam(true);
     setGeneratedQuestions([]);
@@ -727,7 +796,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const handleSaveGeneratedExam = async () => {
     if (generatedQuestions.length === 0) return;
     const activeCourse = getActiveCourse();
-    if (!activeCourse) return;
+    if (!activeCourse) {
+      alert("No active course selected. Please pick a course from the sidebar dropdown.");
+      return;
+    }
 
     const totalMarks = generatedQuestions.reduce((sum, q) => sum + (q.marks || 5), 0);
 
@@ -887,7 +959,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </button>
               </div>
 
-              {/* Course select picker in Drawer */}
+              {/* ✅ FIXED: Course select picker in Drawer */}
               <div className="p-3.5 border-b border-slate-800/80 space-y-1.5 bg-slate-950/40">
                 <label className="text-[10px] font-mono text-amber-400/90 uppercase tracking-widest font-bold">Active Course</label>
                 <select
@@ -895,9 +967,15 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   value={selectedCourseId}
                   onChange={(e) => setSelectedCourseId(e.target.value)}
                 >
-                  <option value="C_SOFT401">SOFT401: Advanced Software Eng</option>
-                  <option value="C_CSCI402">CSCI402: Distributed Database</option>
-                  <option value="C_MATH301">MATH301: Discrete Math & Graph</option>
+                  {courses.length > 0 ? (
+                    courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.courseCode}: {c.courseTitle}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No courses assigned</option>
+                  )}
                 </select>
               </div>
 
@@ -982,6 +1060,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       <div className="flex-1 flex min-w-0" id="instructor_workspace_inner">
         {/* DESKTOP SIDEBAR */}
         <aside className="hidden md:flex md:w-64 bg-[#071526] text-slate-300 flex-col border-r border-slate-800/80 shrink-0">
+          {/* ✅ FIXED: populated from real courses */}
           <div className="p-3.5 border-b border-slate-800/80 space-y-1.5 bg-slate-950/40">
             <label className="text-[10px] font-mono text-amber-400/90 uppercase tracking-widest font-bold">Active Course Context</label>
             <select
@@ -989,9 +1068,15 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               value={selectedCourseId}
               onChange={(e) => setSelectedCourseId(e.target.value)}
             >
-              <option value="C_SOFT401">SOFT401: Advanced Software Eng</option>
-              <option value="C_CSCI402">CSCI402: Distributed Database</option>
-              <option value="C_MATH301">MATH301: Discrete Math & Graph</option>
+              {courses.length > 0 ? (
+                courses.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.courseCode}: {c.courseTitle}
+                  </option>
+                ))
+              ) : (
+                <option value="">No courses assigned</option>
+              )}
             </select>
           </div>
 
@@ -1067,7 +1152,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                     Syllabus Outline & Bulletin Control
                   </h2>
-                  <p className="text-slate-500 text-xs sm:text-sm">Post announcements and configure syllabi details for {getActiveCourse()?.courseTitle}.</p>
+                  <p className="text-slate-500 text-xs sm:text-sm">Post announcements and configure syllabi details for {getActiveCourse()?.courseTitle || "your course"}.</p>
                 </div>
 
                 <div className="rounded-2xl p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1129,7 +1214,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     <h3 className="font-display font-bold text-slate-800 text-base">Active Course Announcements</h3>
                     <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto space-y-3 pr-2">
                       {announcements
-                        .filter((an) => an.courseId === selectedCourseId)
+                        .filter((an) => String(an.courseId) === String(selectedCourseId))
                         .map((an) => (
                           <div key={an.id} className="pt-3 first:pt-0 space-y-1">
                             <span className="text-[10px] font-mono text-slate-400">
@@ -1160,7 +1245,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                       <span>Course Materials & Syllabus Handouts</span>
                     </h2>
                     <p className="text-slate-500 text-xs sm:text-sm">
-                      Upload and publish lecture slides (.pdf), Word study guides (.docx), and handouts for {getActiveCourse()?.courseCode}: {getActiveCourse()?.courseTitle}.
+                      Upload and publish lecture slides (.pdf), Word study guides (.docx), and handouts for {getActiveCourse()?.courseCode || "—"}: {getActiveCourse()?.courseTitle || "No course selected"}.
                     </p>
                   </div>
 
@@ -1296,7 +1381,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                       <div>
                         <h3 className="font-display font-bold text-slate-800 text-base">Published Resources</h3>
                         <p className="text-xs text-slate-400 font-mono">
-                          {materials.filter((m) => m.courseId === selectedCourseId).length} Resources active in {getActiveCourse()?.courseCode}
+                          {materials.filter((m) => String(m.courseId) === String(selectedCourseId)).length} Resources active in {getActiveCourse()?.courseCode || "—"}
                         </p>
                       </div>
 
@@ -1320,7 +1405,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
                     <div className="divide-y divide-slate-100 max-h-[65vh] overflow-y-auto pr-1 space-y-2">
                       {materials
-                        .filter((m) => m.courseId === selectedCourseId)
+                        .filter((m) => String(m.courseId) === String(selectedCourseId))
                         .filter((m) => (materialFilterFormat === "ALL" ? true : m.fileType === materialFilterFormat))
                         .map((m) => {
                           const isPdf = m.fileType === "PDF" || m.fileName?.endsWith(".pdf");
@@ -1407,7 +1492,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           );
                         })}
 
-                      {materials.filter((m) => m.courseId === selectedCourseId).length === 0 && (
+                      {materials.filter((m) => String(m.courseId) === String(selectedCourseId)).length === 0 && (
                         <div className="text-center py-12 text-slate-400 space-y-2">
                           <FileText className="w-10 h-10 mx-auto text-slate-200" />
                           <p className="text-xs">No materials uploaded yet for this course. Use the form on the left or the sample buttons above to add PDF or DOCX handouts.</p>
@@ -1437,7 +1522,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     <h3 className="font-display font-bold text-slate-800 text-base">Student Submissions</h3>
                     <div className="divide-y divide-slate-100">
                       {submissions
-                        .filter((sub) => sub.courseId === selectedCourseId)
+                        .filter((sub) => String(sub.courseId) === String(selectedCourseId))
                         .map((sub) => (
                           <div
                             key={sub.id}
@@ -1555,7 +1640,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                       }`}
                     >
                       <ListChecks className="w-3.5 h-3.5 text-primary" />
-                      <span>Pushed Exams ({exams.filter((e) => e.courseId === selectedCourseId).length})</span>
+                      <span>Pushed Exams ({exams.filter((e) => String(e.courseId) === String(selectedCourseId)).length})</span>
                     </button>
                     <button
                       type="button"
@@ -1589,7 +1674,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
                       <div>
                         <h3 className="font-display font-bold text-slate-800 text-sm">
-                          Course Assessments for {getActiveCourse()?.courseCode}: {getActiveCourse()?.courseTitle}
+                          Course Assessments for {getActiveCourse()?.courseCode || "—"}: {getActiveCourse()?.courseTitle || "No course selected"}
                         </h3>
                         <p className="text-xs text-slate-500">
                           Click "Push to Students" to broadcast an assessment live into the student Online Examination console.
@@ -1621,10 +1706,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
                     <div className="grid grid-cols-1 gap-4">
                       {exams
-                        .filter((ex) => ex.courseId === selectedCourseId)
+                        .filter((ex) => String(ex.courseId) === String(selectedCourseId))
                         .map((ex) => {
                           const isPushed = ex.isPushed || ex.status === "ACTIVE";
-                          const attemptsForThisExam = examAttempts.filter((a) => a.examId === ex.id);
+                          const attemptsForThisExam = examAttempts.filter((a) => String(a.examId) === String(ex.id));
 
                           return (
                             <div
@@ -1721,7 +1806,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           );
                         })}
 
-                      {exams.filter((ex) => ex.courseId === selectedCourseId).length === 0 && (
+                      {exams.filter((ex) => String(ex.courseId) === String(selectedCourseId)).length === 0 && (
                         <div className="text-center py-16 bg-white border border-slate-200 rounded-2xl text-slate-400 space-y-3">
                           <CheckSquare className="w-12 h-12 mx-auto text-slate-300" />
                           <p className="text-sm font-semibold text-slate-600">No exams authored for this course yet</p>
@@ -2183,7 +2268,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-slate-700">
                         {grades
-                          .filter((g) => g.courseId === selectedCourseId)
+                          .filter((g) => String(g.courseId) === String(selectedCourseId))
                           .map((g) => (
                             <tr key={g.id}>
                               <td className="p-4 font-semibold text-slate-800">{g.studentName}</td>

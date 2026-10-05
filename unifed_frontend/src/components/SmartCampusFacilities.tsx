@@ -1,4 +1,4 @@
-import { useState, FormEvent } from "react";
+import { useState, FormEvent, useEffect } from "react";
 import type { User, FacilityBooking } from "../types";
 import { CampusDatabase } from "../services/api";
 import {
@@ -25,15 +25,14 @@ interface SmartCampusFacilitiesProps {
 }
 
 export function SmartCampusFacilities({ user }: SmartCampusFacilitiesProps) {
-  // Safe initialization: guarantees bookings is always an array
-  const [bookings, setBookings] = useState<FacilityBooking[]>(() => {
-    const initialData = CampusDatabase.getFacilityBookings();
-    return Array.isArray(initialData) ? initialData : [];
-  });
+  // ✅ FIXED: real bookings loaded from the API
+  const [bookings, setBookings] = useState<FacilityBooking[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [selectedCampus, setSelectedCampus] = useState<"ALL" | "Tulu Awulia (Main)" | "Masha Campus">("ALL");
   const [showBookingModal, setShowBookingModal] = useState<boolean>(false);
   const [selectedPass, setSelectedPass] = useState<FacilityBooking | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   // New Booking Form State
   const [facilityName, setFacilityName] = useState("ICT High Performance GPU Computing Lab 1");
@@ -89,53 +88,101 @@ export function SmartCampusFacilities({ user }: SmartCampusFacilitiesProps) {
     }
   ];
 
-  const handleCreateBooking = (e: FormEvent) => {
+  // ✅ FIXED: real load on mount
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const data = await CampusDatabase.getFacilityBookings();
+        if (mounted) setBookings(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.warn("[facilities] Failed to load bookings:", err);
+        if (mounted) setBookings([]);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // ✅ FIXED: await the save, then refresh
+  const handleCreateBooking = async (e: FormEvent) => {
     e.preventDefault();
     if (!purpose.trim()) {
       alert("Please enter the academic purpose of the facility reservation.");
       return;
     }
 
-    const newBooking = CampusDatabase.addFacilityBooking({
-      facilityName,
-      facilityCode,
-      campus,
-      roomType,
-      bookedBy: user.fullName,
-      bookedByRole: user.role,
-      department: user.department || user.program || "Software Engineering",
-      date: bookingDate,
-      startTime,
-      endTime,
-      purpose,
-      status: "CONFIRMED",
-      capacity,
-      resourcesEquipped: ["Standard Network Backbone", "Smart Board", "Power Backup UPS"]
-    });
+    setIsSaving(true);
+    try {
+      const payload = {
+        facilityName,
+        facilityCode,
+        campus,
+        roomType,
+        bookedBy: user.fullName,
+        bookedByRole: user.role,
+        department: user.department || user.program || "Software Engineering",
+        date: bookingDate,
+        startTime,
+        endTime,
+        purpose,
+        status: "CONFIRMED" as const,
+        capacity,
+        resourcesEquipped: ["Standard Network Backbone", "Smart Board", "Power Backup UPS"],
+      };
 
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      user.role,
-      "FACILITY_RESERVED",
-      "FACILITY_BOOKING",
-      newBooking.id,
-      `Reserved ${facilityName} for ${bookingDate} (${startTime} - ${endTime}).`
-    );
+      const created: any = await CampusDatabase.addFacilityBooking(payload);
 
-    const updatedData = CampusDatabase.getFacilityBookings();
-    setBookings(Array.isArray(updatedData) ? updatedData : []);
-    setShowBookingModal(false);
-    setPurpose("");
-    setSelectedPass(newBooking);
+      // Refresh from server
+      const refreshed = await CampusDatabase.getFacilityBookings();
+      setBookings(Array.isArray(refreshed) ? refreshed : []);
+
+      // ✅ Fire-and-forget audit log (won't block)
+      CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        user.role,
+        "FACILITY_RESERVED",
+        "FACILITY_BOOKING",
+        String(created?.id ?? ""),
+        `Reserved ${facilityName} for ${bookingDate} (${startTime} - ${endTime}).`
+      ).catch(() => {});
+
+      // Show the security pass
+      setSelectedPass(created);
+      setShowBookingModal(false);
+      setPurpose("");
+    } catch (err: any) {
+      console.error("[facilities] Booking failed:", err);
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      alert("Reservation failed: " + detail);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  // Safe Guarded Filter: avoids TypeError if bookings is not an array
   const safeBookings = Array.isArray(bookings) ? bookings : [];
   const filteredBookings = safeBookings.filter((b) => {
     if (selectedCampus === "ALL") return true;
     return b.campus === selectedCampus;
   });
+
+  // ✅ NEW: check if a facility is currently booked at the chosen time slot
+  const isFacilityBusy = (facilityCode: string, date: string) => {
+    return safeBookings.some(
+      (b) =>
+        b.facilityCode === facilityCode &&
+        String(b.date) === String(date) &&
+        b.status === "CONFIRMED"
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -205,35 +252,46 @@ export function SmartCampusFacilities({ user }: SmartCampusFacilitiesProps) {
 
       {/* Available Labs Showcase Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {availableFacilities.slice(0, 3).map((f) => (
-          <div
-            key={f.code}
-            className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3"
-          >
-            <div className="flex items-start justify-between">
-              <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
-                {f.code}
-              </span>
-              <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-600">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Available</span>
-              </span>
-            </div>
+        {availableFacilities.slice(0, 3).map((f) => {
+          const busy = isFacilityBusy(f.code, bookingDate);
+          return (
+            <div
+              key={f.code}
+              className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs space-y-3"
+            >
+              <div className="flex items-start justify-between">
+                <span className="px-2.5 py-0.5 rounded-md text-[10px] font-mono font-bold bg-cyan-50 dark:bg-cyan-950 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
+                  {f.code}
+                </span>
+                {/* ✅ Dynamic status badge */}
+                {busy ? (
+                  <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-amber-600">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <span>Booked Today</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center space-x-1 text-[11px] font-bold text-emerald-600">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Available</span>
+                  </span>
+                )}
+              </div>
 
-            <div>
-              <h4 className="font-serif font-bold text-sm text-slate-900 dark:text-slate-100">{f.name}</h4>
-              <p className="text-xs text-slate-500 mt-1">{f.specs}</p>
-            </div>
+              <div>
+                <h4 className="font-serif font-bold text-sm text-slate-900 dark:text-slate-100">{f.name}</h4>
+                <p className="text-xs text-slate-500 mt-1">{f.specs}</p>
+              </div>
 
-            <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
-              <span className="flex items-center space-x-1">
-                <Users className="w-3.5 h-3.5" />
-                <span>Max {f.capacity} Seats</span>
-              </span>
-              <span className="font-semibold text-primary">{f.campus}</span>
+              <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <span className="flex items-center space-x-1">
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Max {f.capacity} Seats</span>
+                </span>
+                <span className="font-semibold text-primary">{f.campus}</span>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Active Scheduled Bookings */}
@@ -243,50 +301,60 @@ export function SmartCampusFacilities({ user }: SmartCampusFacilitiesProps) {
           <span>Confirmed Facility Schedules & Passes</span>
         </h4>
 
-        <div className="grid grid-cols-1 gap-3">
-          {filteredBookings.map((b) => (
-            <div
-              key={b.id}
-              className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-            >
-              <div className="space-y-1.5">
-                <div className="flex items-center space-x-2">
-                  <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{b.facilityName}</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                    {b.facilityCode}
-                  </span>
+        {isLoading ? (
+          <div className="text-center py-8 text-xs text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+            Loading facility bookings…
+          </div>
+        ) : filteredBookings.length === 0 ? (
+          <div className="text-center py-8 text-xs text-slate-400 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800">
+            No confirmed bookings for this campus yet. Click <strong>Reserve Lab / Hall</strong> to create one.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3">
+            {filteredBookings.map((b) => (
+              <div
+                key={b.id}
+                className="p-4 sm:p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-bold text-sm text-slate-900 dark:text-slate-100">{b.facilityName}</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      {b.facilityCode}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 dark:text-slate-300">
+                    <span className="font-bold">Purpose:</span> {b.purpose}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+                    <span className="flex items-center space-x-1">
+                      <Calendar className="w-3.5 h-3.5 text-primary" />
+                      <span>{b.date}</span>
+                    </span>
+                    <span className="flex items-center space-x-1">
+                      <Clock className="w-3.5 h-3.5 text-cyan-600" />
+                      <span>{b.startTime} - {b.endTime}</span>
+                    </span>
+                    <span className="flex items-center space-x-1">
+                      <Users className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Booked by: <strong className="text-slate-800 dark:text-slate-200">{b.bookedBy}</strong> ({b.bookedByRole})</span>
+                    </span>
+                  </div>
                 </div>
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  <span className="font-bold">Purpose:</span> {b.purpose}
-                </p>
-                <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                  <span className="flex items-center space-x-1">
-                    <Calendar className="w-3.5 h-3.5 text-primary" />
-                    <span>{b.date}</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <Clock className="w-3.5 h-3.5 text-cyan-600" />
-                    <span>{b.startTime} - {b.endTime}</span>
-                  </span>
-                  <span className="flex items-center space-x-1">
-                    <Users className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>Booked by: <strong className="text-slate-800 dark:text-slate-200">{b.bookedBy}</strong> ({b.bookedByRole})</span>
-                  </span>
-                </div>
-              </div>
 
-              <div className="flex items-center space-x-3 self-end sm:self-center">
-                <button
-                  onClick={() => setSelectedPass(b)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs flex items-center space-x-1.5 transition cursor-pointer"
-                >
-                  <QrCode className="w-4 h-4 text-primary" />
-                  <span>Security Pass</span>
-                </button>
+                <div className="flex items-center space-x-3 self-end sm:self-center">
+                  <button
+                    onClick={() => setSelectedPass(b)}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 font-bold text-xs flex items-center space-x-1.5 transition cursor-pointer"
+                  >
+                    <QrCode className="w-4 h-4 text-primary" />
+                    <span>Security Pass</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Booking Creation Modal */}
@@ -388,9 +456,13 @@ export function SmartCampusFacilities({ user }: SmartCampusFacilitiesProps) {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold cursor-pointer shadow-md"
+                  disabled={isSaving}
+                  className="px-5 py-2 rounded-xl bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-bold cursor-pointer shadow-md flex items-center space-x-2"
                 >
-                  Confirm Reservation
+                  {isSaving && (
+                    <span className="w-3 h-3 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                  )}
+                  <span>{isSaving ? "Saving…" : "Confirm Reservation"}</span>
                 </button>
               </div>
             </form>
