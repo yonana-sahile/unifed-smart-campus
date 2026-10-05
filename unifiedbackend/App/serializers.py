@@ -115,10 +115,30 @@ class ExamSerializer(serializers.ModelSerializer):
             'status': {'required': False},
         }
 
+    def create(self, validated_data):
+        import sys
+        print("=" * 60, file=sys.stderr)
+        print("[ExamSerializer.create] CALLED", file=sys.stderr)
+        print("[ExamSerializer.create] keys:", list(validated_data.keys()), file=sys.stderr)
+        questions = validated_data.pop('questions', [])
+        print(f"[ExamSerializer.create] questions count: {len(questions)}", file=sys.stderr)
+        exam = Exam.objects.create(**validated_data)
+        exam.questions.set(questions)
+        print(f"[ExamSerializer.create] exam {exam.id} now has {exam.questions.count()} questions", file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+        return exam
+
+    def update(self, instance, validated_data):
+        questions = validated_data.pop('questions', None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if questions is not None:
+            instance.questions.set(questions)
+        return instance
+
 
 # ---------- EXAM ATTEMPT ----------
-# FIXED: exam_title and student_name are auto-filled from the related
-# exam/student objects when the frontend does not send them.
 class ExamAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamAttempt

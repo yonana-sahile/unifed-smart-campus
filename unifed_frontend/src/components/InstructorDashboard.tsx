@@ -518,7 +518,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         duration_minutes: authorExamDuration,
         total_marks: totalMarks,
         instructions: authorExamInstructions,
-        questions: questionIds,
+        question_ids: questionIds, 
         status: publishImmediately ? "ACTIVE" : "DRAFT",
         is_pushed: publishImmediately,
         created_by: user.fullName,
@@ -793,6 +793,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
+  // ✅ FIXED: saves AI questions to the DB first, then creates the exam with real IDs
   const handleSaveGeneratedExam = async () => {
     if (generatedQuestions.length === 0) return;
     const activeCourse = getActiveCourse();
@@ -803,35 +804,52 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
     const totalMarks = generatedQuestions.reduce((sum, q) => sum + (q.marks || 5), 0);
 
-    const newExam: Exam = {
-      id: "EX_" + Date.now(),
-      courseId: activeCourse.id,
-      courseTitle: activeCourse.courseTitle,
-      examTitle: `Smart Exam: ${smartTopic} (${smartDifficulty})`,
-      examDate: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
-      durationMinutes: 60,
-      totalMarks: totalMarks,
-      instructions: "This exam was dynamically modeled and audited using the server-side Gemini AI engine. All standard testing regulations apply.",
-      status: "SCHEDULED",
-      questions: generatedQuestions
-    };
-
     try {
+      // ✅ STEP 1: Save each AI-generated question to the DB, collect numeric IDs
+      const questionIds: number[] = [];
+      for (const q of generatedQuestions) {
+        const createdQ: any = await CampusDatabase.addQuestion({
+          question_text: q.questionText,
+          question_type: q.questionType || "MCQ",
+          options: q.options || [],
+          correct_answer: q.correctAnswer,
+          marks: q.marks || 5,
+        });
+        if (createdQ?.id) questionIds.push(Number(createdQ.id));
+      }
+
+      if (questionIds.length === 0) {
+        alert("Failed to save any questions. Please try again.");
+        return;
+      }
+
+      // ✅ STEP 2: Create the exam with the real question IDs
       const created: any = await CampusDatabase.createExam({
-        course: activeCourse.id,
+        course: parseInt(String(activeCourse.id).replace(/\D/g, "")) || activeCourse.id,
         course_title: activeCourse.courseTitle,
-        exam_title: newExam.examTitle,
-        exam_date: newExam.examDate,
+        exam_title: `Smart Exam: ${smartTopic} (${smartDifficulty})`,
+        exam_date: new Date(Date.now() + 86400000).toISOString(),
         duration_minutes: 60,
         total_marks: totalMarks,
-        instructions: newExam.instructions,
-        questions: generatedQuestions,
+        instructions: "This exam was dynamically modeled using the server-side AI engine. All standard testing regulations apply.",
+        question_ids: questionIds,
         status: "SCHEDULED",
       });
+
       const normalized: Exam = {
-        ...newExam,
-        id: String(created?.id ?? newExam.id),
-        examTitle: created?.exam_title ?? newExam.examTitle,
+        id: String(created?.id ?? "EX_" + Date.now()),
+        courseId: String(created?.course ?? activeCourse.id),
+        courseTitle: created?.course_title ?? activeCourse.courseTitle,
+        examTitle: created?.exam_title ?? `Smart Exam: ${smartTopic} (${smartDifficulty})`,
+        examDate: created?.exam_date ?? new Date().toISOString(),
+        durationMinutes: created?.duration_minutes ?? 60,
+        totalMarks: created?.total_marks ?? totalMarks,
+        instructions: created?.instructions ?? "",
+        questions: generatedQuestions,
+        status: created?.status ?? "SCHEDULED",
+        isPushed: false,
+        createdBy: created?.created_by ?? user.fullName,
+        category: "EXAM",
       };
       setExams((prev) => [normalized, ...prev]);
 
@@ -845,13 +863,16 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         `Published AI-generated exam on ${smartTopic} inside ${activeCourse.courseCode}`
       );
 
-      alert(`AI-generated exam published successfully! Total questions: ${generatedQuestions.length}.`);
+      alert(`AI-generated exam published successfully! Total questions: ${questionIds.length}.`);
       setGeneratedQuestions([]);
       setSmartTopic("");
       setActiveTab("exams");
     } catch (err: any) {
       console.error(err);
-      alert("Failed to publish AI exam: " + (err?.message || "Unknown error"));
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      alert("Failed to publish AI exam: " + detail);
     }
   };
 

@@ -125,7 +125,12 @@ class QuestionViewSet(BaseViewSet):
     queryset = Question.objects.all()
     serializer_class = QuestionSerializer
 
-
+    def create(self, request, *args, **kwargs):
+        import sys
+        print("=" * 60, file=sys.stderr)
+        print("[ExamViewSet.create] PAYLOAD:", dict(request.data), file=sys.stderr)
+        print("=" * 60, file=sys.stderr)
+        return super().create(request, *args, **kwargs)
 # ---------- EXAM ----------
 class ExamViewSet(BaseViewSet):
     queryset = Exam.objects.all().order_by('-created_at')
