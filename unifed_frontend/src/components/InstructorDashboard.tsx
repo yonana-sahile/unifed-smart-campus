@@ -121,6 +121,12 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     "U_ST03": false
   });
 
+  // ✅ NEW: Real attendance records loaded from the DB
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
+  const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
+  const [attendedInput, setAttendedInput] = useState(0);
+  const [totalInput, setTotalInput] = useState(1);
+
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [gradingScore, setGradingScore] = useState<number>(0);
   const [gradingFeedback, setGradingFeedback] = useState("");
@@ -156,7 +162,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
   }, []);
 
-    const loadData = async () => {
+  const loadData = async () => {
     // ✅ STEP 1: Load courses FIRST so the dropdown always populates
     try {
       const coursesData = await CampusDatabase.getCourses();
@@ -192,7 +198,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     try {
       const [
         materialsData, announcementsData, assignmentsData,
-        submissionsData, examsData, gradesData, attemptsData,
+        submissionsData, examsData, gradesData, attemptsData, attendanceData,
       ] = await Promise.all([
         CampusDatabase.getMaterials().catch(() => []),
         CampusDatabase.getAnnouncements().catch(() => []),
@@ -201,6 +207,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         CampusDatabase.getExams().catch(() => []),
         CampusDatabase.getGrades().catch(() => []),
         CampusDatabase.getExamAttempts().catch(() => []),
+        CampusDatabase.getAttendance().catch(() => []),
       ]);
 
       setMaterials(Array.isArray(materialsData) ? materialsData : []);
@@ -210,6 +217,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       setExams(Array.isArray(examsData) ? examsData : []);
       setGrades(Array.isArray(gradesData) ? gradesData : []);
       setExamAttempts(Array.isArray(attemptsData) ? attemptsData : []);
+      setAttendanceRecords(Array.isArray(attendanceData) ? attendanceData : []);
     } catch (err) {
       console.error("❌ [loadData] Failed to load secondary data:", err);
     }
@@ -518,7 +526,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         duration_minutes: authorExamDuration,
         total_marks: totalMarks,
         instructions: authorExamInstructions,
-        question_ids: questionIds, 
+        question_ids: questionIds,
         status: publishImmediately ? "ACTIVE" : "DRAFT",
         is_pushed: publishImmediately,
         created_by: user.fullName,
@@ -876,6 +884,39 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
+  // ✅ NEW: Save attendance record updates to the DB
+  const handleSaveAttendance = async () => {
+    if (!editingAttendance) return;
+    try {
+      const percentage = totalInput > 0 ? (attendedInput / totalInput) * 100 : 0;
+      await CampusDatabase.updateAttendance(editingAttendance.id, {
+        attended_sessions: attendedInput,
+        total_sessions: totalInput,
+        attendance_percentage: parseFloat(percentage.toFixed(2)),
+        meets_minimum: percentage >= 80,
+      });
+
+      const refreshed = await CampusDatabase.getAttendance();
+      setAttendanceRecords(Array.isArray(refreshed) ? refreshed : []);
+
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "INSTRUCTOR",
+        "Update Attendance",
+        "AttendanceRecord",
+        editingAttendance.id,
+        `Updated attendance for ${editingAttendance.studentName}: ${attendedInput}/${totalInput}`
+      );
+
+      alert("Attendance updated successfully!");
+      setEditingAttendance(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to save: " + (err?.response?.data ? JSON.stringify(err.response.data) : err?.message));
+    }
+  };
+
   const handlePredictDropoutRisk = async () => {
     setCalculatingPredictor(true);
     setAnalyticsResult(null);
@@ -885,8 +926,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
 
       const mapped = {
         status: result.classification === "HIGH_RISK" ? "At-Risk"
-              : result.classification === "MODERATE_RISK" ? "At-Risk"
-              : "Not At-Risk",
+          : result.classification === "MODERATE_RISK" ? "At-Risk"
+            : "Not At-Risk",
         riskProbability: ((result.dropoutProbability || 0) * 100).toFixed(1),
         metrics: {
           attendance: result.attendancePercentage ?? 0,
@@ -1005,11 +1046,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   <button
                     key={id}
                     onClick={() => goToTab(id)}
-                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
-                      activeTab === id
+                    className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${activeTab === id
                         ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                         : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center space-x-3">
                       <Icon className={`w-4 h-4 ${id === "zoom" ? "text-blue-400" : "text-amber-400"}`} />
@@ -1039,11 +1079,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                   <button
                     key={id}
                     onClick={() => goToTab(id)}
-                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
-                      activeTab === id
+                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${activeTab === id
                         ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                         : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                    }`}
+                      }`}
                   >
                     <Icon className="w-4 h-4 text-amber-400" />
                     <span>{label}</span>
@@ -1066,11 +1105,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
           <button
             key={id}
             onClick={() => setActiveTab(id as any)}
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
-              activeTab === id
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${activeTab === id
                 ? "bg-primary text-white border border-amber-400/40 shadow-xs"
                 : "bg-slate-900/60 text-slate-300 hover:bg-slate-800 border border-slate-800"
-            }`}
+              }`}
           >
             <Icon className={`w-3.5 h-3.5 ${activeTab === id ? "text-amber-300" : "text-amber-400/80"}`} />
             <span>{shortLabel}</span>
@@ -1106,11 +1144,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                  activeTab === id
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${activeTab === id
                     ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                     : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                }`}
+                  }`}
               >
                 <div className="flex items-center space-x-3">
                   <Icon className={`w-4 h-4 ${isZoom ? "text-blue-400" : "text-amber-400"}`} />
@@ -1140,11 +1177,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
               <button
                 key={id}
                 onClick={() => setActiveTab(id as any)}
-                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
-                  activeTab === id
+                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${activeTab === id
                     ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                     : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
-                }`}
+                  }`}
               >
                 <Icon className="w-4 h-4 text-amber-400" />
                 <span>{label}</span>
@@ -1412,11 +1448,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                             key={fmt}
                             type="button"
                             onClick={() => setMaterialFilterFormat(fmt)}
-                            className={`px-2.5 py-1 rounded-lg transition cursor-pointer font-semibold whitespace-nowrap ${
-                              materialFilterFormat === fmt
+                            className={`px-2.5 py-1 rounded-lg transition cursor-pointer font-semibold whitespace-nowrap ${materialFilterFormat === fmt
                                 ? "bg-white text-slate-900 shadow-2xs font-bold"
                                 : "text-slate-500 hover:text-slate-800"
-                            }`}
+                              }`}
                           >
                             {fmt === "ALL" ? "All Formats" : fmt === "Document" ? "DOCX" : fmt}
                           </button>
@@ -1440,13 +1475,12 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                               <div className="space-y-1.5 flex-1">
                                 <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                                   <span
-                                    className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md ${
-                                      isPdf
+                                    className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-md ${isPdf
                                         ? "bg-red-100 text-red-700 border border-red-200"
                                         : isDocx
-                                        ? "bg-blue-100 text-blue-700 border border-blue-200"
-                                        : "bg-amber-100 text-amber-700 border border-amber-200"
-                                    }`}
+                                          ? "bg-blue-100 text-blue-700 border border-blue-200"
+                                          : "bg-amber-100 text-amber-700 border border-amber-200"
+                                      }`}
                                   >
                                     {isPdf ? "PDF" : isDocx ? "DOCX" : m.fileType}
                                   </span>
@@ -1547,9 +1581,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         .map((sub) => (
                           <div
                             key={sub.id}
-                            className={`py-4 first:py-0 flex justify-between items-center gap-4 cursor-pointer hover:bg-slate-50/50 p-2 rounded transition ${
-                              selectedSubmission?.id === sub.id ? "bg-blue-50/60" : ""
-                            }`}
+                            className={`py-4 first:py-0 flex justify-between items-center gap-4 cursor-pointer hover:bg-slate-50/50 p-2 rounded transition ${selectedSubmission?.id === sub.id ? "bg-blue-50/60" : ""
+                              }`}
                             onClick={() => {
                               setSelectedSubmission(sub);
                               setGradingScore(sub.score || 0);
@@ -1559,9 +1592,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                             <div className="space-y-1">
                               <div className="flex items-center space-x-2">
                                 <h4 className="font-semibold text-slate-800 text-sm">{sub.studentName}</h4>
-                                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                                  sub.status === "GRADED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-warning"
-                                }`}>
+                                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${sub.status === "GRADED" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-warning"
+                                  }`}>
                                   {sub.status}
                                 </span>
                               </div>
@@ -1654,11 +1686,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     <button
                       type="button"
                       onClick={() => setExamSubTab("manage")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-                        examSubTab === "manage"
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${examSubTab === "manage"
                           ? "bg-white text-slate-900 shadow-2xs"
                           : "text-slate-600 hover:text-slate-900"
-                      }`}
+                        }`}
                     >
                       <ListChecks className="w-3.5 h-3.5 text-primary" />
                       <span>Pushed Exams ({exams.filter((e) => String(e.courseId) === String(selectedCourseId)).length})</span>
@@ -1666,11 +1697,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     <button
                       type="button"
                       onClick={() => setExamSubTab("author")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-                        examSubTab === "author"
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${examSubTab === "author"
                           ? "bg-white text-slate-900 shadow-2xs"
                           : "text-slate-600 hover:text-slate-900"
-                      }`}
+                        }`}
                     >
                       <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />
                       <span>Exam Builder (ደቂቃ)</span>
@@ -1678,11 +1708,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     <button
                       type="button"
                       onClick={() => setExamSubTab("ai")}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${
-                        examSubTab === "ai"
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center space-x-1.5 whitespace-nowrap ${examSubTab === "ai"
                           ? "bg-white text-slate-900 shadow-2xs"
                           : "text-slate-600 hover:text-slate-900"
-                      }`}
+                        }`}
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                       <span>Gemini AI Modeler</span>
@@ -1735,24 +1764,21 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                           return (
                             <div
                               key={ex.id}
-                              className={`p-4 sm:p-5 rounded-2xl border transition bg-white shadow-xs ${
-                                isPushed ? "border-emerald-200 bg-emerald-50/10" : "border-slate-200"
-                              }`}
+                              className={`p-4 sm:p-5 rounded-2xl border transition bg-white shadow-xs ${isPushed ? "border-emerald-200 bg-emerald-50/10" : "border-slate-200"
+                                }`}
                             >
                               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="space-y-2 flex-1">
                                   <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                                     <span
-                                      className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                                        isPushed
+                                      className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${isPushed
                                           ? "bg-emerald-100 text-emerald-800 border-emerald-300"
                                           : "bg-slate-100 text-slate-600 border-slate-200"
-                                      }`}
+                                        }`}
                                     >
                                       <span
-                                        className={`w-1.5 h-1.5 rounded-full ${
-                                          isPushed ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
-                                        }`}
+                                        className={`w-1.5 h-1.5 rounded-full ${isPushed ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                                          }`}
                                       />
                                       <span>{isPushed ? "LIVE / PUSHED TO STUDENTS" : "DRAFT / UNPUSHED"}</span>
                                     </span>
@@ -1794,11 +1820,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                   <button
                                     type="button"
                                     onClick={() => handleTogglePush(ex)}
-                                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer shadow-xs ${
-                                      isPushed
+                                    className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition cursor-pointer shadow-xs ${isPushed
                                         ? "bg-amber-500 hover:bg-amber-600 text-white"
                                         : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                    }`}
+                                      }`}
                                   >
                                     <Send className="w-3.5 h-3.5" />
                                     <span>{isPushed ? "Unpublish / Recall" : "Push Live to Students"}</span>
@@ -1930,11 +1955,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                 key={mins}
                                 type="button"
                                 onClick={() => setAuthorExamDuration(mins)}
-                                className={`px-2 py-1 rounded-lg text-xs font-bold font-mono transition cursor-pointer ${
-                                  authorExamDuration === mins
+                                className={`px-2 py-1 rounded-lg text-xs font-bold font-mono transition cursor-pointer ${authorExamDuration === mins
                                     ? "bg-amber-600 text-white shadow-2xs"
                                     : "bg-white/80 hover:bg-white text-amber-900 border border-amber-200"
-                                }`}
+                                  }`}
                               >
                                 {mins} ደቂቃ
                               </button>
@@ -2042,11 +2066,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                   {q.options?.map((opt, optIndex) => (
                                     <div
                                       key={optIndex}
-                                      className={`p-2 rounded-xl border flex items-center space-x-2 transition ${
-                                        q.correctAnswer === opt
+                                      className={`p-2 rounded-xl border flex items-center space-x-2 transition ${q.correctAnswer === opt
                                           ? "bg-emerald-50/80 border-emerald-300"
                                           : "bg-white border-slate-200"
-                                      }`}
+                                        }`}
                                     >
                                       <input
                                         type="radio"
@@ -2140,11 +2163,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                 key={lvl}
                                 type="button"
                                 onClick={() => setSmartDifficulty(lvl)}
-                                className={`py-2 rounded-xl font-semibold text-center transition cursor-pointer ${
-                                  smartDifficulty === lvl
+                                className={`py-2 rounded-xl font-semibold text-center transition cursor-pointer ${smartDifficulty === lvl
                                     ? "bg-primary text-white"
                                     : "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                                }`}
+                                  }`}
                               >
                                 {lvl}
                               </button>
@@ -2216,18 +2238,16 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                                   {q.options.map((opt: string, optIdx: number) => (
                                     <div
                                       key={optIdx}
-                                      className={`p-2.5 rounded-xl border flex items-center space-x-2 ${
-                                        opt === q.correctAnswer
+                                      className={`p-2.5 rounded-xl border flex items-center space-x-2 ${opt === q.correctAnswer
                                           ? "bg-emerald-50 border-emerald-200 text-emerald-900 font-semibold"
                                           : "bg-white border-slate-200"
-                                      }`}
+                                        }`}
                                     >
                                       <div
-                                        className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border shrink-0 ${
-                                          opt === q.correctAnswer
+                                        className={`w-3.5 h-3.5 rounded-full flex items-center justify-center border shrink-0 ${opt === q.correctAnswer
                                             ? "bg-emerald-600 text-white border-emerald-300"
                                             : "border-slate-300"
-                                        }`}
+                                          }`}
                                       >
                                         {opt === q.correctAnswer && <Check className="w-2.5 h-2.5" />}
                                       </div>
@@ -2299,13 +2319,12 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                               <td className="p-4 font-mono font-bold text-slate-950">{g.totalGrade}%</td>
                               <td className="p-4 font-mono text-slate-800 font-bold">{g.letterGrade} ({g.gradePoint.toFixed(2)})</td>
                               <td className="p-4">
-                                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                                  g.status === "APPROVED"
+                                <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${g.status === "APPROVED"
                                     ? "bg-emerald-50 text-emerald-700"
                                     : g.status === "SUBMITTED"
-                                    ? "bg-blue-50 text-primary"
-                                    : "bg-slate-100 text-slate-500"
-                                }`}>
+                                      ? "bg-blue-50 text-primary"
+                                      : "bg-slate-100 text-slate-500"
+                                  }`}>
                                   {g.status}
                                 </span>
                               </td>
@@ -2339,80 +2358,189 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 key="instructor-attendance-tab"
               >
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">Course Attendance Ledger</h2>
-                  <p className="text-slate-500 text-xs sm:text-sm">Monitor student course logs and manage attendance minimum warnings (UC-I-07).</p>
+                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
+                    Course Attendance Ledger
+                  </h2>
+                  <p className="text-slate-500 text-xs sm:text-sm">
+                    Live records from the database. Filtered by your active course. Attendance below 80% triggers a warning.
+                  </p>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4 max-w-2xl">
-                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                    <h3 className="font-display font-bold text-slate-800 text-base">Attendance Roster</h3>
-                    <input
-                      type="date"
-                      className="border border-slate-200 rounded-lg p-2 text-xs font-mono"
-                      value={attendanceDate}
-                      onChange={(e) => setAttendanceDate(e.target.value)}
-                    />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs">
+                    <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Total Students</span>
+                    <div className="text-2xl font-display font-bold text-slate-900 mt-1">
+                      {attendanceRecords.filter((a) => String(a.courseId) === String(selectedCourseId)).length}
+                    </div>
+                  </div>
+                  <div className="bg-white border border-emerald-200 rounded-xl p-4 shadow-xs">
+                    <span className="text-[10px] font-mono text-emerald-700 uppercase tracking-wider">Meeting Minimum (≥80%)</span>
+                    <div className="text-2xl font-display font-bold text-emerald-700 mt-1">
+                      {attendanceRecords.filter(
+                        (a) => String(a.courseId) === String(selectedCourseId) && a.attendancePercentage >= 80
+                      ).length}
+                    </div>
+                  </div>
+                  <div className="bg-white border border-red-200 rounded-xl p-4 shadow-xs">
+                    <span className="text-[10px] font-mono text-red-700 uppercase tracking-wider">Below Minimum (&lt;80%)</span>
+                    <div className="text-2xl font-display font-bold text-red-700 mt-1">
+                      {attendanceRecords.filter(
+                        (a) => String(a.courseId) === String(selectedCourseId) && a.attendancePercentage < 80
+                      ).length}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                  <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <h3 className="font-display font-bold text-slate-800 text-base">
+                      Attendance Roster — {getActiveCourse()?.courseCode || "—"}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={loadData}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition cursor-pointer"
+                    >
+                      Refresh
+                    </button>
                   </div>
 
-                  <div className="divide-y divide-slate-100">
-                    {[
-                      { id: "U_ST01", name: "Tadesse Mersha", studentId: "MAU1402271" },
-                      { id: "U_ST02", name: "Yonas Sahle", studentId: "MAU1402530" },
-                      { id: "U_ST03", name: "Tarekegn Abebe", studentId: "MAU1402284" }
-                    ].map((st) => {
-                      const isPresent = attendanceMap[st.id] !== false;
-                      return (
-                        <div key={st.id} className="py-3 flex flex-col sm:flex-row justify-between sm:items-center gap-3">
-                          <div>
-                            <h4 className="font-semibold text-slate-800 text-sm">{st.name}</h4>
-                            <p className="text-[10px] font-mono text-slate-400">ID: {st.studentId}</p>
-                          </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs md:text-sm min-w-[720px]">
+                      <thead>
+                        <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-400 font-mono text-[11px]">
+                          <th className="p-4">Student</th>
+                          <th className="p-4">Course</th>
+                          <th className="p-4 text-center">Attended</th>
+                          <th className="p-4 text-center">Total</th>
+                          <th className="p-4 text-center">Percentage</th>
+                          <th className="p-4 text-center">Status</th>
+                          <th className="p-4 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700">
+                        {attendanceRecords
+                          .filter((a) => String(a.courseId) === String(selectedCourseId))
+                          .map((rec) => (
+                            <tr key={rec.id} className="hover:bg-slate-50/40">
+                              <td className="p-4">
+                                <div className="font-semibold text-slate-800">{rec.studentName || "Unnamed"}</div>
+                                <div className="text-[10px] font-mono text-slate-400">ID: {rec.studentId}</div>
+                              </td>
+                              <td className="p-4 font-mono text-xs">{rec.courseCode || "—"}</td>
+                              <td className="p-4 text-center font-mono">{rec.attendedSessions}</td>
+                              <td className="p-4 text-center font-mono">{rec.totalSessions}</td>
+                              <td className="p-4 text-center">
+                                <span className={`font-mono font-bold ${rec.attendancePercentage >= 80 ? "text-emerald-700" : "text-red-700"
+                                  }`}>
+                                  {rec.attendancePercentage.toFixed(1)}%
+                                </span>
+                              </td>
+                              <td className="p-4 text-center">
+                                {rec.attendancePercentage >= 80 ? (
+                                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    ✓ OK
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                                    ⚠ BELOW MIN
+                                  </span>
+                                )}
+                              </td>
+                              <td className="p-4 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingAttendance(rec);
+                                    setAttendedInput(rec.attendedSessions);
+                                    setTotalInput(rec.totalSessions);
+                                  }}
+                                  className="px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-600 text-white text-xs font-semibold transition cursor-pointer"
+                                >
+                                  Update
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
 
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => setAttendanceMap(prev => ({ ...prev, [st.id]: true }))}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-mono transition ${
-                                isPresent
-                                  ? "bg-emerald-500 text-white"
-                                  : "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                              }`}
-                            >
-                              Present
-                            </button>
-                            <button
-                              onClick={() => setAttendanceMap(prev => ({ ...prev, [st.id]: false }))}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-mono transition ${
-                                !isPresent
-                                  ? "bg-red-500 text-white"
-                                  : "bg-slate-100 hover:bg-slate-200 text-slate-600"
-                              }`}
-                            >
-                              Absent
-                            </button>
+                        {attendanceRecords.filter((a) => String(a.courseId) === String(selectedCourseId)).length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="p-8 text-center text-slate-400 text-xs">
+                              No attendance records for {getActiveCourse()?.courseCode || "this course"} yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {editingAttendance && (
+                  <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white w-full max-w-md rounded-2xl overflow-hidden shadow-2xl p-6 space-y-4">
+                      <h3 className="font-display font-bold text-lg text-slate-800 border-b border-slate-100 pb-3">
+                        Update Attendance
+                      </h3>
+                      <div className="space-y-3 text-xs">
+                        <div className="p-3 bg-slate-50 rounded-lg">
+                          <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Student</p>
+                          <p className="font-semibold text-slate-800 text-sm">{editingAttendance.studentName}</p>
+                          <p className="text-[10px] font-mono text-slate-500">Course: {editingAttendance.courseCode}</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <label className="block text-slate-600 font-medium">Attended Sessions</label>
+                            <input
+                              type="number"
+                              min={0}
+                              className="w-full border border-slate-200 rounded-lg p-2.5 font-mono"
+                              value={attendedInput}
+                              onChange={(e) => setAttendedInput(parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-slate-600 font-medium">Total Sessions</label>
+                            <input
+                              type="number"
+                              min={1}
+                              className="w-full border border-slate-200 rounded-lg p-2.5 font-mono"
+                              value={totalInput}
+                              onChange={(e) => setTotalInput(parseInt(e.target.value) || 1)}
+                            />
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
 
-                  <button
-                    onClick={async () => {
-                      alert(`Attendance saved successfully for ${attendanceDate}! Audit ledger updated.`);
-                      await CampusDatabase.addAuditLog(
-                        user.id,
-                        user.fullName,
-                        "INSTRUCTOR",
-                        "Save Attendance",
-                        "Course",
-                        selectedCourseId,
-                        `Recorded class attendance roster for date: ${attendanceDate}`
-                      );
-                    }}
-                    className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold transition mt-4 w-full sm:w-auto"
-                  >
-                    Save Attendance Ledger
-                  </button>
-                </div>
+                        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 text-xs">
+                          <span className="text-slate-500">New Percentage: </span>
+                          <strong className="text-blue-800 font-mono">
+                            {totalInput > 0 ? ((attendedInput / totalInput) * 100).toFixed(1) : 0}%
+                          </strong>
+                          {totalInput > 0 && (attendedInput / totalInput) * 100 < 80 && (
+                            <span className="ml-2 text-red-600 font-semibold">(Below minimum)</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex space-x-3 pt-4">
+                        <button
+                          type="button"
+                          onClick={() => setEditingAttendance(null)}
+                          className="flex-1 py-2.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleSaveAttendance}
+                          className="flex-1 py-2.5 bg-primary hover:bg-primary-600 text-white rounded-lg text-xs font-semibold shadow-sm transition cursor-pointer"
+                        >
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -2478,9 +2606,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-100">
                           <div>
                             <span className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">Classification Status</span>
-                            <h4 className={`text-xl font-display font-bold mt-1 ${
-                              analyticsResult.status === "At-Risk" ? "text-danger" : "text-success"
-                            }`}>
+                            <h4 className={`text-xl font-display font-bold mt-1 ${analyticsResult.status === "At-Risk" ? "text-danger" : "text-success"
+                              }`}>
                               {analyticsResult.status}
                             </h4>
                           </div>

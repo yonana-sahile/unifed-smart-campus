@@ -29,30 +29,111 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://unifed-smart-campus.onrender.com/api';
 
+// ---------- AUTH HELPERS ----------
+export const getAccessToken = () => localStorage.getItem('access_token');
+export const getRefreshToken = () => localStorage.getItem('refresh_token');
+
+export const setTokens = (access?: string | null, refresh?: string | null) => {
+  if (access) localStorage.setItem('access_token', access);
+  if (refresh) localStorage.setItem('refresh_token', refresh);
+};
+
+export const clearTokens = () => {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+};
+
+const forceLogout = () => {
+  clearTokens();
+  // Notify the app so it can redirect to login
+  window.dispatchEvent(new CustomEvent('uscms:auth-expired'));
+};
+
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 60_000,
   headers: { 'Content-Type': 'application/json' },
 });
 
+// ---------- REQUEST INTERCEPTOR ----------
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
+  const token = getAccessToken();
+
+  // Diagnostic (safe — remove in production if noisy)
+  console.log(
+    '[api→]',
+    config.method?.toUpperCase(),
+    config.url,
+    '| token:',
+    token ? token.slice(0, 20) + '…' : 'NULL'
+  );
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
+  } else {
+    console.warn('[api→] No access token in storage — request will likely 401');
   }
+
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
   }
   return config;
 });
 
+// ---------- RESPONSE INTERCEPTOR (auto-refresh on 401) ----------
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Diagnostic: log every 401 with the URL and whether a header was sent
     if (error?.response?.status === 401) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
+      console.warn(
+        '[api←] 401 on',
+        originalRequest?.method?.toUpperCase(),
+        originalRequest?.url,
+        '| had Authorization header:',
+        !!originalRequest?.headers?.Authorization
+      );
     }
+
+    // If 401 and we haven't retried this request yet
+    if (
+      error?.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/token/refresh/') // don't retry the refresh call itself
+    ) {
+      originalRequest._retry = true;
+
+      const refresh = getRefreshToken();
+      if (!refresh) {
+        console.warn('[auth] No refresh token — forcing logout');
+        forceLogout();
+        return Promise.reject(error);
+      }
+
+      try {
+        // Use raw axios (not the `api` instance) to avoid interceptor recursion
+        const { data } = await axios.post(`${API_BASE}/token/refresh/`, { refresh });
+
+        // Save new access token
+        setTokens(data.access, data.refresh); // SimpleJWT may rotate refresh
+
+        originalRequest.headers.Authorization = `Bearer ${data.access}`;
+        // Retry the original request with the new token
+        return api(originalRequest);
+      } catch (refreshErr: any) {
+        console.warn(
+          '[auth] Refresh failed:',
+          refreshErr?.response?.status,
+          refreshErr?.response?.data || refreshErr?.message
+        );
+        forceLogout();
+        return Promise.reject(refreshErr);
+      }
+    }
+
     return Promise.reject(error);
   }
 );
@@ -65,10 +146,10 @@ const unwrapList = <T>(raw: any): T[] =>
 
 const mapUser = (u: any): User => ({
   id: `U_${u.id}`,
-  username: u.username || "",
-  fullName: u.full_name || u.fullName || u.username || "Unknown User",
-  email: u.email || "",
-  role: u.role || "STUDENT",
+  username: u.username || '',
+  fullName: u.full_name || u.fullName || u.username || 'Unknown User',
+  email: u.email || '',
+  role: u.role || 'STUDENT',
   isActive: u.is_active ?? true,
   avatarUrl: u.avatar_url ?? undefined,
   phoneNumber: u.phone_number ?? undefined,
@@ -164,10 +245,10 @@ const mapExam = (e: any): Exam => ({
   totalMarks: e.total_marks ?? e.totalMarks ?? 100,
   instructions: e.instructions ?? '',
   questions: (e.questions || []).map((q: any) => ({
-    questionText: q.question_text ?? q.questionText ?? "",
-    questionType: q.question_type ?? q.questionType ?? "MCQ",
+    questionText: q.question_text ?? q.questionText ?? '',
+    questionType: q.question_type ?? q.questionType ?? 'MCQ',
     options: q.options ?? [],
-    correctAnswer: q.correct_answer ?? q.correctAnswer ?? "",
+    correctAnswer: q.correct_answer ?? q.correctAnswer ?? '',
     marks: q.marks ?? 5,
   })),
   status: e.status ?? 'DRAFT',
@@ -209,6 +290,19 @@ const mapGrade = (g: any): Grade => ({
   comments: g.comments ?? undefined,
 } as Grade);
 
+const mapAttendance = (a: any): AttendanceRecord => ({
+  id: String(a.id),
+  studentId: String(a.student ?? a.studentId ?? ''),
+  studentName: a.student_name ?? a.studentName ?? '',
+  courseId: String(a.course ?? a.courseId ?? ''),
+  courseCode: a.course_code ?? a.courseCode ?? '',
+  totalSessions: a.total_sessions ?? a.totalSessions ?? 0,
+  attendedSessions: a.attended_sessions ?? a.attendedSessions ?? 0,
+  attendancePercentage: a.attendance_percentage ?? a.attendancePercentage ?? 0,
+  lastUpdated: a.last_updated ?? a.lastUpdated ?? '',
+  meetsMinimum: a.meets_minimum ?? a.meetsMinimum ?? false,
+} as AttendanceRecord);
+
 // ---------- USERS ----------
 export const getUsers = (): Promise<User[]> =>
   api.get('/users/').then(r =>
@@ -225,6 +319,10 @@ export const login = async (username: string, password: string) => {
   if (token) localStorage.setItem('access_token', token);
   if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
   return data;
+};
+
+export const logout = () => {
+  clearTokens();
 };
 
 // ---------- COURSES ----------
@@ -256,10 +354,10 @@ export const getAnnouncements = (): Promise<Announcement[]> =>
 export const createAnnouncement = (announcement: any): Promise<any> => {
   const payload: any = {
     course: announcement.course ?? null,
-    course_title: announcement.courseTitle ?? announcement.course_title ?? "Campus News & Announcements",
+    course_title: announcement.courseTitle ?? announcement.course_title ?? 'Campus News & Announcements',
     title: announcement.title,
     content: announcement.content,
-    posted_by: announcement.postedBy ?? announcement.posted_by ?? "University Media Directorate",
+    posted_by: announcement.postedBy ?? announcement.posted_by ?? 'University Media Directorate',
     posted_at: announcement.postedAt ?? announcement.posted_at ?? new Date().toISOString(),
   };
   return api.post('/announcements/', payload).then(r => r.data);
@@ -268,10 +366,10 @@ export const createAnnouncement = (announcement: any): Promise<any> => {
 export const updateAnnouncement = (id: string, announcement: any): Promise<any> => {
   const payload: any = {
     course: announcement.course ?? null,
-    course_title: announcement.courseTitle ?? announcement.course_title ?? "Campus News & Announcements",
+    course_title: announcement.courseTitle ?? announcement.course_title ?? 'Campus News & Announcements',
     title: announcement.title,
     content: announcement.content,
-    posted_by: announcement.postedBy ?? announcement.posted_by ?? "University Media Directorate",
+    posted_by: announcement.postedBy ?? announcement.posted_by ?? 'University Media Directorate',
     posted_at: announcement.postedAt ?? announcement.posted_at ?? new Date().toISOString(),
   };
   return api.put(`/announcements/${id}/`, payload).then(r => r.data);
@@ -340,9 +438,11 @@ export const saveTranscripts = (transcripts: Transcript[]): Promise<Transcript[]
 
 // ---------- ATTENDANCE ----------
 export const getAttendance = (): Promise<AttendanceRecord[]> =>
-  api.get('/attendance/').then(r => unwrapList<AttendanceRecord>(r.data));
+  api.get('/attendance/').then(r => unwrapList<any>(r.data).map(mapAttendance));
 export const saveAttendance = (records: AttendanceRecord[]): Promise<AttendanceRecord[]> =>
   api.put('/attendance/', records).then(r => r.data);
+export const updateAttendance = (id: string, data: any): Promise<any> =>
+  api.patch(`/attendance/${id}/`, data).then(r => r.data);
 
 // ---------- LIBRARY RESOURCES ----------
 export const getLibraryResources = (): Promise<LibraryResource[]> =>
@@ -374,25 +474,23 @@ export const getEvaluations = (): Promise<InstructorEvaluation[]> =>
 export const saveEvaluations = (evaluations: InstructorEvaluation[]): Promise<InstructorEvaluation[]> =>
   api.put('/evaluations/', evaluations).then(r => r.data);
 
-// ✅ NEW: Create a single evaluation via POST (uses DRF's create action)
 export const addEvaluation = (evaluation: any): Promise<any> => {
-  // Map camelCase → snake_case for Django
   const payload: any = {
-    student: parseInt(String(evaluation.studentId).replace(/\D/g, "")) || evaluation.studentId,
-    student_name: evaluation.studentName || "",
-    instructor: parseInt(String(evaluation.instructorId).replace(/\D/g, "")) || evaluation.instructorId,
-    instructor_name: evaluation.instructorName || "",
+    student: parseInt(String(evaluation.studentId).replace(/\D/g, '')) || evaluation.studentId,
+    student_name: evaluation.studentName || '',
+    instructor: parseInt(String(evaluation.instructorId).replace(/\D/g, '')) || evaluation.instructorId,
+    instructor_name: evaluation.instructorName || '',
     course: evaluation.courseId
-      ? parseInt(String(evaluation.courseId).replace(/\D/g, "")) || evaluation.courseId
+      ? parseInt(String(evaluation.courseId).replace(/\D/g, '')) || evaluation.courseId
       : null,
-    course_code: evaluation.courseCode || "",
+    course_code: evaluation.courseCode || '',
     clarity: evaluation.clarity ?? 0,
     punctuality: evaluation.punctuality ?? 0,
     helpfulness: evaluation.helpfulness ?? 0,
     assessment_fairness: evaluation.assessmentFairness ?? 0,
     overall_rating: evaluation.overallRating ?? 0,
-    comments: evaluation.comments || "",
-    semester: evaluation.semester || "",
+    comments: evaluation.comments || '',
+    semester: evaluation.semester || '',
   };
   return api.post('/evaluations/', payload).then(r => r.data);
 };
@@ -459,7 +557,7 @@ export const getCourseAdvisor = (data: {
 // ---------- AI CHAT (Groq) ----------
 export const sendChatMessage = (payload: {
   message: string;
-  history?: { role: "user" | "assistant"; content: string }[];
+  history?: { role: 'user' | 'assistant'; content: string }[];
 }): Promise<{ reply: string }> =>
   api.post('/ai/chat/', payload).then(r => r.data);
 
@@ -473,7 +571,7 @@ export const addAuditLog = async (
   entityId: string,
   description: string
 ): Promise<AuditLog | null> => {
-  const token = localStorage.getItem('access_token');
+  const token = getAccessToken();
   if (!token) {
     return null;
   }
@@ -488,7 +586,6 @@ export const addAuditLog = async (
       entity_type: entityType,
       entity_id: entityId,
       description,
-      ip_address: 'unknown',
     });
     return res.data;
   } catch (err: any) {
@@ -509,8 +606,8 @@ export const saveClearances = (clearances: StudentClearance[]): Promise<StudentC
 
 export const updateClearanceStage = (
   clearanceId: string,
-  dept: "LIBRARY" | "FINANCE" | "DORMITORY" | "DEPARTMENT_LAB" | "REGISTRAR",
-  status: "CLEARED" | "REJECTED" | "PENDING",
+  dept: 'LIBRARY' | 'FINANCE' | 'DORMITORY' | 'DEPARTMENT_LAB' | 'REGISTRAR',
+  status: 'CLEARED' | 'REJECTED' | 'PENDING',
   officerName: string,
   remarks?: string
 ): Promise<StudentClearance> =>
@@ -586,24 +683,24 @@ const toZoomSnakeCase = (data: any): any => {
 };
 
 const fromZoomSnakeCase = (raw: any) => ({
-  id: String(raw?.id ?? ""),
+  id: String(raw?.id ?? ''),
   courseId: raw?.course ?? raw?.courseId ?? null,
-  courseCode: raw?.course_code ?? raw?.courseCode ?? "",
-  courseTitle: raw?.course_title ?? raw?.courseTitle ?? "",
-  title: raw?.title ?? "",
-  topic: raw?.topic ?? "",
-  instructorId: String(raw?.instructor ?? raw?.instructorId ?? ""),
-  instructorName: raw?.instructor_name ?? raw?.instructorName ?? "",
+  courseCode: raw?.course_code ?? raw?.courseCode ?? '',
+  courseTitle: raw?.course_title ?? raw?.courseTitle ?? '',
+  title: raw?.title ?? '',
+  topic: raw?.topic ?? '',
+  instructorId: String(raw?.instructor ?? raw?.instructorId ?? ''),
+  instructorName: raw?.instructor_name ?? raw?.instructorName ?? '',
   startTime: raw?.start_time ?? raw?.startTime ?? new Date().toISOString(),
   durationMinutes: raw?.duration_minutes ?? raw?.durationMinutes ?? 60,
-  meetingId: raw?.meeting_id ?? raw?.meetingId ?? "",
-  passcode: raw?.passcode ?? "",
-  joinUrl: raw?.join_url ?? raw?.joinUrl ?? "",
-  hostUrl: raw?.host_url ?? raw?.hostUrl ?? "",
-  status: raw?.status ?? "UPCOMING",
-  lectureNotes: raw?.lecture_notes ?? raw?.lectureNotes ?? "",
-  recordingUrl: raw?.recording_url ?? raw?.recordingUrl ?? "",
-  recordingDuration: raw?.recording_duration ?? raw?.recordingDuration ?? "",
+  meetingId: raw?.meeting_id ?? raw?.meetingId ?? '',
+  passcode: raw?.passcode ?? '',
+  joinUrl: raw?.join_url ?? raw?.joinUrl ?? '',
+  hostUrl: raw?.host_url ?? raw?.hostUrl ?? '',
+  status: raw?.status ?? 'UPCOMING',
+  lectureNotes: raw?.lecture_notes ?? raw?.lectureNotes ?? '',
+  recordingUrl: raw?.recording_url ?? raw?.recordingUrl ?? '',
+  recordingDuration: raw?.recording_duration ?? raw?.recordingDuration ?? '',
   activeAttendees: raw?.active_attendees ?? raw?.activeAttendees ?? [],
   chatMessages: raw?.chat_messages ?? raw?.chatMessages ?? [],
 });
@@ -623,6 +720,7 @@ export const CampusDatabase = {
   saveUsers,
   updateUser,
   login,
+  logout,
   getCourses,
   saveCourses,
   updateCourse,
@@ -661,6 +759,7 @@ export const CampusDatabase = {
   saveTranscripts,
   getAttendance,
   saveAttendance,
+  updateAttendance,
   getLibraryResources,
   saveLibraryResources,
   getPayments,
@@ -671,7 +770,7 @@ export const CampusDatabase = {
   saveCourseOutlines,
   getEvaluations,
   saveEvaluations,
-  addEvaluation,              // ✅ NEW
+  addEvaluation,
   getMoEAdmissions,
   saveMoEAdmissions,
   getCertificates,

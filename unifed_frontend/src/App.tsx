@@ -140,14 +140,26 @@ export default function App() {
     }
   }, []);
 
-  // ✅ FIXED: real Django auth via /api/token/, then DEMO_USERS fallback
+  // ✅ NEW: react to token expiry coming from api.ts interceptor
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      console.warn("[App] Session expired — returning to login.");
+      localStorage.removeItem("uscms_current_user");
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      setCurrentUser(null);
+      setErrorMessage("Your session has expired. Please log in again.");
+    };
+    window.addEventListener("uscms:auth-expired", handleAuthExpired);
+    return () => window.removeEventListener("uscms:auth-expired", handleAuthExpired);
+  }, []);
+
+  // ✅ REAL LOGIN (form submit) — uses CampusDatabase.login() so API_BASE is respected
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
 
-    // ✅ FIX 1: aggressively trim + lowercase username to defeat mobile autocorrect
     const usernameOrEmail = emailInput.trim().toLowerCase().replace(/\s+/g, "");
-    // ✅ FIX 1b: trim password (keep case-sensitive for security)
     const cleanPassword = passwordInput.trim();
 
     if (!usernameOrEmail || !cleanPassword) {
@@ -155,68 +167,22 @@ export default function App() {
       return;
     }
 
-    // ── 1️⃣ Try real Django auth via /api/token/ ──
+    // ── 1️⃣ Try real Django auth via CampusDatabase.login() ──
     try {
-      const tokenResp = await fetch("http://127.0.0.1:8000/api/token/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username: usernameOrEmail,
-          password: cleanPassword,
-        }),
-      });
+      await CampusDatabase.login(usernameOrEmail, cleanPassword);
 
-      if (!tokenResp.ok) {
-        const errBody = await tokenResp.text();
-        console.warn("[login] /api/token/ rejected:", tokenResp.status, errBody);
-        throw new Error("bad credentials");
-      }
-
-      const tokenData = await tokenResp.json();
-      if (tokenData.access) localStorage.setItem("access_token", tokenData.access);
-      if (tokenData.refresh) localStorage.setItem("refresh_token", tokenData.refresh);
-
-      // Fetch users to find the logged-in profile
-      const usersResp = await fetch("http://127.0.0.1:8000/api/users/");
-      const usersData = await usersResp.json();
-      const userList = usersData.results || usersData;
-
-      const meRaw = userList.find(
-        (u: any) =>
+      // We now have tokens in localStorage. Fetch profile.
+      const users = await CampusDatabase.getUsers();
+      const me = users.find(
+        (u) =>
           u.username?.toLowerCase() === usernameOrEmail ||
           u.email?.toLowerCase() === usernameOrEmail
       );
 
-      if (!meRaw) {
+      if (!me) {
         setErrorMessage("Login succeeded but user profile not found.");
         return;
       }
-
-      const me: User = {
-        id: String(meRaw.id),
-        username: meRaw.username,
-        fullName: meRaw.full_name || meRaw.username,
-        email: meRaw.email,
-        role: meRaw.role || "STUDENT",
-        isActive: meRaw.is_active ?? true,
-        avatarUrl: meRaw.avatar_url,
-        phoneNumber: meRaw.phone_number,
-        studentId: meRaw.student_id,
-        academicYear: meRaw.academic_year,
-        semester: meRaw.semester,
-        program: meRaw.program,
-        gpa: meRaw.gpa,
-        cgpa: meRaw.cgpa,
-        outstandingFees: parseFloat(meRaw.outstanding_fees) || 0,
-        instructorId: meRaw.instructor_id,
-        department: meRaw.department,
-        specialization: meRaw.specialization,
-        officeHours: meRaw.office_hours,
-        staffId: meRaw.staff_id,
-        librarySection: meRaw.library_section,
-        officerId: meRaw.officer_id,
-        bio: meRaw.bio,
-      };
 
       if (!me.isActive) {
         setErrorMessage("This institutional account is currently deactivated by the University Registrar.");
@@ -226,11 +192,12 @@ export default function App() {
       localStorage.setItem("uscms_current_user", JSON.stringify(me));
       setCurrentUser(me);
       return;
-    } catch (err) {
-      console.warn("Token auth failed, trying demo users:", err);
+    } catch (err: any) {
+      console.warn("[App] Real login failed:", err?.response?.status, err?.response?.data || err?.message);
+      // Fall through to demo users
     }
 
-    // ── 2️⃣ Fallback to DEMO_USERS ──
+    // ── 2️⃣ Fallback to DEMO_USERS (offline / demo mode) ──
     const demo = DEMO_USERS.find(
       (u) =>
         (u.username.toLowerCase() === usernameOrEmail ||
@@ -239,6 +206,7 @@ export default function App() {
     );
 
     if (demo) {
+      // ⚠️ Demo mode: no tokens. Backend writes will 401. Read-only UI still works.
       localStorage.setItem("uscms_current_user", JSON.stringify(demo));
       setCurrentUser(demo);
       return;
@@ -269,57 +237,92 @@ export default function App() {
     setPasswordInput("");
   };
 
-  // ✅ Quick login — unchanged behaviour
+  // ✅ FIXED: real authentication for quick-login, with graceful demo fallback
   const handleQuickLogin = async (email: string) => {
     setEmailInput(email);
     setPasswordInput("password");
+    setErrorMessage("");
 
     const localUser = DEMO_USERS.find((u) => u.email === email);
-    if (localUser) {
-      localStorage.setItem("uscms_current_user", JSON.stringify(localUser));
-      setCurrentUser(localUser);
-      try {
-        void CampusDatabase.addAuditLog(
-          localUser.id,
-          localUser.fullName,
-          localUser.role,
-          "Institutional Login",
-          "User",
-          localUser.id,
-          "Quick demo authorization session established (local fallback)."
-        );
-      } catch {
-        // Ignore audit failure
-      }
+    if (!localUser) {
+      // Should never happen — but keep a safety net
+      alert("Unknown demo profile.");
       return;
     }
 
+    // ── 1️⃣ Try REAL backend auth using the demo user's username + "password" ──
     try {
+      await CampusDatabase.login(localUser.username, "password");
+
+      // Verify the token works and pull the authoritative profile from the server
       const users = await CampusDatabase.getUsers();
-      const found = users.find((u) => u.email === email);
-      if (found) {
-        localStorage.setItem("uscms_current_user", JSON.stringify(found));
-        setCurrentUser(found);
-        void CampusDatabase.addAuditLog(
-          found.id,
-          found.fullName,
-          found.role,
-          "Institutional Login",
-          "User",
-          found.id,
-          "Quick demo authorization session established (API)."
-        );
-      } else {
-        alert("User not found. Please check credentials or use the demo profiles.");
-      }
-    } catch (error) {
-      console.error("Quick login failed:", error);
-      alert("Unable to login. Please ensure the backend is running or use the demo profiles.");
+      const me =
+        users.find((u) => u.username?.toLowerCase() === localUser.username.toLowerCase()) ||
+        users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ||
+        localUser; // fall back to local shape if server lookup is odd
+
+      localStorage.setItem("uscms_current_user", JSON.stringify(me));
+      setCurrentUser(me);
+
+      void CampusDatabase.addAuditLog(
+        me.id,
+        me.fullName,
+        me.role,
+        "Institutional Login",
+        "User",
+        me.id,
+        "Quick demo authorization session established (real backend token)."
+      );
+      return;
+    } catch (err: any) {
+      console.warn(
+        "[App] Quick-login backend auth failed, using local demo user (read-only):",
+        err?.response?.status,
+        err?.response?.data || err?.message
+      );
+    }
+
+    // ── 2️⃣ Demo fallback: no tokens, no backend writes ──
+    localStorage.setItem("uscms_current_user", JSON.stringify(localUser));
+    setCurrentUser(localUser);
+
+    try {
+      void CampusDatabase.addAuditLog(
+        localUser.id,
+        localUser.fullName,
+        localUser.role,
+        "Institutional Login",
+        "User",
+        localUser.id,
+        "Quick demo authorization session established (local fallback)."
+      );
+    } catch {
+      // Ignore audit failure
     }
   };
 
   // Render Dashboard based on role
   if (currentUser) {
+    // ✅ OPTIONAL STRICT MODE — uncomment if you want to require a real token.
+    // const hasToken = !!localStorage.getItem("access_token");
+    // if (!hasToken) {
+    //   return (
+    //     <div className="min-h-screen flex items-center justify-center p-6">
+    //       <div className="bg-white p-6 rounded-2xl shadow-xl max-w-md text-center space-y-3">
+    //         <ShieldAlert className="w-10 h-10 text-amber-500 mx-auto" />
+    //         <h3 className="font-bold text-lg">Session required</h3>
+    //         <p className="text-sm text-slate-500">
+    //           You are viewing a demo account without backend authentication.
+    //           Please log in with real credentials to enable write operations.
+    //         </p>
+    //         <button onClick={handleLogout} className="bg-primary text-white px-4 py-2 rounded-lg text-sm font-bold">
+    //           Back to login
+    //         </button>
+    //       </div>
+    //     </div>
+    //   );
+    // }
+
     const renderRoleDashboard = () => {
       switch (currentUser.role) {
         case "STUDENT":
@@ -363,7 +366,7 @@ export default function App() {
     );
   }
 
-  // --- LOGIN PAGE ---
+  // --- LOGIN PAGE (unchanged) ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/80 dark:from-[#06111f] dark:via-[#071526] dark:to-[#0a1d35] flex flex-col font-sans relative selection:bg-amber-400 selection:text-slate-900 transition-colors duration-300">
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-400/10 dark:bg-blue-900/15 rounded-full blur-3xl pointer-events-none" />
