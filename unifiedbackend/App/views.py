@@ -131,6 +131,8 @@ class QuestionViewSet(BaseViewSet):
         print("[ExamViewSet.create] PAYLOAD:", dict(request.data), file=sys.stderr)
         print("=" * 60, file=sys.stderr)
         return super().create(request, *args, **kwargs)
+
+
 # ---------- EXAM ----------
 class ExamViewSet(BaseViewSet):
     queryset = Exam.objects.all().order_by('-created_at')
@@ -371,24 +373,70 @@ class AIViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'])
     def predict_risk(self, request):
-        student_id = request.data.get('student_id')
-        try:
-            student = User.objects.get(id=student_id, role='STUDENT')
-        except User.DoesNotExist:
-            return Response({'error': 'Student not found'}, status=status.HTTP_404_NOT_FOUND)
+        # Accept both formats from the frontend
+        raw_id = request.data.get('studentId') or request.data.get('student_id')
 
+        if not raw_id:
+            return Response(
+                {'error': 'studentId is required.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        raw_id = str(raw_id).strip()
+
+        # 1) Try by the real student_id field (e.g. "MAU1402271")
+        student = User.objects.filter(
+            role='STUDENT',
+            student_id__iexact=raw_id
+        ).first()
+
+        # 2) Fall back to username (e.g. "stud", "henoke")
+        if student is None:
+            student = User.objects.filter(
+                role='STUDENT',
+                username__iexact=raw_id
+            ).first()
+
+        # 3) Fall back to Django numeric pk (e.g. "18")
+        if student is None and raw_id.isdigit():
+            student = User.objects.filter(
+                role='STUDENT',
+                id=int(raw_id)
+            ).first()
+
+        if student is None:
+            return Response(
+                {
+                    'error': f"Student '{raw_id}' not found",
+                    'available_student_ids': list(
+                        User.objects.filter(role='STUDENT')
+                        .exclude(student_id__isnull=True)
+                        .exclude(student_id='')
+                        .values_list('student_id', flat=True)
+                    )
+                },
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        # Attendance
         attendance = AttendanceRecord.objects.filter(student=student)
-        avg_attendance = attendance.aggregate(Avg('attendance_percentage'))['attendance_percentage__avg'] or 0
+        avg_attendance = (
+            attendance.aggregate(Avg('attendance_percentage'))['attendance_percentage__avg'] or 0
+        )
 
+        # Grades
         grades = Grade.objects.filter(student=student)
-        avg_grade = grades.aggregate(Avg('total_grade'))['total_grade__avg'] or 0
+        avg_grade = (
+            grades.aggregate(Avg('total_grade'))['total_grade__avg'] or 0
+        )
 
+        # Dropout probability
         dropout_probability = 0.0
         if avg_attendance < 80:
             dropout_probability += 0.3
         if avg_grade < 60:
             dropout_probability += 0.4
-        if student.outstanding_fees > 5000:
+        if (student.outstanding_fees or 0) > 5000:
             dropout_probability += 0.2
 
         classification = 'NOT_AT_RISK'
@@ -397,17 +445,29 @@ class AIViewSet(viewsets.GenericViewSet):
         elif dropout_probability > 0.3:
             classification = 'MODERATE_RISK'
 
+        # Build a display name from the actual User fields
+        student_name = f"{student.first_name or ''} {student.last_name or ''}".strip()
+        if not student_name:
+            student_name = student.username
+
         return Response({
-            'student_id': student.id,
-            'student_name': student.full_name,
+            'student_id': student.student_id or student.id,
+            'student_name': student_name,
             'program': student.program,
             'cgpa': student.cgpa,
             'attendance_percentage': avg_attendance,
             'continuous_assessment_avg': avg_grade,
             'dropout_probability': dropout_probability,
             'classification': classification,
-            'key_risk_factors': ['Low attendance', 'Poor grades'] if dropout_probability > 0.3 else [],
-            'recommended_action': 'Academic intervention required' if dropout_probability > 0.3 else 'Continue monitoring'
+            'key_risk_factors': (
+                ['Low attendance', 'Poor grades']
+                if dropout_probability > 0.3 else []
+            ),
+            'recommended_action': (
+                'Academic intervention required'
+                if dropout_probability > 0.3
+                else 'Continue monitoring'
+            )
         })
 
     @action(detail=False, methods=['post'])
@@ -686,6 +746,7 @@ Silently ask: "Would a helpful, warm university advisor say this?"
 If no, revise.
 
 Be the assistant students actually want to talk to."""
+
 
 @api_view(["POST"])
 @_perm_classes([permissions.IsAuthenticated])

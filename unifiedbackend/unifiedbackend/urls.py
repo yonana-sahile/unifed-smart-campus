@@ -9,6 +9,9 @@ from drf_yasg import openapi
 # ✅ ADDED: JWT token endpoints
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
+# ✅ ADDED: AI viewset for the explicit predict-risk route
+from App.views import AIViewSet
+
 schema_view = get_schema_view(
     openapi.Info(
         title="Unified Smart Campus API",
@@ -24,6 +27,16 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+
+    # ✅ ADDED: explicit route for AI risk prediction.
+    #    Must come BEFORE include('App.urls') so Django matches it first
+    #    and doesn't fall through to the router.
+    path(
+        'api/ai/predict-risk/',
+        AIViewSet.as_view({'post': 'predict_risk'}),
+        name='ai-predict-risk',
+    ),
+
     path('api/', include('App.urls')),  # ✅ Changed from 'api.urls' to 'App.urls'
 
     # ✅ ADDED: /api/token/ and /api/token/refresh/ for real JWT login

@@ -121,7 +121,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     "U_ST03": false
   });
 
-  // ✅ NEW: Real attendance records loaded from the DB
+  // ✅ Real attendance records loaded from the DB
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [editingAttendance, setEditingAttendance] = useState<any | null>(null);
   const [attendedInput, setAttendedInput] = useState(0);
@@ -131,9 +131,16 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const [gradingScore, setGradingScore] = useState<number>(0);
   const [gradingFeedback, setGradingFeedback] = useState("");
 
-  const [analyzingStudentId, setAnalyzingStudentId] = useState<string>("U_ST03");
+  // ---- Analytics state ----
+  const [analyzingStudentId, setAnalyzingStudentId] = useState<string>("");
   const [analyticsResult, setAnalyticsResult] = useState<any>(null);
   const [calculatingPredictor, setCalculatingPredictor] = useState(false);
+
+  // ✅ NEW: real students loaded from the DB for the AI Analytics dropdown
+  const [studentOptions, setStudentOptions] = useState<
+    { id: string; studentId: string; name: string }[]
+  >([]);
+  const [loadingStudents, setLoadingStudents] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -162,39 +169,61 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
   }, []);
 
+  // ✅ NEW: load students when the AI Analytics tab is opened
+  useEffect(() => {
+    if (activeTab !== "analytics") return;
+
+    let cancelled = false;
+    setLoadingStudents(true);
+
+    CampusDatabase.getUsers()
+      .then((users) => {
+        if (cancelled) return;
+        const students = users
+          .filter((u) => u.role === "STUDENT")
+          .map((u) => ({
+            // Prefer the real student_id (e.g. MAU1402271). Fall back to username, then numeric id.
+            id: u.studentId || u.username || String(u.id).replace(/^U_/, ""),
+            studentId: u.studentId || "",
+            name: u.fullName || u.username || "Unnamed Student",
+          }));
+        setStudentOptions(students);
+        if (students.length > 0 && !analyzingStudentId) {
+          setAnalyzingStudentId(students[0].id);
+        }
+      })
+      .catch((err) => console.error("Failed to load students:", err))
+      .finally(() => {
+        if (!cancelled) setLoadingStudents(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   const loadData = async () => {
     // ✅ STEP 1: Load courses FIRST so the dropdown always populates
     try {
       const coursesData = await CampusDatabase.getCourses();
-      console.log("🔍 [loadData] coursesData =", coursesData);
-      console.log("🔍 [loadData] user.id =", user.id, "| typeof:", typeof user.id);
-
       const allCourses = Array.isArray(coursesData) ? coursesData : [];
       const myCourses = allCourses.filter(
         (c) => String(c.instructorId) === String(user.id)
       );
-      console.log("🔍 [loadData] myCourses =", myCourses.length, "| allCourses =", allCourses.length);
-
-      // Fallback: if no match (demo user), show all courses so the form works
       const coursesToShow = myCourses.length > 0 ? myCourses : allCourses;
-      console.log("🔍 [loadData] coursesToShow =", coursesToShow);
-
       setCourses(coursesToShow);
 
-      // Auto-select the first course
       const firstCourse = coursesToShow[0];
       if (firstCourse) {
-        console.log("🔍 [loadData] auto-selecting course:", firstCourse.id);
         setSelectedCourseId(String(firstCourse.id));
-      } else {
-        console.warn("⚠️ [loadData] No courses to auto-select");
       }
     } catch (err) {
       console.error("❌ [loadData] Failed to load courses:", err);
       setCourses([]);
     }
 
-    // ✅ STEP 2: Load everything else — each call fails independently
+    // ✅ STEP 2: Load everything else
     try {
       const [
         materialsData, announcementsData, assignmentsData,
@@ -222,6 +251,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       console.error("❌ [loadData] Failed to load secondary data:", err);
     }
   };
+
   const getActiveCourse = () => {
     return (
       courses.find((c) => String(c.id) === String(selectedCourseId)) ||
@@ -351,7 +381,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     };
 
     try {
-      // ✅ FIX: send snake_case matching Django's CourseMaterial model
       const created: any = await CampusDatabase.addMaterial({
         course: activeCourse.id,
         title: newMat.title,
@@ -497,7 +526,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     const totalMarks = authorQuestions.reduce((sum, q) => sum + (q.marks || 5), 0);
 
     try {
-      // ✅ STEP 1: Create each question in the DB, collect numeric IDs
       const questionIds: number[] = [];
       for (const q of authorQuestions) {
         const createdQ: any = await CampusDatabase.addQuestion({
@@ -515,7 +543,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         return;
       }
 
-      // ✅ STEP 2: Create the exam using the question IDs
       const created: any = await CampusDatabase.createExam({
         course:
           parseInt(String(activeCourse.id).replace(/\D/g, "")) ||
@@ -579,6 +606,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       alert("Failed to save exam: " + detail);
     }
   };
+
   const handleTogglePush = async (exam: Exam) => {
     const nextPushed = !exam.isPushed;
     try {
@@ -801,7 +829,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
-  // ✅ FIXED: saves AI questions to the DB first, then creates the exam with real IDs
   const handleSaveGeneratedExam = async () => {
     if (generatedQuestions.length === 0) return;
     const activeCourse = getActiveCourse();
@@ -813,7 +840,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     const totalMarks = generatedQuestions.reduce((sum, q) => sum + (q.marks || 5), 0);
 
     try {
-      // ✅ STEP 1: Save each AI-generated question to the DB, collect numeric IDs
       const questionIds: number[] = [];
       for (const q of generatedQuestions) {
         const createdQ: any = await CampusDatabase.addQuestion({
@@ -831,7 +857,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         return;
       }
 
-      // ✅ STEP 2: Create the exam with the real question IDs
       const created: any = await CampusDatabase.createExam({
         course: parseInt(String(activeCourse.id).replace(/\D/g, "")) || activeCourse.id,
         course_title: activeCourse.courseTitle,
@@ -884,7 +909,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
-  // ✅ NEW: Save attendance record updates to the DB
   const handleSaveAttendance = async () => {
     if (!editingAttendance) return;
     try {
@@ -918,30 +942,43 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   };
 
   const handlePredictDropoutRisk = async () => {
+    if (!analyzingStudentId) {
+      alert("Please select a student first.");
+      return;
+    }
     setCalculatingPredictor(true);
     setAnalyticsResult(null);
 
     try {
       const result: any = await CampusDatabase.predictStudentRisk(analyzingStudentId);
 
+      // Three-state classification (High / Moderate / Not At-Risk)
+      const status =
+        result.classification === "HIGH_RISK" ? "High Risk"
+        : result.classification === "MODERATE_RISK" ? "Moderate Risk"
+        : result.classification === "INSUFFICIENT_DATA" ? "Insufficient Data"
+        : "Not At-Risk";
+
       const mapped = {
-        status: result.classification === "HIGH_RISK" ? "At-Risk"
-          : result.classification === "MODERATE_RISK" ? "At-Risk"
-            : "Not At-Risk",
+        status,
         riskProbability: ((result.dropoutProbability || 0) * 100).toFixed(1),
         metrics: {
           attendance: result.attendancePercentage ?? 0,
           grade: result.continuousAssessmentAvg ?? 0,
-          submissions: result.continuousAssessmentAvg ?? 0,
-          library: "N/A",
+          // Only show a submissions metric if the backend provides one; otherwise fall back to N/A
+          submissions: result.submissionRate ?? result.continuousAssessmentAvg ?? 0,
+          library: result.libraryLogins ?? "N/A",
         },
         feedback: result.recommendedAction || "No further action.",
         interventions: result.keyRiskFactors || [],
       };
       setAnalyticsResult(mapped);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Failed to compute risk prediction. Check the console.");
+      const detail = err?.response?.data
+        ? (err.response.data.error || JSON.stringify(err.response.data))
+        : err?.message || "Unknown error";
+      alert("Failed to compute risk prediction: " + detail);
     } finally {
       setCalculatingPredictor(false);
     }
@@ -983,7 +1020,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         isMobileNavOpen={isMobileNavOpen}
       />
 
-      {/* MOBILE SLIDE-OUT DRAWER */}
       <AnimatePresence>
         {isMobileNavOpen && (
           <div className="fixed inset-0 z-50 md:hidden">
@@ -1021,7 +1057,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </button>
               </div>
 
-              {/* ✅ FIXED: Course select picker in Drawer */}
               <div className="p-3.5 border-b border-slate-800/80 space-y-1.5 bg-slate-950/40">
                 <label className="text-[10px] font-mono text-amber-400/90 uppercase tracking-widest font-bold">Active Course</label>
                 <select
@@ -1099,7 +1134,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         )}
       </AnimatePresence>
 
-      {/* MOBILE HORIZONTAL QUICK-NAV */}
       <div className="md:hidden sticky top-[48px] sm:top-[57px] z-30 bg-[#071526] border-b border-slate-800/90 px-2 py-1.5 overflow-x-auto flex items-center space-x-1.5 shadow-md shrink-0 scrollbar-none">
         {[...navItems, ...smartItems].map(({ id, shortLabel, Icon }) => (
           <button
@@ -1117,9 +1151,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       </div>
 
       <div className="flex-1 flex min-w-0" id="instructor_workspace_inner">
-        {/* DESKTOP SIDEBAR */}
         <aside className="hidden md:flex md:w-64 bg-[#071526] text-slate-300 flex-col border-r border-slate-800/80 shrink-0">
-          {/* ✅ FIXED: populated from real courses */}
           <div className="p-3.5 border-b border-slate-800/80 space-y-1.5 bg-slate-950/40">
             <label className="text-[10px] font-mono text-amber-400/90 uppercase tracking-widest font-bold">Active Course Context</label>
             <select
@@ -2570,15 +2602,24 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         className="w-full border border-slate-200 rounded-lg p-2.5 bg-white font-medium"
                         value={analyzingStudentId}
                         onChange={(e) => setAnalyzingStudentId(e.target.value)}
+                        disabled={loadingStudents}
                       >
-                        <option value="U_ST01">Tadesse Mersha (Active, Good Profile)</option>
-                        <option value="U_ST02">Yonas Sahle (High Performer)</option>
-                        <option value="U_ST03">Tarekegn Abebe (Lower Attendance / Overdue Balance)</option>
+                        {loadingStudents ? (
+                          <option value="">Loading students…</option>
+                        ) : studentOptions.length === 0 ? (
+                          <option value="">No students in database</option>
+                        ) : (
+                          studentOptions.map((s) => (
+                            <option key={s.id} value={s.id}>
+                              {s.name} {s.studentId ? `(${s.studentId})` : ""}
+                            </option>
+                          ))
+                        )}
                       </select>
 
                       <button
                         onClick={handlePredictDropoutRisk}
-                        disabled={calculatingPredictor}
+                        disabled={calculatingPredictor || !analyzingStudentId}
                         className="w-full bg-slate-950 hover:bg-slate-800 text-white py-2.5 rounded-lg font-semibold flex items-center justify-center space-x-2 transition disabled:bg-slate-100 disabled:text-slate-400 shadow"
                       >
                         {calculatingPredictor ? (
@@ -2606,7 +2647,10 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-4 sm:p-5 rounded-xl border border-slate-100">
                           <div>
                             <span className="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">Classification Status</span>
-                            <h4 className={`text-xl font-display font-bold mt-1 ${analyticsResult.status === "At-Risk" ? "text-danger" : "text-success"
+                            <h4 className={`text-xl font-display font-bold mt-1 ${analyticsResult.status === "High Risk" ? "text-red-600"
+                                : analyticsResult.status === "Moderate Risk" ? "text-amber-600"
+                                : analyticsResult.status === "Insufficient Data" ? "text-slate-500"
+                                : "text-emerald-600"
                               }`}>
                               {analyticsResult.status}
                             </h4>
