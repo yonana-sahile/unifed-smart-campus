@@ -133,6 +133,12 @@ api.interceptors.response.use(
 const unwrapList = <T>(raw: any): T[] =>
   Array.isArray(raw) ? raw : (raw?.results ?? []);
 
+// Helper: strip "U_", "PAY_", "LIB_" etc. prefixes so we get a numeric pk
+const numericId = (id: string | number, prefix?: string): string => {
+  const s = String(id);
+  return prefix ? s.replace(new RegExp(`^${prefix}`), '') : s.replace(/^[A-Z]+_/, '');
+};
+
 // ---------- MAPPERS ----------
 const mapUser = (u: any): User => ({
   id: `U_${u.id}`,
@@ -309,7 +315,10 @@ export const addUser = (payload: any): Promise<User> =>
   api.post('/users/', payload).then(r => mapUser(r.data));
 
 export const patchUser = (id: string, patch: any): Promise<User> =>
-  api.patch(`/users/${id}/`, patch).then(r => mapUser(r.data));
+  api.patch(`/users/${numericId(id, 'U_')}/`, patch).then(r => mapUser(r.data));
+
+export const deleteUser = (id: string): Promise<void> =>
+  api.delete(`/users/${numericId(id, 'U_')}/`).then(() => undefined);
 
 export const login = async (username: string, password: string) => {
   const { data } = await api.post('/token/', { username, password });
@@ -329,9 +338,11 @@ export const getCourses = (): Promise<Course[]> =>
 export const saveCourses = (courses: Course[]): Promise<Course[]> =>
   api.put('/courses/', courses).then(r => r.data);
 export const updateCourse = (id: string, course: any): Promise<Course> =>
-  api.patch(`/courses/${id}/`, course).then(r => r.data);
+  api.patch(`/courses/${numericId(id)}/`, course).then(r => r.data);
 export const addCourse = (course: any): Promise<Course> =>
   api.post('/courses/', course).then(r => mapCourse(r.data));
+export const deleteCourse = (id: string): Promise<void> =>
+  api.delete(`/courses/${numericId(id)}/`).then(() => undefined);
 
 // ---------- MATERIALS ----------
 export const getMaterials = (): Promise<CourseMaterial[]> =>
@@ -341,9 +352,9 @@ export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMateri
 export const addMaterial = (material: any): Promise<CourseMaterial> =>
   api.post('/materials/', material).then(r => mapMaterial(r.data));
 export const updateMaterial = (id: string, material: any): Promise<CourseMaterial> =>
-  api.patch(`/materials/${id}/`, material).then(r => mapMaterial(r.data));
+  api.patch(`/materials/${numericId(id)}/`, material).then(r => mapMaterial(r.data));
 export const deleteMaterial = (id: string): Promise<void> =>
-  api.delete(`/materials/${id}/`).then(() => undefined);
+  api.delete(`/materials/${numericId(id)}/`).then(() => undefined);
 
 // ---------- ANNOUNCEMENTS ----------
 export const getAnnouncements = (): Promise<Announcement[]> =>
@@ -370,11 +381,14 @@ export const updateAnnouncement = (id: string, announcement: any): Promise<any> 
     posted_by: announcement.postedBy ?? announcement.posted_by ?? 'University Media Directorate',
     posted_at: announcement.postedAt ?? announcement.posted_at ?? new Date().toISOString(),
   };
-  return api.put(`/announcements/${id}/`, payload).then(r => r.data);
+  return api.put(`/announcements/${numericId(id)}/`, payload).then(r => r.data);
 };
 
+export const patchAnnouncement = (id: string, patch: any): Promise<any> =>
+  api.patch(`/announcements/${numericId(id)}/`, patch).then(r => r.data);
+
 export const deleteAnnouncement = (id: string): Promise<void> =>
-  api.delete(`/announcements/${id}/`).then(() => undefined);
+  api.delete(`/announcements/${numericId(id)}/`).then(() => undefined);
 
 // ---------- ASSIGNMENTS ----------
 export const getAssignments = (): Promise<Assignment[]> =>
@@ -383,8 +397,10 @@ export const saveAssignments = (assignments: Assignment[]): Promise<Assignment[]
   api.put('/assignments/', assignments).then(r => r.data);
 export const addAssignment = (assignment: any): Promise<Assignment> =>
   api.post('/assignments/', assignment).then(r => mapAssignment(r.data));
+export const updateAssignment = (id: string, patch: any): Promise<Assignment> =>
+  api.patch(`/assignments/${numericId(id)}/`, patch).then(r => mapAssignment(r.data));
 export const deleteAssignment = (id: string): Promise<void> =>
-  api.delete(`/assignments/${id}/`).then(() => undefined);
+  api.delete(`/assignments/${numericId(id)}/`).then(() => undefined);
 
 // ---------- SUBMISSIONS ----------
 export const getSubmissions = (): Promise<Submission[]> =>
@@ -394,7 +410,9 @@ export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]
 export const addSubmission = (submission: any): Promise<Submission> =>
   api.post('/submissions/', submission).then(r => mapSubmission(r.data));
 export const updateSubmission = (id: string, submission: any): Promise<Submission> =>
-  api.patch(`/submissions/${id}/`, submission).then(r => mapSubmission(r.data));
+  api.patch(`/submissions/${numericId(id)}/`, submission).then(r => mapSubmission(r.data));
+export const deleteSubmission = (id: string): Promise<void> =>
+  api.delete(`/submissions/${numericId(id)}/`).then(() => undefined);
 
 // ---------- EXAMS ----------
 export const getExams = (): Promise<Exam[]> =>
@@ -404,11 +422,11 @@ export const addQuestion = (question: any): Promise<any> =>
 export const createExam = (exam: any): Promise<Exam> =>
   api.post('/exams/', exam).then(r => mapExam(r.data));
 export const updateExam = (id: string, exam: any): Promise<Exam> =>
-  api.patch(`/exams/${id}/`, exam).then(r => mapExam(r.data));
+  api.patch(`/exams/${numericId(id)}/`, exam).then(r => mapExam(r.data));
 export const pushExam = (examId: string, isPushed: boolean): Promise<Exam> =>
-  api.post(`/exams/${examId}/push/`, { is_pushed: isPushed }).then(r => mapExam(r.data));
+  api.post(`/exams/${numericId(examId)}/push/`, { is_pushed: isPushed }).then(r => mapExam(r.data));
 export const deleteExam = (id: string): Promise<void> =>
-  api.delete(`/exams/${id}/`).then(() => undefined);
+  api.delete(`/exams/${numericId(id)}/`).then(() => undefined);
 export const saveExams = (exams: Exam[]): Promise<Exam[]> =>
   api.put('/exams/', exams).then(r => r.data);
 
@@ -419,62 +437,94 @@ export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]
   api.put('/exam-attempts/', attempts).then(r => r.data);
 export const createExamAttempt = (attempt: any): Promise<ExamAttempt> =>
   api.post('/exam-attempts/', attempt).then(r => mapExamAttempt(r.data));
+export const updateExamAttempt = (id: string, patch: any): Promise<ExamAttempt> =>
+  api.patch(`/exam-attempts/${numericId(id)}/`, patch).then(r => mapExamAttempt(r.data));
+export const deleteExamAttempt = (id: string): Promise<void> =>
+  api.delete(`/exam-attempts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- GRADES ----------
 export const getGrades = (): Promise<Grade[]> =>
   api.get('/grades/').then(r => unwrapList<any>(r.data).map(mapGrade));
 export const saveGrades = (grades: Grade[]): Promise<Grade[]> =>
   api.put('/grades/', grades).then(r => r.data);
+export const addGrade = (payload: any): Promise<Grade> =>
+  api.post('/grades/', payload).then(r => mapGrade(r.data));
 export const updateGrade = (id: string, grade: any): Promise<Grade> =>
-  api.patch(`/grades/${id}/`, grade).then(r => mapGrade(r.data));
+  api.patch(`/grades/${numericId(id)}/`, grade).then(r => mapGrade(r.data));
+export const deleteGrade = (id: string): Promise<void> =>
+  api.delete(`/grades/${numericId(id)}/`).then(() => undefined);
 
 // ---------- TRANSCRIPTS ----------
 export const getTranscripts = (): Promise<Transcript[]> =>
   api.get('/transcripts/').then(r => unwrapList<Transcript>(r.data));
 export const saveTranscripts = (transcripts: Transcript[]): Promise<Transcript[]> =>
   api.put('/transcripts/', transcripts).then(r => r.data);
+export const addTranscript = (payload: any): Promise<Transcript> =>
+  api.post('/transcripts/', payload).then(r => r.data);
+export const updateTranscript = (id: string, patch: any): Promise<Transcript> =>
+  api.patch(`/transcripts/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteTranscript = (id: string): Promise<void> =>
+  api.delete(`/transcripts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- ATTENDANCE ----------
 export const getAttendance = (): Promise<AttendanceRecord[]> =>
   api.get('/attendance/').then(r => unwrapList<any>(r.data).map(mapAttendance));
 export const saveAttendance = (records: AttendanceRecord[]): Promise<AttendanceRecord[]> =>
   api.put('/attendance/', records).then(r => r.data);
+export const addAttendance = (payload: any): Promise<AttendanceRecord> =>
+  api.post('/attendance/', payload).then(r => mapAttendance(r.data));
 export const updateAttendance = (id: string, data: any): Promise<any> =>
-  api.patch(`/attendance/${id}/`, data).then(r => r.data);
+  api.patch(`/attendance/${numericId(id)}/`, data).then(r => r.data);
+export const deleteAttendance = (id: string): Promise<void> =>
+  api.delete(`/attendance/${numericId(id)}/`).then(() => undefined);
 
 // ---------- LIBRARY RESOURCES ----------
 export const getLibraryResources = (): Promise<LibraryResource[]> =>
   api.get('/library-resources/').then(r => unwrapList<LibraryResource>(r.data));
 export const saveLibraryResources = (resources: LibraryResource[]): Promise<LibraryResource[]> =>
   api.put('/library-resources/', resources).then(r => r.data);
-
-// ✅ NEW: per-record CRUD so writes don't 405 on the collection URL
 export const addLibraryResource = (payload: any): Promise<LibraryResource> =>
   api.post('/library-resources/', payload).then(r => r.data);
-
 export const updateLibraryResource = (id: string, patch: any): Promise<LibraryResource> =>
-  api.patch(`/library-resources/${id}/`, patch).then(r => r.data);
-
+  api.patch(`/library-resources/${numericId(id, 'LIB_')}/`, patch).then(r => r.data);
 export const deleteLibraryResource = (id: string): Promise<void> =>
-  api.delete(`/library-resources/${id}/`).then(() => undefined);
+  api.delete(`/library-resources/${numericId(id, 'LIB_')}/`).then(() => undefined);
 
 // ---------- PAYMENTS ----------
 export const getPayments = (): Promise<PaymentTransaction[]> =>
   api.get('/payments/').then(r => unwrapList<PaymentTransaction>(r.data));
 export const savePayments = (payments: PaymentTransaction[]): Promise<PaymentTransaction[]> =>
   api.put('/payments/', payments).then(r => r.data);
+export const addPayment = (payload: any): Promise<PaymentTransaction> =>
+  api.post('/payments/', payload).then(r => r.data);
+export const updatePayment = (id: string, patch: any): Promise<PaymentTransaction> =>
+  api.patch(`/payments/${numericId(id, 'PAY_')}/`, patch).then(r => r.data);
+export const deletePayment = (id: string): Promise<void> =>
+  api.delete(`/payments/${numericId(id, 'PAY_')}/`).then(() => undefined);
 
 // ---------- SCHOLARSHIPS ----------
 export const getScholarships = (): Promise<Scholarship[]> =>
   api.get('/scholarships/').then(r => unwrapList<Scholarship>(r.data));
 export const saveScholarships = (scholarships: Scholarship[]): Promise<Scholarship[]> =>
   api.put('/scholarships/', scholarships).then(r => r.data);
+export const addScholarship = (payload: any): Promise<Scholarship> =>
+  api.post('/scholarships/', payload).then(r => r.data);
+export const updateScholarship = (id: string, patch: any): Promise<Scholarship> =>
+  api.patch(`/scholarships/${numericId(id, 'SCH_')}/`, patch).then(r => r.data);
+export const deleteScholarship = (id: string): Promise<void> =>
+  api.delete(`/scholarships/${numericId(id, 'SCH_')}/`).then(() => undefined);
 
 // ---------- COURSE OUTLINES ----------
 export const getCourseOutlines = (): Promise<CourseOutlineForm[]> =>
   api.get('/course-outlines/').then(r => unwrapList<CourseOutlineForm>(r.data));
 export const saveCourseOutlines = (outlines: CourseOutlineForm[]): Promise<CourseOutlineForm[]> =>
   api.put('/course-outlines/', outlines).then(r => r.data);
+export const addCourseOutline = (payload: any): Promise<CourseOutlineForm> =>
+  api.post('/course-outlines/', payload).then(r => r.data);
+export const updateCourseOutline = (id: string, patch: any): Promise<CourseOutlineForm> =>
+  api.patch(`/course-outlines/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteCourseOutline = (id: string): Promise<void> =>
+  api.delete(`/course-outlines/${numericId(id)}/`).then(() => undefined);
 
 // ---------- EVALUATIONS ----------
 export const getEvaluations = (): Promise<InstructorEvaluation[]> =>
@@ -503,17 +553,34 @@ export const addEvaluation = (evaluation: any): Promise<any> => {
   return api.post('/evaluations/', payload).then(r => r.data);
 };
 
+export const updateEvaluation = (id: string, patch: any): Promise<any> =>
+  api.patch(`/evaluations/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteEvaluation = (id: string): Promise<void> =>
+  api.delete(`/evaluations/${numericId(id)}/`).then(() => undefined);
+
 // ---------- MOE ADMISSIONS ----------
 export const getMoEAdmissions = (): Promise<MoEAdmissionRecord[]> =>
   api.get('/moe-admissions/').then(r => unwrapList<MoEAdmissionRecord>(r.data));
 export const saveMoEAdmissions = (admissions: MoEAdmissionRecord[]): Promise<MoEAdmissionRecord[]> =>
   api.put('/moe-admissions/', admissions).then(r => r.data);
+export const addMoEAdmission = (payload: any): Promise<MoEAdmissionRecord> =>
+  api.post('/moe-admissions/', payload).then(r => r.data);
+export const updateMoEAdmission = (id: string, patch: any): Promise<MoEAdmissionRecord> =>
+  api.patch(`/moe-admissions/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteMoEAdmission = (id: string): Promise<void> =>
+  api.delete(`/moe-admissions/${numericId(id)}/`).then(() => undefined);
 
 // ---------- CERTIFICATES ----------
 export const getCertificates = (): Promise<CertificateRecord[]> =>
   api.get('/certificates/').then(r => unwrapList<CertificateRecord>(r.data));
 export const saveCertificates = (certificates: CertificateRecord[]): Promise<CertificateRecord[]> =>
   api.put('/certificates/', certificates).then(r => r.data);
+export const addCertificate = (payload: any): Promise<CertificateRecord> =>
+  api.post('/certificates/', payload).then(r => r.data);
+export const updateCertificate = (id: string, patch: any): Promise<CertificateRecord> =>
+  api.patch(`/certificates/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteCertificate = (id: string): Promise<void> =>
+  api.delete(`/certificates/${numericId(id)}/`).then(() => undefined);
 
 // ---------- AUDIT LOGS ----------
 export const getAuditLogs = (): Promise<AuditLog[]> =>
@@ -532,7 +599,7 @@ export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> 
   api.put('/settings/', settings).then(r => r.data);
 
 export const updateSettings = (id: string, patch: any): Promise<SystemSettings> =>
-  api.patch(`/settings/${id}/`, patch).then(r => r.data);
+  api.patch(`/settings/${numericId(id)}/`, patch).then(r => r.data);
 
 // ---------- AI ----------
 export const predictStudentRisk = async (studentId: string): Promise<AIRiskPrediction> => {
@@ -614,6 +681,12 @@ export const getClearances = (): Promise<StudentClearance[]> =>
   api.get('/clearances/').then(r => unwrapList<StudentClearance>(r.data));
 export const saveClearances = (clearances: StudentClearance[]): Promise<StudentClearance[]> =>
   api.put('/clearances/', clearances).then(r => r.data);
+export const addClearance = (payload: any): Promise<StudentClearance> =>
+  api.post('/clearances/', payload).then(r => r.data);
+export const updateClearance = (id: string, patch: any): Promise<StudentClearance> =>
+  api.patch(`/clearances/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteClearance = (id: string): Promise<void> =>
+  api.delete(`/clearances/${numericId(id)}/`).then(() => undefined);
 
 export const updateClearanceStage = (
   clearanceId: string,
@@ -622,7 +695,7 @@ export const updateClearanceStage = (
   officerName: string,
   remarks?: string
 ): Promise<StudentClearance> =>
-  api.patch(`/clearances/${clearanceId}/stage/`, {
+  api.patch(`/clearances/${numericId(clearanceId)}/stage/`, {
     department: dept,
     status,
     officerName,
@@ -636,6 +709,10 @@ export const saveFacilityBookings = (bookings: FacilityBooking[]): Promise<Facil
   api.put('/facility-bookings/', bookings).then(r => r.data);
 export const addFacilityBooking = (booking: Omit<FacilityBooking, 'id'>): Promise<FacilityBooking> =>
   api.post('/facility-bookings/', booking).then(r => r.data);
+export const updateFacilityBooking = (id: string, patch: any): Promise<FacilityBooking> =>
+  api.patch(`/facility-bookings/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteFacilityBooking = (id: string): Promise<void> =>
+  api.delete(`/facility-bookings/${numericId(id)}/`).then(() => undefined);
 
 // ---------- CAMPUS ALERTS ----------
 export const getCampusAlerts = (): Promise<CampusAlert[]> =>
@@ -644,6 +721,10 @@ export const saveCampusAlerts = (alerts: CampusAlert[]): Promise<CampusAlert[]> 
   api.put('/campus-alerts/', alerts).then(r => r.data);
 export const addCampusAlert = (alert: Omit<CampusAlert, 'id' | 'timestamp'>): Promise<CampusAlert> =>
   api.post('/campus-alerts/', alert).then(r => r.data);
+export const updateCampusAlert = (id: string, patch: any): Promise<CampusAlert> =>
+  api.patch(`/campus-alerts/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteCampusAlert = (id: string): Promise<void> =>
+  api.delete(`/campus-alerts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- CAMPUS MEDIA POSTS ----------
 export const getMediaPosts = (): Promise<CampusMediaPost[]> =>
@@ -655,12 +736,14 @@ export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'vi
 export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => {
   return api.post('/media-posts/', formData).then(r => r.data);
 };
+export const updateMediaPost = (id: string, patch: any): Promise<CampusMediaPost> =>
+  api.patch(`/media-posts/${numericId(id)}/`, patch).then(r => r.data);
 export const deleteMediaPost = (id: string): Promise<{ success: boolean }> =>
-  api.delete(`/media-posts/${id}/`).then(r => r.data);
+  api.delete(`/media-posts/${numericId(id)}/`).then(r => r.data);
 export const incrementMediaViews = (id: string): Promise<void> =>
-  api.post(`/media-posts/${id}/view/`).then(r => r.data);
+  api.post(`/media-posts/${numericId(id)}/view/`).then(r => r.data);
 export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
-  api.post(`/media-posts/${id}/like/`).then(r => r.data);
+  api.post(`/media-posts/${numericId(id)}/like/`).then(r => r.data);
 
 // ---------- ZOOM CLASS SESSIONS ----------
 const toZoomSnakeCase = (data: any): any => {
@@ -721,40 +804,58 @@ export const getZoomSessions = (): Promise<any[]> =>
 export const addZoomSession = (data: any): Promise<any> =>
   api.post('/zoom-sessions/', toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
 export const updateZoomSession = (id: string, data: any): Promise<any> =>
-  api.patch(`/zoom-sessions/${id}/`, toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
+  api.patch(`/zoom-sessions/${numericId(id)}/`, toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
 export const deleteZoomSession = (id: string): Promise<void> =>
-  api.delete(`/zoom-sessions/${id}/`).then(() => undefined);
+  api.delete(`/zoom-sessions/${numericId(id)}/`).then(() => undefined);
 
 // ---------- EXPORT ----------
 export const CampusDatabase = {
+  // Users
   getUsers,
   saveUsers,
   updateUser,
   addUser,
   patchUser,
+  deleteUser,
   login,
   logout,
+
+  // Courses
   getCourses,
   saveCourses,
   updateCourse,
   addCourse,
+  deleteCourse,
+
+  // Materials
   getMaterials,
   saveMaterials,
   addMaterial,
   updateMaterial,
   deleteMaterial,
+
+  // Announcements
   getAnnouncements,
   createAnnouncement,
   updateAnnouncement,
+  patchAnnouncement,
   deleteAnnouncement,
+
+  // Assignments
   getAssignments,
   saveAssignments,
   addAssignment,
+  updateAssignment,
   deleteAssignment,
+
+  // Submissions
   getSubmissions,
   saveSubmissions,
   addSubmission,
   updateSubmission,
+  deleteSubmission,
+
+  // Exams
   getExams,
   addQuestion,
   createExam,
@@ -762,61 +863,135 @@ export const CampusDatabase = {
   pushExam,
   deleteExam,
   saveExams,
+
+  // Exam Attempts
   getExamAttempts,
   saveExamAttempts,
   createExamAttempt,
+  updateExamAttempt,
+  deleteExamAttempt,
+
+  // Grades
   getGrades,
   saveGrades,
+  addGrade,
   updateGrade,
+  deleteGrade,
+
+  // Transcripts
   getTranscripts,
   saveTranscripts,
+  addTranscript,
+  updateTranscript,
+  deleteTranscript,
+
+  // Attendance
   getAttendance,
   saveAttendance,
+  addAttendance,
   updateAttendance,
+  deleteAttendance,
+
+  // Library Resources
   getLibraryResources,
   saveLibraryResources,
-  addLibraryResource,      // ✅ NEW
-  updateLibraryResource,   // ✅ NEW
-  deleteLibraryResource,   // ✅ NEW
+  addLibraryResource,
+  updateLibraryResource,
+  deleteLibraryResource,
+
+  // Payments
   getPayments,
   savePayments,
+  addPayment,
+  updatePayment,
+  deletePayment,
+
+  // Scholarships
   getScholarships,
   saveScholarships,
+  addScholarship,
+  updateScholarship,
+  deleteScholarship,
+
+  // Course Outlines
   getCourseOutlines,
   saveCourseOutlines,
+  addCourseOutline,
+  updateCourseOutline,
+  deleteCourseOutline,
+
+  // Evaluations
   getEvaluations,
   saveEvaluations,
   addEvaluation,
+  updateEvaluation,
+  deleteEvaluation,
+
+  // MoE Admissions
   getMoEAdmissions,
   saveMoEAdmissions,
+  addMoEAdmission,
+  updateMoEAdmission,
+  deleteMoEAdmission,
+
+  // Certificates
   getCertificates,
   saveCertificates,
+  addCertificate,
+  updateCertificate,
+  deleteCertificate,
+
+  // Audit Logs
   getAuditLogs,
   saveAuditLogs,
+
+  // Settings
   getSettings,
   saveSettings,
   updateSettings,
+
+  // AI
   predictStudentRisk,
   generateExamQuestions,
   getCourseAdvisor,
   sendChatMessage,
+
+  // Audit helper
   addAuditLog,
+
+  // Clearances
   getClearances,
   saveClearances,
+  addClearance,
+  updateClearance,
+  deleteClearance,
   updateClearanceStage,
+
+  // Facility Bookings
   getFacilityBookings,
   saveFacilityBookings,
   addFacilityBooking,
+  updateFacilityBooking,
+  deleteFacilityBooking,
+
+  // Campus Alerts
   getCampusAlerts,
   saveCampusAlerts,
   addCampusAlert,
+  updateCampusAlert,
+  deleteCampusAlert,
+
+  // Media Posts
   getMediaPosts,
   saveMediaPosts,
   addMediaPost,
+  updateMediaPost,
   uploadMediaPost,
   deleteMediaPost,
   incrementMediaViews,
   toggleMediaLike,
+
+  // Zoom
   getZoomSessions,
   addZoomSession,
   updateZoomSession,

@@ -56,14 +56,9 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
     loadData();
   }, []);
 
-  // ✅ FIXED: Async data loading with proper error handling
   const loadData = async () => {
     try {
-      const [
-        paymentsData,
-        scholarshipsData,
-        usersData,
-      ] = await Promise.all([
+      const [paymentsData, scholarshipsData, usersData] = await Promise.all([
         CampusDatabase.getPayments(),
         CampusDatabase.getScholarships(),
         CampusDatabase.getUsers(),
@@ -80,87 +75,114 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
     }
   };
 
-  // ✅ FIXED: Async payment verification
+  // ✅ FIXED: PATCH /payments/{id}/ instead of PUT /payments/
   const handleVerifyPayment = async (paymentId: string) => {
     const receiptNum = "MAU-REC-" + Math.floor(Math.random() * 90000 + 10000);
-    const updated = payments.map((p) => {
-      if (p.id === paymentId) {
-        return {
-          ...p,
-          status: "VERIFIED" as const,
-          receiptNumber: receiptNum,
-          verifiedBy: user.fullName
-        };
-      }
-      return p;
-    });
+    const payment = payments.find((p) => p.id === paymentId);
+    if (!payment) return;
 
     try {
-      await CampusDatabase.savePayments(updated);
-      setPayments(updated);
+      const numericId = String(paymentId).replace(/^PAY_/, "");
 
-      // Update student's balance if it was cost sharing or fee
-      const payment = payments.find((p) => p.id === paymentId);
-      if (payment) {
-        const allUsers = await CampusDatabase.getUsers();
-        const updatedUsers = allUsers.map((u) => {
-          if (u.id === payment.studentId) {
-            const currentFees = u.outstandingFees || 0;
-            const currentCostSharing = u.costSharingBalance || 0;
-            return {
-              ...u,
-              outstandingFees: Math.max(0, currentFees - payment.amount),
-              costSharingBalance: payment.paymentType === "COST_SHARING" ? Math.max(0, currentCostSharing - payment.amount) : currentCostSharing
-            };
+      await (CampusDatabase as any).updatePayment(numericId, {
+        status: "VERIFIED",
+        receipt_number: receiptNum,
+        verified_by: user.fullName,
+      });
+
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === paymentId
+            ? { ...p, status: "VERIFIED" as const, receiptNumber: receiptNum, verifiedBy: user.fullName }
+            : p
+        )
+      );
+
+      // Update student's balance via PATCH /users/{id}/
+      const allUsers = await CampusDatabase.getUsers();
+      const studentUser = allUsers.find((u) => u.id === payment.studentId);
+      if (studentUser) {
+        const currentFees = studentUser.outstandingFees || 0;
+        const currentCostSharing = studentUser.costSharingBalance || 0;
+        const nextFees = Math.max(0, currentFees - payment.amount);
+        const nextCostSharing =
+          payment.paymentType === "COST_SHARING"
+            ? Math.max(0, currentCostSharing - payment.amount)
+            : currentCostSharing;
+
+        await (CampusDatabase as any).patchUser(
+          String(studentUser.id).replace(/^U_/, ""),
+          {
+            outstanding_fees: nextFees,
+            cost_sharing_balance: nextCostSharing,
           }
-          return u;
-        });
-        await CampusDatabase.saveUsers(updatedUsers);
-        setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
+        );
 
-        await CampusDatabase.addAuditLog(
-          user.id,
-          user.fullName,
-          "FINANCE_OFFICER",
-          "Verify Payment",
-          "PaymentTransaction",
-          paymentId,
-          `Verified ${payment.paymentMethod} transaction of ${payment.amount} ETB for student ${payment.studentName} (Ref: ${payment.referenceNumber}). Issued receipt ${receiptNum}.`
+        setStudents((prev) =>
+          prev.map((s) =>
+            s.id === studentUser.id
+              ? { ...s, outstandingFees: nextFees, costSharingBalance: nextCostSharing }
+              : s
+          )
         );
       }
+
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "FINANCE_OFFICER",
+        "Verify Payment",
+        "PaymentTransaction",
+        paymentId,
+        `Verified ${payment.paymentMethod} transaction of ${payment.amount} ETB for student ${payment.studentName} (Ref: ${payment.referenceNumber}). Issued receipt ${receiptNum}.`
+      );
 
       alert(`Payment verified successfully! Receipt Number: ${receiptNum}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to verify payment:", error);
-      alert("Failed to verify payment. Please try again.");
+      const detail = error?.response?.data
+        ? JSON.stringify(error.response.data)
+        : error?.message || "Unknown error";
+      alert("Failed to verify payment: " + detail);
     }
   };
 
-  // ✅ FIXED: Async payment rejection
+  // ✅ FIXED: PATCH /payments/{id}/ instead of PUT /payments/
   const handleRejectPayment = async (paymentId: string) => {
-    if (window.confirm("Are you sure you want to reject this payment transaction?")) {
-      try {
-        const updated = payments.map((p) => (p.id === paymentId ? { ...p, status: "REJECTED" as const } : p));
-        await CampusDatabase.savePayments(updated);
-        setPayments(updated);
+    if (!window.confirm("Are you sure you want to reject this payment transaction?")) return;
 
-        await CampusDatabase.addAuditLog(
-          user.id,
-          user.fullName,
-          "FINANCE_OFFICER",
-          "Reject Payment",
-          "PaymentTransaction",
-          paymentId,
-          `Rejected fraudulent or invalid payment reference.`
-        );
-      } catch (error) {
-        console.error("Failed to reject payment:", error);
-        alert("Failed to reject payment. Please try again.");
-      }
+    try {
+      const numericId = String(paymentId).replace(/^PAY_/, "");
+
+      await (CampusDatabase as any).updatePayment(numericId, {
+        status: "REJECTED",
+      });
+
+      setPayments((prev) =>
+        prev.map((p) =>
+          p.id === paymentId ? { ...p, status: "REJECTED" as const } : p
+        )
+      );
+
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "FINANCE_OFFICER",
+        "Reject Payment",
+        "PaymentTransaction",
+        paymentId,
+        `Rejected fraudulent or invalid payment reference.`
+      );
+    } catch (error: any) {
+      console.error("Failed to reject payment:", error);
+      const detail = error?.response?.data
+        ? JSON.stringify(error.response.data)
+        : error?.message || "Unknown error";
+      alert("Failed to reject payment: " + detail);
     }
   };
 
-  // ✅ FIXED: Async manual fee collection
+  // ✅ FIXED: POST /payments/ + PATCH /users/{id}/ instead of PUT
   const handleCollectFeeManual = async (e: FormEvent) => {
     e.preventDefault();
     const student = students.find((s) => s.id === selectedStudentId);
@@ -170,37 +192,52 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
     }
 
     const receiptNum = "MAU-REC-" + Math.floor(Math.random() * 90000 + 10000);
-    const newTx: PaymentTransaction = {
-      id: "PAY_" + Date.now(),
-      studentId: student.id,
-      studentName: student.fullName,
-      amount: Number(feeAmount),
-      paymentMethod: feeMethod,
-      paymentType: feeType,
-      referenceNumber: referenceInput || `${feeMethod}-${Date.now().toString().slice(-6)}`,
-      status: "VERIFIED",
-      receiptNumber: receiptNum,
-      timestamp: new Date().toISOString(),
-      verifiedBy: user.fullName
-    };
 
     try {
-      const updatedPayments = [newTx, ...payments];
-      await CampusDatabase.savePayments(updatedPayments);
-      setPayments(updatedPayments);
-
-      // Deduct student outstanding fees
-      const allUsers = await CampusDatabase.getUsers();
-      const updatedUsers = allUsers.map((u) => {
-        if (u.id === student.id) {
-          const fees = u.outstandingFees || 0;
-          return { ...u, outstandingFees: Math.max(0, fees - Number(feeAmount)) };
-        }
-        return u;
+      // 1. Create the payment via POST /payments/
+      const created: any = await (CampusDatabase as any).addPayment({
+        student: parseInt(String(student.id).replace(/\D/g, "")) || student.id,
+        student_name: student.fullName,
+        amount: Number(feeAmount),
+        payment_method: feeMethod,
+        payment_type: feeType,
+        reference_number:
+          referenceInput || `${feeMethod}-${Date.now().toString().slice(-6)}`,
+        status: "VERIFIED",
+        receipt_number: receiptNum,
+        timestamp: new Date().toISOString(),
+        verified_by: user.fullName,
       });
-      await CampusDatabase.saveUsers(updatedUsers);
-      setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
 
+      const newTx: PaymentTransaction = {
+        id: String(created?.id ?? "PAY_" + Date.now()),
+        studentId: student.id,
+        studentName: student.fullName,
+        amount: Number(feeAmount),
+        paymentMethod: feeMethod,
+        paymentType: feeType,
+               reference_number:
+          referenceInput || `${feeMethod}-${Date.now().toString().slice(-6)}`,
+        status: "VERIFIED",
+        receiptNumber: created?.receipt_number ?? receiptNum,
+        timestamp: created?.timestamp ?? new Date().toISOString(),
+        verifiedBy: user.fullName,
+      };
+      setPayments((prev) => [newTx, ...prev]);
+
+      // 2. Deduct student's outstanding fees via PATCH /users/{id}/
+      const numericUserId = String(student.id).replace(/^U_/, "");
+      const nextFees = Math.max(0, (student.outstandingFees || 0) - Number(feeAmount));
+
+      await (CampusDatabase as any).patchUser(numericUserId, {
+        outstanding_fees: nextFees,
+      });
+
+      setStudents((prev) =>
+        prev.map((s) => (s.id === student.id ? { ...s, outstandingFees: nextFees } : s))
+      );
+
+      // 3. Audit log
       await CampusDatabase.addAuditLog(
         user.id,
         user.fullName,
@@ -215,13 +252,16 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
       setSelectedStudentId("");
       setReferenceInput("");
       alert(`Payment of ${feeAmount} ETB processed successfully!`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to process fee:", error);
-      alert("Failed to process fee. Please try again.");
+      const detail = error?.response?.data
+        ? JSON.stringify(error.response.data)
+        : error?.message || "Unknown error";
+      alert("Failed to process fee: " + detail);
     }
   };
 
-  // ✅ FIXED: Async scholarship award
+  // ✅ FIXED: POST /scholarships/ + PATCH /users/{id}/ instead of PUT
   const handleAwardScholarship = async (e: FormEvent) => {
     e.preventDefault();
     const student = students.find((s) => s.id === schStudentId);
@@ -230,34 +270,48 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
       return;
     }
 
-    const newSch: Scholarship = {
-      id: "SCH_" + Date.now(),
-      studentId: student.id,
-      studentName: student.fullName,
-      scholarshipType: schType,
-      amount: Number(schAmount),
-      semester: "Semester II",
-      academicYear: student.academicYear || 4,
-      status: "ISSUED",
-      issuedDate: new Date().toISOString().split("T")[0]
-    };
-
     try {
-      const updatedScholarships = [newSch, ...scholarships];
-      await CampusDatabase.saveScholarships(updatedScholarships);
-      setScholarships(updatedScholarships);
-
-      // Credit student fees or cost sharing
-      const allUsers = await CampusDatabase.getUsers();
-      const updatedUsers = allUsers.map((u) => {
-        if (u.id === student.id) {
-          const currentCost = u.costSharingBalance || 0;
-          return { ...u, costSharingBalance: Math.max(0, currentCost - Number(schAmount)) };
-        }
-        return u;
+      // 1. Create the scholarship via POST /scholarships/
+      const created: any = await (CampusDatabase as any).addScholarship({
+        student: parseInt(String(student.id).replace(/\D/g, "")) || student.id,
+        student_name: student.fullName,
+        scholarship_type: schType,
+        amount: Number(schAmount),
+        semester: "Semester II",
+        academic_year: student.academicYear || 4,
+        status: "ISSUED",
+        issued_date: new Date().toISOString().split("T")[0],
       });
-      await CampusDatabase.saveUsers(updatedUsers);
-      setStudents(updatedUsers.filter((u) => u.role === "STUDENT"));
+
+      const newSch: Scholarship = {
+        id: String(created?.id ?? "SCH_" + Date.now()),
+        studentId: student.id,
+        studentName: student.fullName,
+        scholarshipType: schType,
+        amount: Number(schAmount),
+        semester: "Semester II",
+        academicYear: student.academicYear || 4,
+        status: "ISSUED",
+        issuedDate: created?.issued_date ?? new Date().toISOString().split("T")[0],
+      };
+      setScholarships((prev) => [newSch, ...prev]);
+
+      // 2. Credit student's cost sharing balance via PATCH /users/{id}/
+      const numericUserId = String(student.id).replace(/^U_/, "");
+      const nextCostSharing = Math.max(
+        0,
+        (student.costSharingBalance || 0) - Number(schAmount)
+      );
+
+      await (CampusDatabase as any).patchUser(numericUserId, {
+        cost_sharing_balance: nextCostSharing,
+      });
+
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === student.id ? { ...s, costSharingBalance: nextCostSharing } : s
+        )
+      );
 
       await CampusDatabase.addAuditLog(
         user.id,
@@ -271,13 +325,16 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
 
       alert(`Scholarship of ${schAmount} ETB awarded and credited to ${student.fullName}!`);
       setSchStudentId("");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to award scholarship:", error);
-      alert("Failed to award scholarship. Please try again.");
+      const detail = error?.response?.data
+        ? JSON.stringify(error.response.data)
+        : error?.message || "Unknown error";
+      alert("Failed to award scholarship: " + detail);
     }
   };
 
-  // Filtered payments with safe array check
+  // Filtered payments
   const filteredPayments = Array.isArray(payments) ? payments.filter((p) => {
     const matchesSearch =
       p.studentName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -296,7 +353,6 @@ export function FinanceOfficerDashboard({ user, onLogout }: FinanceOfficerDashbo
     ? payments.filter((p) => p.status === "PENDING").length
     : 0;
 
-  // Safe students reduce for cost sharing debt pool
   const totalCostSharingDebt = Array.isArray(students)
     ? students.reduce((sum, s) => sum + (s.costSharingBalance || 0), 0)
     : 0;
