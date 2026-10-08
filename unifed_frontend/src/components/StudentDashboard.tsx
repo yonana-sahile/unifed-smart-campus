@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
-import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade } from "../types";
+import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, LibraryResource } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
 import { SmartAICopilot } from "./SmartAICopilot";
@@ -21,7 +21,7 @@ interface StudentDashboardProps {
 
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "courses" | "materials" | "exams" | "zoom" | "grades" |
+    "dashboard" | "courses" | "materials" | "library" | "exams" | "zoom" | "grades" |
     "transcript" | "fees" | "copilot" | "clearance" | "facilities" | "alerts"
   >("dashboard");
 
@@ -36,9 +36,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<any>(null);
 
-  // ✅ Instructors for evaluation dropdown
+  // ✅ NEW: Library resources
+  const [libraryResources, setLibraryResources] = useState<LibraryResource[]>([]);
+  const [librarySearch, setLibrarySearch] = useState("");
+  const [libraryType, setLibraryType] = useState<string>("ALL");
+
   const [instructors, setInstructors] = useState<User[]>([]);
-  // ✅ Course chosen for the evaluation
   const [evaluationCourseId, setEvaluationCourseId] = useState<string>("");
 
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
@@ -84,7 +87,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         examAttemptsData,
         gradesData,
         settingsData,
-        usersData,           // ✅ NEW
+        usersData,
+        libraryResourcesData,   // ✅ NEW
       ] = await Promise.all([
         CampusDatabase.getCourses(),
         CampusDatabase.getMaterials(),
@@ -95,7 +99,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         CampusDatabase.getExamAttempts(),
         CampusDatabase.getGrades(),
         CampusDatabase.getSettings(),
-        CampusDatabase.getUsers(),  // ✅ NEW
+        CampusDatabase.getUsers(),
+        (CampusDatabase as any).getLibraryResources(),   // ✅ NEW
       ]);
 
       setCourses(Array.isArray(coursesData) ? coursesData : []);
@@ -107,8 +112,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setExamAttempts(Array.isArray(examAttemptsData) ? examAttemptsData : []);
       setGrades(Array.isArray(gradesData) ? gradesData : []);
       setSettings(settingsData || null);
+      setLibraryResources(Array.isArray(libraryResourcesData) ? libraryResourcesData : []);  // ✅ NEW
 
-      // ✅ Filter users to instructors only
       const allUsers: User[] = Array.isArray(usersData) ? usersData : [];
       setInstructors(
         allUsers.filter(
@@ -130,6 +135,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setGrades([]);
       setSettings(null);
       setInstructors([]);
+      setLibraryResources([]);   // ✅ NEW
     }
   };
 
@@ -417,7 +423,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  // ✅ FIXED: sends real course + course_code + semester
   const submitInstructorEvaluation = async () => {
     if (!evaluatorInstructorId) {
       alert("Please select an instructor.");
@@ -650,10 +655,51 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
+  // ✅ NEW: Library filtering + download
+  const visibleLibraryResources = libraryResources
+    .filter((r) => r.accessLevel !== "FACULTY_ONLY")
+    .filter((r) => libraryType === "ALL" || r.resourceType === libraryType)
+    .filter(
+      (r) =>
+        librarySearch === "" ||
+        r.title.toLowerCase().includes(librarySearch.toLowerCase()) ||
+        r.author.toLowerCase().includes(librarySearch.toLowerCase()) ||
+        (r.isbn && r.isbn.includes(librarySearch))
+    );
+
+  const handleLibraryDownload = async (res: LibraryResource) => {
+    try {
+      const nextCount = (res.downloadsCount ?? 0) + 1;
+      const numericId = String(res.id).replace(/^LIB_/, "");
+      await (CampusDatabase as any).updateLibraryResource(numericId, {
+        downloads_count: nextCount,
+      });
+      setLibraryResources((prev) =>
+        prev.map((r) => (r.id === res.id ? { ...r, downloadsCount: nextCount } : r))
+      );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "STUDENT",
+        "Download Library Resource",
+        "LibraryResource",
+        res.id,
+        `Downloaded "${res.title}" by ${res.author}`
+      );
+      alert(`Download started: "${res.title}" (${res.fileSize})`);
+    } catch (err: any) {
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      alert("Download failed: " + detail);
+    }
+  };
+
   const navItems = [
     { id: "dashboard", label: "Academic Dashboard", shortLabel: "Dashboard", Icon: BookOpen },
     { id: "courses", label: "Browse & Register", shortLabel: "Courses", Icon: Calendar },
     { id: "materials", label: "Course Materials", shortLabel: "Materials", Icon: FileText },
+    { id: "library", label: "Digital Library", shortLabel: "Library", Icon: BookOpen },
     { id: "zoom", label: "Zoom Classroom", shortLabel: "Zoom", Icon: Video, isZoom: true },
     { id: "exams", label: "Online Examinations", shortLabel: "Exams", Icon: Play },
     { id: "grades", label: "Grades & Assessments", shortLabel: "Grades", Icon: CheckCircle2 },
@@ -1425,6 +1471,127 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
+            {/* ✅ NEW: Digital Library tab */}
+            {activeTab === "library" && (
+              <motion.div
+                key="student-library-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-6"
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
+                      Digital Library & E-Resources
+                    </h2>
+                    <p className="text-slate-500 text-xs sm:text-sm">
+                      Browse textbooks, lecture videos, research articles, and curriculum
+                      materials published by the University Library Directorate.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by title, author, or ISBN..."
+                      value={librarySearch}
+                      onChange={(e) => setLibrarySearch(e.target.value)}
+                      className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-xs focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <select
+                    value={libraryType}
+                    onChange={(e) => setLibraryType(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-xs bg-white focus:outline-none focus:border-primary"
+                  >
+                    <option value="ALL">All Media Types</option>
+                    <option value="BOOK">Digital Books (PDF / ePub)</option>
+                    <option value="VIDEO">Video Lectures (MP4)</option>
+                    <option value="ARTICLE">Articles & Papers</option>
+                    <option value="LECTURE_NOTE">Lecture Slides</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {visibleLibraryResources.map((res) => (
+                    <div
+                      key={res.id}
+                      className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md hover:border-primary/40 transition flex flex-col justify-between"
+                    >
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-start gap-2">
+                          <span
+                            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${
+                              res.resourceType === "BOOK"
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : res.resourceType === "VIDEO"
+                                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            }`}
+                          >
+                            {res.resourceType} • {res.fileSize}
+                          </span>
+                          <span className="text-[10px] font-mono text-slate-400 shrink-0 flex items-center space-x-1">
+                            <Download className="w-3 h-3" />
+                            <span>{res.downloadsCount}</span>
+                          </span>
+                        </div>
+
+                        <div>
+                          <h3 className="font-semibold text-slate-800 text-sm line-clamp-2">
+                            {res.title}
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1">
+                            By <span className="font-medium text-slate-700">{res.author}</span>
+                          </p>
+                        </div>
+
+                        <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
+                          {res.description}
+                        </p>
+
+                        <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                            {res.category}
+                          </span>
+                          {res.isbn && (
+                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500">
+                              ISBN: {res.isbn}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] font-mono text-slate-400">
+                          {res.accessLevel === "PUBLIC" ? "🌐 Public" : "🎓 Students Only"}
+                        </span>
+                        <button
+                          onClick={() => handleLibraryDownload(res)}
+                          className="bg-primary hover:bg-primary-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 transition"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Download</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {visibleLibraryResources.length === 0 && (
+                    <div className="col-span-full text-center py-12 text-slate-400 text-xs bg-white border border-slate-200 rounded-xl">
+                      {libraryResources.length === 0
+                        ? "No library resources have been published yet. Check back soon."
+                        : `No resources match your filters.`}
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+
             {activeTab === "exams" && (
               <motion.div
                 key="student-exams-tab"
@@ -1594,7 +1761,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   </div>
 
                   <div className="space-y-6">
-                    {/* ✅ FIXED: real instructors + course dropdown + working submit */}
                     <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                       <div className="flex items-center space-x-2 text-primary">
                         <Star className="w-5 h-5 fill-current" />
@@ -1647,7 +1813,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           </p>
                         )}
 
-                        {/* ✅ Course dropdown appears after instructor is picked */}
                         {evaluatorInstructorId && (
                           <div>
                             <label className="block text-xs font-medium text-slate-700 mb-1 mt-2">

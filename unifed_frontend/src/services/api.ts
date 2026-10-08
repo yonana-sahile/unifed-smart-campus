@@ -305,11 +305,9 @@ export const saveUsers = (users: User[]): Promise<User[]> =>
 export const updateUser = (user: User): Promise<User> =>
   api.put(`/users/${user.id}/`, user).then(r => r.data);
 
-// ✅ NEW: create a single user via POST /users/
 export const addUser = (payload: any): Promise<User> =>
   api.post('/users/', payload).then(r => mapUser(r.data));
 
-// ✅ NEW: partial update via PATCH /users/{id}/
 export const patchUser = (id: string, patch: any): Promise<User> =>
   api.patch(`/users/${id}/`, patch).then(r => mapUser(r.data));
 
@@ -450,6 +448,16 @@ export const getLibraryResources = (): Promise<LibraryResource[]> =>
 export const saveLibraryResources = (resources: LibraryResource[]): Promise<LibraryResource[]> =>
   api.put('/library-resources/', resources).then(r => r.data);
 
+// ✅ NEW: per-record CRUD so writes don't 405 on the collection URL
+export const addLibraryResource = (payload: any): Promise<LibraryResource> =>
+  api.post('/library-resources/', payload).then(r => r.data);
+
+export const updateLibraryResource = (id: string, patch: any): Promise<LibraryResource> =>
+  api.patch(`/library-resources/${id}/`, patch).then(r => r.data);
+
+export const deleteLibraryResource = (id: string): Promise<void> =>
+  api.delete(`/library-resources/${id}/`).then(() => undefined);
+
 // ---------- PAYMENTS ----------
 export const getPayments = (): Promise<PaymentTransaction[]> =>
   api.get('/payments/').then(r => unwrapList<PaymentTransaction>(r.data));
@@ -523,7 +531,6 @@ export const getSettings = (): Promise<SystemSettings> =>
 export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> =>
   api.put('/settings/', settings).then(r => r.data);
 
-// ✅ per-record partial update for /settings/{id}/
 export const updateSettings = (id: string, patch: any): Promise<SystemSettings> =>
   api.patch(`/settings/${id}/`, patch).then(r => r.data);
 
@@ -723,8 +730,8 @@ export const CampusDatabase = {
   getUsers,
   saveUsers,
   updateUser,
-  addUser,          // ✅ NEW
-  patchUser,        // ✅ NEW
+  addUser,
+  patchUser,
   login,
   logout,
   getCourses,
@@ -768,6 +775,9 @@ export const CampusDatabase = {
   updateAttendance,
   getLibraryResources,
   saveLibraryResources,
+  addLibraryResource,      // ✅ NEW
+  updateLibraryResource,   // ✅ NEW
+  deleteLibraryResource,   // ✅ NEW
   getPayments,
   savePayments,
   getScholarships,
