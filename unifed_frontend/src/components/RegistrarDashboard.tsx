@@ -34,7 +34,7 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
       const [usersData, gradesData, settingsData] = await Promise.all([
         CampusDatabase.getUsers(),
         CampusDatabase.getGrades(),
-        CampusDatabase.getSettings(),
+        CampusDatabase.getSettings().catch(() => null),
       ]);
 
       setStudents(Array.isArray(usersData) ? usersData.filter((u) => u.role === "STUDENT") : []);
@@ -51,12 +51,13 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
   const handleUpdateStudent = async () => {
     if (!editingStudent) return;
     try {
-      const allUsers = await CampusDatabase.getUsers();
-      const updatedUsers = allUsers.map((u) => {
-        if (u.id === editingStudent.id) return editingStudent;
-        return u;
-      });
-      await CampusDatabase.saveUsers(updatedUsers);
+      const numericId = String(editingStudent.id).replace(/^U_/, "");
+
+      await CampusDatabase.updateUser({
+        ...editingStudent,
+        id: numericId,
+      } as any);
+
       await CampusDatabase.addAuditLog(
         user.id,
         user.fullName,
@@ -66,25 +67,33 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
         editingStudent.id,
         `Updated record details for student: ${editingStudent.fullName}`
       );
+
       alert("Student record updated successfully!");
       setEditingStudent(null);
       await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to update student:", error);
-      alert("Failed to update student record. Please try again.");
+      const detail = error?.response?.data
+        ? JSON.stringify(error.response.data)
+        : error?.message || "Unknown error";
+      alert("Failed to update student record: " + detail);
     }
   };
 
   const handleApproveGrade = async (gradeId: string) => {
     try {
-      const updatedGrades = grades.map((g) => {
-        if (g.id === gradeId) {
-          return { ...g, status: "APPROVED" as const };
-        }
-        return g;
+      const updated: any = await CampusDatabase.updateGrade(gradeId, {
+        status: "APPROVED",
       });
-      await CampusDatabase.saveGrades(updatedGrades);
-      setGrades(updatedGrades);
+
+      setGrades((prev) =>
+        prev.map((g) =>
+          g.id === gradeId
+            ? { ...g, status: (updated?.status ?? "APPROVED") as Grade["status"] }
+            : g
+        )
+      );
+
       await CampusDatabase.addAuditLog(
         user.id,
         user.fullName,
@@ -94,24 +103,31 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
         gradeId,
         "Officially approved student score to be stamped on transcripts."
       );
+
       alert("Grade verified and approved for transcript posting.");
-      await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to approve grade:", error);
-      alert("Failed to approve grade. Please try again.");
+      const detail = error?.response?.data
+        ? JSON.stringify(error.response.data)
+        : error?.message || "Unknown error";
+      alert("Failed to approve grade: " + detail);
     }
   };
 
   const handleRejectGrade = async (gradeId: string) => {
     try {
-      const updatedGrades = grades.map((g) => {
-        if (g.id === gradeId) {
-          return { ...g, status: "RETURNED" as const };
-        }
-        return g;
+      const updated: any = await CampusDatabase.updateGrade(gradeId, {
+        status: "RETURNED",
       });
-      await CampusDatabase.saveGrades(updatedGrades);
-      setGrades(updatedGrades);
+
+      setGrades((prev) =>
+        prev.map((g) =>
+          g.id === gradeId
+            ? { ...g, status: (updated?.status ?? "RETURNED") as Grade["status"] }
+            : g
+        )
+      );
+
       await CampusDatabase.addAuditLog(
         user.id,
         user.fullName,
@@ -121,19 +137,24 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
         gradeId,
         "Returned grades to subject instructor for revision."
       );
+
       alert("Grades returned to instructor for revision.");
-      await loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to reject grade:", error);
-      alert("Failed to reject grade. Please try again.");
+      const detail = error?.response?.data
+        ? JSON.stringify(error.response.data)
+        : error?.message || "Unknown error";
+      alert("Failed to reject grade: " + detail);
     }
   };
 
-  const filteredStudents = Array.isArray(students) ? students.filter(
-    (st) =>
-      st.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (st.studentId && st.studentId.includes(searchQuery))
-  ) : [];
+  const filteredStudents = Array.isArray(students)
+    ? students.filter(
+        (st) =>
+          st.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (st.studentId && st.studentId.includes(searchQuery))
+      )
+    : [];
 
   const navItems = [
     { id: "records", label: "Student Records", shortLabel: "Records", Icon: Users },
@@ -519,34 +540,86 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
 
           {activeTab === "calendar" && (
             <div className="space-y-6">
-              <h3 className="text-lg sm:text-xl font-display font-bold text-slate-900">Academic Semester Calendar</h3>
-              {settings && (
+              <h3 className="text-lg sm:text-xl font-display font-bold text-slate-900">
+                Academic Semester Calendar
+              </h3>
+
+              {!settings ? (
+                <div className="bg-white border border-slate-200 rounded-xl p-8 text-center space-y-3 max-w-xl">
+                  <Calendar className="w-10 h-10 text-slate-300 mx-auto" />
+                  <p className="text-sm font-semibold text-slate-600">
+                    No academic calendar configured yet
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Create a SystemSettings record in the Django admin to define the semester dates.
+                  </p>
+                </div>
+              ) : (
                 <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm max-w-xl space-y-4">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs font-mono">
                     <div className="p-4 bg-slate-50 rounded-lg border">
                       <span className="block text-slate-400">SEMESTER START</span>
-                      <strong className="block text-sm mt-1">{settings.semesterDates.start}</strong>
+                      <strong className="block text-sm mt-1">
+                        {(settings as any).semesterDates?.start ??
+                          (settings as any).semester_start ??
+                          "Not set"}
+                      </strong>
                     </div>
                     <div className="p-4 bg-slate-50 rounded-lg border">
                       <span className="block text-slate-400">SEMESTER END</span>
-                      <strong className="block text-sm mt-1">{settings.semesterDates.end}</strong>
+                      <strong className="block text-sm mt-1">
+                        {(settings as any).semesterDates?.end ??
+                          (settings as any).semester_end ??
+                          "Not set"}
+                      </strong>
                     </div>
                   </div>
+
                   <div className="border-t pt-4">
-                    <label className="block text-xs font-medium text-slate-600">Course Registration Add/Drop Deadline</label>
+                    <label className="block text-xs font-medium text-slate-600">
+                      Course Registration Add/Drop Deadline
+                    </label>
                     <input
                       type="date"
                       className="border border-slate-200 rounded-lg p-2.5 mt-1 text-xs font-mono w-full"
-                      value={settings.registrationDeadline}
+                      value={
+                        (settings as any).registrationDeadline ??
+                        (settings as any).registration_deadline ??
+                        ""
+                      }
                       onChange={async (e) => {
-                        const s = { ...settings, registrationDeadline: e.target.value };
-                        await CampusDatabase.saveSettings(s);
-                        setSettings(s);
+                        const newDeadline = e.target.value;
+                        const next = { ...settings, registrationDeadline: newDeadline };
+
+                        const settingsId =
+                          (settings as any).id ?? (settings as any).settings_id ?? 1;
+
+                        console.log("[calendar] saving settings", { settingsId, newDeadline });
+
+                        try {
+                          const updated: any = await (CampusDatabase as any).updateSettings(
+                            String(settingsId),
+                            { registration_deadline: newDeadline }
+                          );
+                          setSettings(updated ?? next);
+                          alert("Calendar updated successfully.");
+                        } catch (err: any) {
+                          console.error("Failed to save calendar (PATCH):", err);
+                          const detail = err?.response?.data
+                            ? JSON.stringify(err.response.data)
+                            : err?.message || "Unknown error";
+                          alert("Failed to save calendar: " + detail);
+                        }
                       }}
                     />
                   </div>
+
                   <button
-                    onClick={() => alert("Academic parameters successfully saved and synchronized across university portals.")}
+                    onClick={() =>
+                      alert(
+                        "Academic parameters saved and synchronized across university portals."
+                      )
+                    }
                     className="university-gradient hover:opacity-95 text-white text-xs font-semibold px-5 py-2.5 rounded-xl shadow-md border border-amber-400/20 w-full sm:w-auto"
                   >
                     Publish Calendar Updates

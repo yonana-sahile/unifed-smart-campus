@@ -45,7 +45,6 @@ export const clearTokens = () => {
 
 const forceLogout = () => {
   clearTokens();
-  // Notify the app so it can redirect to login
   window.dispatchEvent(new CustomEvent('uscms:auth-expired'));
 };
 
@@ -59,7 +58,6 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
 
-  // Diagnostic (safe — remove in production if noisy)
   console.log(
     '[api→]',
     config.method?.toUpperCase(),
@@ -86,7 +84,6 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    // Diagnostic: log every 401 with the URL and whether a header was sent
     if (error?.response?.status === 401) {
       console.warn(
         '[api←] 401 on',
@@ -97,12 +94,11 @@ api.interceptors.response.use(
       );
     }
 
-    // If 401 and we haven't retried this request yet
     if (
       error?.response?.status === 401 &&
       originalRequest &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/token/refresh/') // don't retry the refresh call itself
+      !originalRequest.url?.includes('/token/refresh/')
     ) {
       originalRequest._retry = true;
 
@@ -114,14 +110,9 @@ api.interceptors.response.use(
       }
 
       try {
-        // Use raw axios (not the `api` instance) to avoid interceptor recursion
         const { data } = await axios.post(`${API_BASE}/token/refresh/`, { refresh });
-
-        // Save new access token
-        setTokens(data.access, data.refresh); // SimpleJWT may rotate refresh
-
+        setTokens(data.access, data.refresh);
         originalRequest.headers.Authorization = `Bearer ${data.access}`;
-        // Retry the original request with the new token
         return api(originalRequest);
       } catch (refreshErr: any) {
         console.warn(
@@ -138,12 +129,11 @@ api.interceptors.response.use(
   }
 );
 
-// Helper: unwrap DRF pagination envelope { count, next, previous, results }
+// Helper: unwrap DRF pagination envelope
 const unwrapList = <T>(raw: any): T[] =>
   Array.isArray(raw) ? raw : (raw?.results ?? []);
 
-// ---------- MAPPERS (Django snake_case → frontend camelCase) ----------
-
+// ---------- MAPPERS ----------
 const mapUser = (u: any): User => ({
   id: `U_${u.id}`,
   username: u.username || '',
@@ -523,6 +513,10 @@ export const getSettings = (): Promise<SystemSettings> =>
 export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> =>
   api.put('/settings/', settings).then(r => r.data);
 
+// ✅ NEW: per-record partial update for /settings/{id}/
+export const updateSettings = (id: string, patch: any): Promise<SystemSettings> =>
+  api.patch(`/settings/${id}/`, patch).then(r => r.data);
+
 // ---------- AI ----------
 export const predictStudentRisk = async (studentId: string): Promise<AIRiskPrediction> => {
   const raw: any = await api.post('/ai/predict-risk/', { studentId }).then(r => r.data);
@@ -779,6 +773,7 @@ export const CampusDatabase = {
   saveAuditLogs,
   getSettings,
   saveSettings,
+  updateSettings,
   predictStudentRisk,
   generateExamQuestions,
   getCourseAdvisor,
