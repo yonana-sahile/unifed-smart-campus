@@ -5,6 +5,13 @@ from .models import *
 
 # ---------- USER ----------
 class UserSerializer(serializers.ModelSerializer):
+    # Write-only password field for creating users
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+    )
+
     class Meta:
         model = User
         fields = [
@@ -13,9 +20,31 @@ class UserSerializer(serializers.ModelSerializer):
             'semester', 'program', 'gpa', 'cgpa', 'outstanding_fees',
             'cost_sharing_balance', 'instructor_id', 'department',
             'specialization', 'office_hours', 'staff_id', 'library_section',
-            'officer_id', 'bio'
+            'officer_id', 'bio',
+            'password',
         ]
         read_only_fields = ['id']
+
+    def create(self, validated_data):
+        password = validated_data.pop('password', None) or 'password'
+        validated_data.pop('full_name', None)
+        validated_data.pop('id', None)
+        user = User.objects.create_user(password=password, **validated_data)
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        if password:
+            instance.set_password(password)
+
+        validated_data.pop('full_name', None)
+        validated_data.pop('id', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
@@ -91,8 +120,6 @@ class QuestionSerializer(serializers.ModelSerializer):
 
 
 # ---------- EXAM ----------
-# Write: POST/PUT/PATCH accepts  "question_ids": [1, 2, 3]
-# Read:  GET returns            "questions": [ {full object}, ... ]
 class ExamSerializer(serializers.ModelSerializer):
     questions = QuestionSerializer(many=True, read_only=True)
     question_ids = serializers.PrimaryKeyRelatedField(
