@@ -2,14 +2,15 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.views.generic import RedirectView
 from rest_framework import permissions
 from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
-# ✅ ADDED: JWT token endpoints
+# ✅ JWT token endpoints
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-# ✅ ADDED: AI viewset for the explicit predict-risk route
+# ✅ AI viewset for the explicit predict-risk route
 from App.views import AIViewSet
 
 schema_view = get_schema_view(
@@ -26,20 +27,21 @@ schema_view = get_schema_view(
 )
 
 urlpatterns = [
+    # ✅ ADDED: Redirect root URL (/) to Swagger docs to fix the Render 404 error
+    path('', RedirectView.as_view(url='/swagger/', permanent=False)),
+
     path('admin/', admin.site.urls),
 
-    # ✅ ADDED: explicit route for AI risk prediction.
-    #    Must come BEFORE include('App.urls') so Django matches it first
-    #    and doesn't fall through to the router.
+    # ✅ Explicit route for AI risk prediction
     path(
         'api/ai/predict-risk/',
         AIViewSet.as_view({'post': 'predict_risk'}),
         name='ai-predict-risk',
     ),
 
-    path('api/', include('App.urls')),  # ✅ Changed from 'api.urls' to 'App.urls'
+    path('api/', include('App.urls')), 
 
-    # ✅ ADDED: /api/token/ and /api/token/refresh/ for real JWT login
+    # ✅ /api/token/ and /api/token/refresh/ for real JWT login
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
