@@ -29,6 +29,13 @@ import type {
 
 const API_BASE = import.meta.env.VITE_API_URL || 'https://unifed-smart-campus.onrender.com/api';
 
+// ✅ FIX: Export the axios instance so other files can use it
+export const api = axios.create({
+  baseURL: API_BASE,
+  timeout: 60_000,
+  headers: { 'Content-Type': 'application/json' },
+});
+
 // ---------- AUTH HELPERS ----------
 export const getAccessToken = () => localStorage.getItem('access_token');
 export const getRefreshToken = () => localStorage.getItem('refresh_token');
@@ -47,12 +54,6 @@ const forceLogout = () => {
   clearTokens();
   window.dispatchEvent(new CustomEvent('uscms:auth-expired'));
 };
-
-const api = axios.create({
-  baseURL: API_BASE,
-  timeout: 60_000,
-  headers: { 'Content-Type': 'application/json' },
-});
 
 // ---------- REQUEST INTERCEPTOR ----------
 api.interceptors.request.use((config) => {
@@ -441,6 +442,10 @@ export const updateExamAttempt = (id: string, patch: any): Promise<ExamAttempt> 
   api.patch(`/exam-attempts/${numericId(id)}/`, patch).then(r => mapExamAttempt(r.data));
 export const deleteExamAttempt = (id: string): Promise<void> =>
   api.delete(`/exam-attempts/${numericId(id)}/`).then(() => undefined);
+
+// ---------- MONITORING EVENTS (NEW) ----------
+export const logMonitoringEvent = (data: { attempt: number | string; event_type: string; details: string }): Promise<any> =>
+  api.post('/monitoring-events/', data).then(r => r.data);
 
 // ---------- GRADES ----------
 export const getGrades = (): Promise<Grade[]> =>
@@ -870,6 +875,9 @@ export const CampusDatabase = {
   createExamAttempt,
   updateExamAttempt,
   deleteExamAttempt,
+
+  // Monitoring
+  logMonitoringEvent, // ✅ NEW
 
   // Grades
   getGrades,

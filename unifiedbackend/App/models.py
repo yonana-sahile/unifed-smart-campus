@@ -757,3 +757,25 @@ class ZoomClassSession(models.Model):
 
     def __str__(self):
         return f"{self.course_code} - {self.title}"
+
+
+# ---------- EXAM MONITORING EVENT ----------
+class ExamMonitoringEvent(models.Model):
+    EVENT_TYPES = (
+        ('NO_FACE', 'No face detected'),
+        ('MULTIPLE_FACES', 'Multiple faces detected'),
+        ('CAMERA_DISCONNECTED', 'Camera disconnected'),
+        ('CAMERA_UNAVAILABLE', 'Camera permission denied or unavailable'),
+        ('MONITORING_READY', 'Camera and monitoring ready'),
+    )
+
+    attempt = models.ForeignKey(ExamAttempt, on_delete=models.CASCADE, related_name='monitoring_events')
+    event_type = models.CharField(max_length=50, choices=EVENT_TYPES)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    details = models.TextField(blank=True, null=True) # e.g., "Chrome 120, Windows 11"
+
+    class Meta:
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.event_type} - Attempt {self.attempt.id}"

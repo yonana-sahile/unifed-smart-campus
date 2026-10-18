@@ -827,3 +827,23 @@ Question: {message}"""
         },
         status=status.HTTP_200_OK,
     )
+# ---------- EXAM MONITORING EVENT ----------
+class ExamMonitoringEventViewSet(viewsets.ModelViewSet):
+    queryset = ExamMonitoringEvent.objects.all()
+    serializer_class = ExamMonitoringEventSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        # Students can only see their own monitoring events
+        if user.role == 'STUDENT':
+            return ExamMonitoringEvent.objects.filter(attempt__student=user)
+        # Instructors and Admins can see all
+        return ExamMonitoringEvent.objects.all()
+
+    def perform_create(self, serializer):
+        # Optional security: Ensure a student can only log events for their own attempt
+        attempt = serializer.validated_data.get('attempt')
+        if self.request.user.role == 'STUDENT' and attempt.student != self.request.user:
+            raise permissions.PermissionDenied("You can only log events for your own exam attempts.")
+        serializer.save()

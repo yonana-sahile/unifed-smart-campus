@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
+import { WebcamMonitor } from "./WebcamMonitor"; // ✅ NEW: Import Camera Component
 
 interface StudentDashboardProps {
   user: User;
@@ -370,7 +371,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     try {
       const created: any = await CampusDatabase.createExamAttempt({
         exam: currentExam.id,
-                student: parseInt(String(user.id).replace(/\D/g, "")) || user.id,
+        student: parseInt(String(user.id).replace(/\D/g, "")) || user.id,
         student_name: user.fullName,
         answers: examAnswers,
         score: calculatedScore,
@@ -386,7 +387,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
       const allGrades = await CampusDatabase.getGrades();
       const gradeList = Array.isArray(allGrades) ? allGrades : [];
-           const existingGrade = gradeList.find(
+      const existingGrade = gradeList.find(
         (g) => String(g.studentId) === String(user.id) && String(g.courseId) === String(currentExam.courseId)
       );
 
@@ -414,12 +415,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setViewingAttempt(normalizedAttempt);
       setCurrentExam(null);
     } catch (err: any) {
-  console.error(err);
-  const detail = err?.response?.data
-    ? JSON.stringify(err.response.data, null, 2)
-    : err?.message || "Unknown error";
-  alert("Exam submission failed:\n" + detail);
-}
+      console.error(err);
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data, null, 2)
+        : err?.message || "Unknown error";
+      alert("Exam submission failed:\n" + detail);
+    }
   };
 
   const submitInstructorEvaluation = async () => {
@@ -2483,6 +2484,21 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
                 {/* RIGHT — Sidebar */}
                 <div className="space-y-5">
+
+                  {/* ✅ NEW: Camera Monitoring Widget */}
+                  <WebcamMonitor 
+                    onEventDetected={async (type, details) => {
+                      try {
+                        await CampusDatabase.logMonitoringEvent({
+                          attempt: currentExam.id, 
+                          event_type: type,
+                          details: details
+                        });
+                      } catch (err) {
+                        console.error("Failed to log monitoring event", err);
+                      }
+                    }} 
+                  />
 
                   {/* Timer card */}
                   <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-6 flex flex-col items-center">

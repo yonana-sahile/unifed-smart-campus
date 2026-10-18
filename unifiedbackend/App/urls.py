@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views  # ✅ This now imports from App
+from . import views
 
 router = DefaultRouter()
 router.register(r'auth', views.AuthViewSet, basename='auth')
@@ -32,7 +32,10 @@ router.register(r'media-posts', views.CampusMediaPostViewSet)
 router.register(r'zoom-sessions', views.ZoomClassSessionViewSet)
 router.register(r'ai', views.AIViewSet, basename='ai')
 
+# ✅ ADDED: Monitoring Events
+router.register(r'monitoring-events', views.ExamMonitoringEventViewSet, basename='monitoring-events')
+
 urlpatterns = [
-    path('ai/chat/', views.ai_chat, name='ai-chat'),   # ✅ ADDED: Groq AI chat endpoint
+    path('ai/chat/', views.ai_chat, name='ai-chat'),
     path('', include(router.urls)),
 ]

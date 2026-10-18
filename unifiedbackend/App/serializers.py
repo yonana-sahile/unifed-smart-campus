@@ -340,3 +340,11 @@ class ZoomClassSessionSerializer(serializers.ModelSerializer):
             'recording_duration': {'required': False, 'allow_blank': True, 'allow_null': True},
             'host_url': {'required': False, 'allow_blank': True, 'allow_null': True},
         }
+
+
+# ---------- EXAM MONITORING EVENT ----------
+class ExamMonitoringEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExamMonitoringEvent
+        fields = '__all__'
+        read_only_fields = ['id', 'timestamp']
