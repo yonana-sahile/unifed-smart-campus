@@ -827,7 +827,11 @@ Question: {message}"""
         },
         status=status.HTTP_200_OK,
     )
+
+
 # ---------- EXAM MONITORING EVENT ----------
+import rest_framework.serializers as drf_serializers
+
 class ExamMonitoringEventViewSet(viewsets.ModelViewSet):
     queryset = ExamMonitoringEvent.objects.all()
     serializer_class = ExamMonitoringEventSerializer
@@ -842,8 +846,13 @@ class ExamMonitoringEventViewSet(viewsets.ModelViewSet):
         return ExamMonitoringEvent.objects.all()
 
     def perform_create(self, serializer):
-        # Optional security: Ensure a student can only log events for their own attempt
         attempt = serializer.validated_data.get('attempt')
+        
+        # ✅ SAFETY: Prevent 500 error if attempt is missing or invalid
+        if not attempt:
+            raise drf_serializers.ValidationError({"attempt": "Attempt ID is required."})
+            
         if self.request.user.role == 'STUDENT' and attempt.student != self.request.user:
             raise permissions.PermissionDenied("You can only log events for your own exam attempts.")
+            
         serializer.save()

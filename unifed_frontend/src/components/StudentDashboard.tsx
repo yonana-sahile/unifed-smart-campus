@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
-import { WebcamMonitor } from "./WebcamMonitor"; // ✅ NEW: Import Camera Component
+import { WebcamMonitor } from "./WebcamMonitor"; 
 
 interface StudentDashboardProps {
   user: User;
@@ -45,12 +45,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [evaluationCourseId, setEvaluationCourseId] = useState<string>("");
 
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
+  const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null); // ✅ NEW
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
-  const [examCurrentIndex, setExamCurrentIndex] = useState<number>(0); // NEW: Exam pagination
+  const [examCurrentIndex, setExamCurrentIndex] = useState<number>(0); 
   
   const examTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isExamSubmittingRef = useRef(false); // Prevent double submission
+  const isExamSubmittingRef = useRef(false); 
 
   const [viewingAttempt, setViewingAttempt] = useState<ExamAttempt | null>(null);
 
@@ -78,7 +79,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     loadData();
   }, []);
 
-  // OPTION A FIX: Use Promise.allSettled so one failure doesn't wipe everything
   const loadData = async () => {
     try {
       const results = await Promise.allSettled([
@@ -127,7 +127,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  // OPTION A FIX: Robust timer logic (no state churn, side effect moved out)
   useEffect(() => {
     if (!currentExam) return;
 
@@ -142,7 +141,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         });
       }, 1000);
     } else if (examTimeRemaining === 0 && !isExamSubmittingRef.current) {
-      // Auto-submit outside of state updater
       isExamSubmittingRef.current = true;
       alert("Exam time limit reached! Your answers will be submitted automatically.");
       completeExamSubmission();
@@ -188,7 +186,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         force = true;
       }
 
-      // OPTION A FIX: Consistent Fee Threshold
       if (user.outstandingFees && user.outstandingFees > 0) {
         alert(`Enrollment Blocked: You must clear outstanding fee balances. Current balance: ${user.outstandingFees} ETB.`);
         return;
@@ -319,17 +316,32 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
+  // ✅ NEW: Create the Exam Attempt in the DB *before* the exam starts
   const startExam = async (exam: Exam) => {
-    setCurrentExam(exam);
-    setExamAnswers({});
-    setExamTimeRemaining(exam.durationMinutes * 60);
-    setExamCurrentIndex(0); 
-    isExamSubmittingRef.current = false; // Reset submission lock
-    
-    await CampusDatabase.addAuditLog(
-      user.id, user.fullName, "STUDENT", "Start Exam", "Exam", exam.id,
-      `Started online exam: ${exam.examTitle}`
-    );
+    try {
+      const createdAttempt: any = await CampusDatabase.createExamAttempt({
+        exam: parseInt(String(exam.id).replace(/\D/g, "")) || exam.id,
+        student: parseInt(String(user.id).replace(/\D/g, "")) || user.id,
+        student_name: user.fullName,
+        answers: {},
+        status: "IN_PROGRESS",
+      });
+
+      setCurrentAttemptId(Number(createdAttempt.id));
+      setCurrentExam(exam);
+      setExamAnswers({});
+      setExamTimeRemaining(exam.durationMinutes * 60);
+      setExamCurrentIndex(0); 
+      isExamSubmittingRef.current = false;
+      
+      await CampusDatabase.addAuditLog(
+        user.id, user.fullName, "STUDENT", "Start Exam", "Exam", exam.id,
+        `Started online exam: ${exam.examTitle}`
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert("Failed to start exam: " + (err?.response?.data?.detail || err?.message || "Unknown error"));
+    }
   };
 
   const handleSelectAnswer = (questionIndex: number, answer: string) => {
@@ -344,7 +356,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   };
 
   const completeExamSubmission = async () => {
-    if (!currentExam) return;
+    if (!currentExam || !currentAttemptId) return;
     if (examTimerRef.current) clearInterval(examTimerRef.current);
 
     let calculatedScore = 0;
@@ -355,34 +367,27 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       }
     });
 
-    const newAttempt: ExamAttempt = {
-      id: "ATT_" + Date.now(),
-      examId: currentExam.id,
-      examTitle: currentExam.examTitle,
-      studentId: user.id,
-      studentName: user.fullName,
-      answers: examAnswers,
-      score: calculatedScore,
-      status: "SUBMITTED",
-      startedAt: new Date(Date.now() - currentExam.durationMinutes * 60000).toISOString(),
-      submittedAt: new Date().toISOString()
-    };
-
     try {
-      const created: any = await CampusDatabase.createExamAttempt({
-        exam: currentExam.id,
-        student: parseInt(String(user.id).replace(/\D/g, "")) || user.id,
-        student_name: user.fullName,
+      const updated: any = await CampusDatabase.updateExamAttempt(String(currentAttemptId), {
         answers: examAnswers,
         score: calculatedScore,
         status: "SUBMITTED",
-        started_at: newAttempt.startedAt,
-        submitted_at: newAttempt.submittedAt,
+        submitted_at: new Date().toISOString(),
       });
+
       const normalizedAttempt: ExamAttempt = {
-        ...newAttempt,
-        id: String(created?.id ?? newAttempt.id),
+        id: String(updated?.id ?? currentAttemptId),
+        examId: currentExam.id,
+        examTitle: currentExam.examTitle,
+        studentId: user.id,
+        studentName: user.fullName,
+        answers: examAnswers,
+        score: calculatedScore,
+        status: "SUBMITTED",
+        startedAt: updated.started_at || new Date().toISOString(),
+        submittedAt: updated.submitted_at || new Date().toISOString(),
       };
+      
       setExamAttempts((prev) => [...prev, normalizedAttempt]);
 
       const allGrades = await CampusDatabase.getGrades();
@@ -414,6 +419,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
       setViewingAttempt(normalizedAttempt);
       setCurrentExam(null);
+      setCurrentAttemptId(null);
     } catch (err: any) {
       console.error(err);
       const detail = err?.response?.data
@@ -489,9 +495,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         ...user,
         outstandingFees: Math.max(0, (user.outstandingFees || 0) - payAmount),
       } as any);
-
-      // OPTION A FIX: Don't mutate props directly
-      // We force a state refresh by reloading data instead
       
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Pay Fees", "User", user.id,
@@ -502,7 +505,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setPayAmount(0);
       setCardNumber("");
       setShowPayModal(false);
-      await loadData(); // Reload to get new balance
+      await loadData();
     } catch (err: any) {
       console.error(err);
       alert("Payment failed: " + (err?.message || "Unknown error"));
@@ -728,7 +731,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setIsMobileNavOpen(false);
   };
 
-  // OPTION A FIX: Extracted fallback for evaluation dropdown
   const evaluationCoursesToShow = 
     courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, "")).length > 0
       ? courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, ""))
@@ -2488,9 +2490,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   {/* ✅ NEW: Camera Monitoring Widget */}
                   <WebcamMonitor 
                     onEventDetected={async (type, details) => {
+                      if (!currentAttemptId) return; // ✅ Wait for attempt to exist
                       try {
                         await CampusDatabase.logMonitoringEvent({
-                          attempt: currentExam.id, 
+                          attempt: currentAttemptId, 
                           event_type: type,
                           details: details
                         });
