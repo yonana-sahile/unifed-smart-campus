@@ -332,7 +332,10 @@ export const login = async (username: string, password: string) => {
 export const logout = () => {
   clearTokens();
 };
-
+// ---------- USER AVATAR UPLOAD ----------
+export const uploadAvatar = (userId: string, base64Image: string): Promise<any> =>
+  api.post(`/users/${numericId(userId, 'U_')}/upload_avatar/`, { image: base64Image })
+     .then(r => r.data);
 // ---------- COURSES ----------
 export const getCourses = (): Promise<Course[]> =>
   api.get('/courses/').then(r => unwrapList<any>(r.data).map(mapCourse));
@@ -827,7 +830,7 @@ export const CampusDatabase = {
   deleteUser,
   login,
   logout,
-
+ uploadAvatar,
   // Courses
   getCourses,
   saveCourses,

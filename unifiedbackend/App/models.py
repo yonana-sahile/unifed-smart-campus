@@ -19,7 +19,12 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='STUDENT')
     is_active = models.BooleanField(default=True)
-    avatar_url = models.URLField(max_length=500, blank=True, null=True)
+    
+    # ✅ UPDATED: Stores the base64 image or URL for the ID photo
+    avatar_url = models.TextField(max_length=500, blank=True, null=True) 
+    # ✅ NEW: Tracks when the photo was uploaded
+    avatar_updated_at = models.DateTimeField(blank=True, null=True)
+    
     phone_number = models.CharField(max_length=20, blank=True, null=True)
 
     # Role-specific fields
@@ -767,6 +772,7 @@ class ExamMonitoringEvent(models.Model):
         ('CAMERA_DISCONNECTED', 'Camera disconnected'),
         ('CAMERA_UNAVAILABLE', 'Camera permission denied or unavailable'),
         ('MONITORING_READY', 'Camera and monitoring ready'),
+        ('NOISE_DETECTED', 'Loud noise or speaking detected'), # ✅ NEW
     )
 
     attempt = models.ForeignKey(ExamAttempt, on_delete=models.CASCADE, related_name='monitoring_events')

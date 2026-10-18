@@ -73,6 +73,33 @@ class UserViewSet(BaseViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+    # ✅ NEW: Endpoint for uploading the student's verification photo
+    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    def upload_avatar(self, request, pk=None):
+        user = self.get_object()
+        
+        # Security: Users can only update their own avatar
+        if str(request.user.id) != str(user.id) and request.user.role not in ['ADMIN', 'REGISTRAR']:
+            return Response({'error': 'You can only update your own profile photo.'}, status=status.HTTP_403_FORBIDDEN)
+
+        # The frontend sends a base64 string (data:image/jpeg;base64,...)
+        image_data = request.data.get('image')
+        
+        if not image_data:
+            return Response({'error': 'No image provided.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user.avatar_url = image_data 
+            user.avatar_updated_at = timezone.now()
+            user.save()
+            return Response({
+                'message': 'Profile photo updated successfully',
+                'avatar_url': user.avatar_url,
+                'avatar_updated_at': user.avatar_updated_at
+            })
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 # ---------- COURSE ----------
 class CourseViewSet(BaseViewSet):
