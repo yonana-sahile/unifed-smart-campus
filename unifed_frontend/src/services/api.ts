@@ -443,9 +443,12 @@ export const updateExamAttempt = (id: string, patch: any): Promise<ExamAttempt> 
 export const deleteExamAttempt = (id: string): Promise<void> =>
   api.delete(`/exam-attempts/${numericId(id)}/`).then(() => undefined);
 
-// ---------- MONITORING EVENTS (NEW) ----------
+// ---------- MONITORING EVENTS ----------
 export const logMonitoringEvent = (data: { attempt: number | string; event_type: string; details: string }): Promise<any> =>
   api.post('/monitoring-events/', data).then(r => r.data);
+
+export const getMonitoringEvents = (): Promise<any[]> =>
+  api.get('/monitoring-events/').then(r => unwrapList<any>(r.data));
 
 // ---------- GRADES ----------
 export const getGrades = (): Promise<Grade[]> =>
@@ -877,7 +880,8 @@ export const CampusDatabase = {
   deleteExamAttempt,
 
   // Monitoring
-  logMonitoringEvent, // ✅ NEW
+  logMonitoringEvent,
+  getMonitoringEvents,
 
   // Grades
   getGrades,
