@@ -9,9 +9,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
-DEBUG = True  # Temporarily forced to True to reveal the traceback
+DEBUG = True
 
-# Allow Render domain, wildcard domain, localhost, and custom hostnames
 ALLOWED_HOSTS = [
     'unifed-smart-campus.onrender.com',
     '.onrender.com',
@@ -73,8 +72,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'unifiedbackend.wsgi.application'
 
-# Database Configuration
-# ✅ FIX: DB_PASSWORD fallback changed from 'postgres' to 'tadesse' for local dev
 DATABASES = {
     'default': dj_database_url.config(
         default=f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'tadesse')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'smartcampus_db')}",

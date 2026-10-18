@@ -3,7 +3,6 @@ import type { User, Course, CourseMaterial, Announcement, Assignment, Submission
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
 import { SmartAICopilot } from "./SmartAICopilot";
-import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusFacilities } from "./SmartCampusFacilities";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { ExamResultsModal } from "./ExamResultsModal";
@@ -22,7 +21,7 @@ interface StudentDashboardProps {
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
   const [activeTab, setActiveTab] = useState<
     "dashboard" | "courses" | "materials" | "library" | "exams" | "zoom" | "grades" |
-    "transcript" | "fees" | "copilot" | "clearance" | "facilities" | "alerts"
+    "transcript" | "fees" | "copilot" | "facilities" | "alerts"
   >("dashboard");
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -36,7 +35,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<any>(null);
 
-  // ✅ NEW: Library resources
+  // Library resources
   const [libraryResources, setLibraryResources] = useState<LibraryResource[]>([]);
   const [librarySearch, setLibrarySearch] = useState("");
   const [libraryType, setLibraryType] = useState<string>("ALL");
@@ -47,7 +46,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
+  const [examCurrentIndex, setExamCurrentIndex] = useState<number>(0); // NEW: Exam pagination
+  
   const examTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isExamSubmittingRef = useRef(false); // Prevent double submission
 
   const [viewingAttempt, setViewingAttempt] = useState<ExamAttempt | null>(null);
 
@@ -75,21 +77,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     loadData();
   }, []);
 
+  // OPTION A FIX: Use Promise.allSettled so one failure doesn't wipe everything
   const loadData = async () => {
     try {
-      const [
-        coursesData,
-        materialsData,
-        announcementsData,
-        assignmentsData,
-        submissionsData,
-        examsData,
-        examAttemptsData,
-        gradesData,
-        settingsData,
-        usersData,
-        libraryResourcesData,   // ✅ NEW
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         CampusDatabase.getCourses(),
         CampusDatabase.getMaterials(),
         CampusDatabase.getAnnouncements(),
@@ -100,21 +91,28 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         CampusDatabase.getGrades(),
         CampusDatabase.getSettings(),
         CampusDatabase.getUsers(),
-        (CampusDatabase as any).getLibraryResources(),   // ✅ NEW
+        (CampusDatabase as any).getLibraryResources?.(),
       ]);
 
-      setCourses(Array.isArray(coursesData) ? coursesData : []);
-      setMaterials(Array.isArray(materialsData) ? materialsData : []);
-      setAnnouncements(Array.isArray(announcementsData) ? announcementsData : []);
-      setAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
-      setSubmissions(Array.isArray(submissionsData) ? submissionsData : []);
-      setExams(Array.isArray(examsData) ? examsData : []);
-      setExamAttempts(Array.isArray(examAttemptsData) ? examAttemptsData : []);
-      setGrades(Array.isArray(gradesData) ? gradesData : []);
-      setSettings(settingsData || null);
-      setLibraryResources(Array.isArray(libraryResourcesData) ? libraryResourcesData : []);  // ✅ NEW
+      const getSafe = (index: number, defaultVal: any) => {
+        const res = results[index];
+        return res.status === "fulfilled" && res.value !== undefined && res.value !== null 
+          ? res.value 
+          : defaultVal;
+      };
 
-      const allUsers: User[] = Array.isArray(usersData) ? usersData : [];
+      setCourses(Array.isArray(getSafe(0, [])) ? getSafe(0, []) : []);
+      setMaterials(Array.isArray(getSafe(1, [])) ? getSafe(1, []) : []);
+      setAnnouncements(Array.isArray(getSafe(2, [])) ? getSafe(2, []) : []);
+      setAssignments(Array.isArray(getSafe(3, [])) ? getSafe(3, []) : []);
+      setSubmissions(Array.isArray(getSafe(4, [])) ? getSafe(4, []) : []);
+      setExams(Array.isArray(getSafe(5, [])) ? getSafe(5, []) : []);
+      setExamAttempts(Array.isArray(getSafe(6, [])) ? getSafe(6, []) : []);
+      setGrades(Array.isArray(getSafe(7, [])) ? getSafe(7, []) : []);
+      setSettings(getSafe(8, null));
+      setLibraryResources(Array.isArray(getSafe(10, [])) ? getSafe(10, []) : []);
+
+      const allUsers: User[] = Array.isArray(getSafe(9, [])) ? getSafe(9, []) : [];
       setInstructors(
         allUsers.filter(
           (u) =>
@@ -124,34 +122,31 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         )
       );
     } catch (error) {
-      console.error("Failed to load student data:", error);
-      setCourses([]);
-      setMaterials([]);
-      setAnnouncements([]);
-      setAssignments([]);
-      setSubmissions([]);
-      setExams([]);
-      setExamAttempts([]);
-      setGrades([]);
-      setSettings(null);
-      setInstructors([]);
-      setLibraryResources([]);   // ✅ NEW
+      console.error("Critical failure loading student data:", error);
     }
   };
 
+  // OPTION A FIX: Robust timer logic (no state churn, side effect moved out)
   useEffect(() => {
-    if (currentExam && examTimeRemaining > 0) {
+    if (!currentExam) return;
+
+    if (examTimeRemaining > 0 && !isExamSubmittingRef.current) {
       examTimerRef.current = setInterval(() => {
         setExamTimeRemaining((prev) => {
           if (prev <= 1) {
             clearInterval(examTimerRef.current!);
-            handleExamAutoSubmit();
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
+    } else if (examTimeRemaining === 0 && !isExamSubmittingRef.current) {
+      // Auto-submit outside of state updater
+      isExamSubmittingRef.current = true;
+      alert("Exam time limit reached! Your answers will be submitted automatically.");
+      completeExamSubmission();
     }
+
     return () => {
       if (examTimerRef.current) clearInterval(examTimerRef.current);
     };
@@ -192,8 +187,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         force = true;
       }
 
-      if (user.outstandingFees && user.outstandingFees > 1000) {
-        alert(`Enrollment Blocked: You must clear outstanding fee balances exceeding 1000 ETB. Current balance: ${user.outstandingFees} ETB.`);
+      // OPTION A FIX: Consistent Fee Threshold
+      if (user.outstandingFees && user.outstandingFees > 0) {
+        alert(`Enrollment Blocked: You must clear outstanding fee balances. Current balance: ${user.outstandingFees} ETB.`);
         return;
       }
 
@@ -326,6 +322,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     setCurrentExam(exam);
     setExamAnswers({});
     setExamTimeRemaining(exam.durationMinutes * 60);
+    setExamCurrentIndex(0); 
+    isExamSubmittingRef.current = false; // Reset submission lock
+    
     await CampusDatabase.addAuditLog(
       user.id, user.fullName, "STUDENT", "Start Exam", "Exam", exam.id,
       `Started online exam: ${exam.examTitle}`
@@ -338,17 +337,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const submitExamManual = () => {
     if (window.confirm("Are you sure you want to submit your exam answers?")) {
+      isExamSubmittingRef.current = true;
       completeExamSubmission();
     }
   };
 
-  const handleExamAutoSubmit = () => {
-    alert("Exam time limit reached! Your answers will be submitted automatically.");
-    completeExamSubmission();
-  };
-
   const completeExamSubmission = async () => {
     if (!currentExam) return;
+    if (examTimerRef.current) clearInterval(examTimerRef.current);
 
     let calculatedScore = 0;
     currentExam.questions.forEach((q, idx) => {
@@ -374,7 +370,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     try {
       const created: any = await CampusDatabase.createExamAttempt({
         exam: currentExam.id,
-        student: user.id,
+                student: parseInt(String(user.id).replace(/\D/g, "")) || user.id,
         student_name: user.fullName,
         answers: examAnswers,
         score: calculatedScore,
@@ -390,8 +386,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
       const allGrades = await CampusDatabase.getGrades();
       const gradeList = Array.isArray(allGrades) ? allGrades : [];
-      const existingGrade = gradeList.find(
-        (g) => g.studentId === user.id && g.courseId === currentExam.courseId
+           const existingGrade = gradeList.find(
+        (g) => String(g.studentId) === String(user.id) && String(g.courseId) === String(currentExam.courseId)
       );
 
       if (existingGrade) {
@@ -418,9 +414,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setViewingAttempt(normalizedAttempt);
       setCurrentExam(null);
     } catch (err: any) {
-      console.error(err);
-      alert("Exam submission failed: " + (err?.message || "Unknown error"));
-    }
+  console.error(err);
+  const detail = err?.response?.data
+    ? JSON.stringify(err.response.data, null, 2)
+    : err?.message || "Unknown error";
+  alert("Exam submission failed:\n" + detail);
+}
   };
 
   const submitInstructorEvaluation = async () => {
@@ -489,9 +488,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         ...user,
         outstandingFees: Math.max(0, (user.outstandingFees || 0) - payAmount),
       } as any);
-      user.outstandingFees =
-        updatedUser?.outstandingFees ?? Math.max(0, (user.outstandingFees || 0) - payAmount);
 
+      // OPTION A FIX: Don't mutate props directly
+      // We force a state refresh by reloading data instead
+      
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Pay Fees", "User", user.id,
         `Paid ${payAmount} ETB online. Card digits: ****${cardNumber.slice(-4)}`
@@ -501,7 +501,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       setPayAmount(0);
       setCardNumber("");
       setShowPayModal(false);
-      await loadData();
+      await loadData(); // Reload to get new balance
     } catch (err: any) {
       console.error(err);
       alert("Payment failed: " + (err?.message || "Unknown error"));
@@ -655,7 +655,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
 
-  // ✅ NEW: Library filtering + download
   const visibleLibraryResources = libraryResources
     .filter((r) => r.accessLevel !== "FACULTY_ONLY")
     .filter((r) => libraryType === "ALL" || r.resourceType === libraryType)
@@ -671,7 +670,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     try {
       const nextCount = (res.downloadsCount ?? 0) + 1;
       const numericId = String(res.id).replace(/^LIB_/, "");
-      await (CampusDatabase as any).updateLibraryResource(numericId, {
+      await (CampusDatabase as any).updateLibraryResource?.(numericId, {
         downloads_count: nextCount,
       });
       setLibraryResources((prev) =>
@@ -714,10 +713,25 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     { id: "alerts", label: "Campus Alerts", shortLabel: "Alerts", Icon: Radio },
   ] as const;
 
+  const CLEARANCE_PORTAL_URL = "https://university-clearance-system-lake.vercel.app";
+
+  const openClearancePortal = () => {
+    const url = user.studentId
+      ? `${CLEARANCE_PORTAL_URL}?studentId=${encodeURIComponent(user.studentId)}`
+      : CLEARANCE_PORTAL_URL;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
+
   const goToTab = (id: string) => {
     setActiveTab(id as any);
     setIsMobileNavOpen(false);
   };
+
+  // OPTION A FIX: Extracted fallback for evaluation dropdown
+  const evaluationCoursesToShow = 
+    courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, "")).length > 0
+      ? courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, ""))
+      : courses;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="student_dashboard_main">
@@ -795,7 +809,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 {smartItems.map(({ id, label, Icon }) => (
                   <button
                     key={id}
-                    onClick={() => goToTab(id)}
+                    onClick={() => {
+                      if (id === "clearance") {
+                        openClearancePortal();
+                        setIsMobileNavOpen(false);
+                        return;
+                      }
+                      goToTab(id);
+                    }}
                     className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
                       activeTab === id
                         ? "bg-primary text-white border border-amber-400/20 shadow-xs"
@@ -828,7 +849,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         {[...navItems, ...smartItems].map(({ id, shortLabel, Icon }) => (
           <button
             key={id}
-            onClick={() => setActiveTab(id as any)}
+            onClick={() => {
+              if (id === "clearance") {
+                openClearancePortal();
+                return;
+              }
+              setActiveTab(id as any);
+            }}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
               activeTab === id
                 ? "bg-primary text-white border border-amber-400/40 shadow-xs"
@@ -880,7 +907,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
             {smartItems.map(({ id, label, Icon, isCopilot }: any) => (
               <button
                 key={id}
-                onClick={() => setActiveTab(id)}
+                onClick={() => {
+                  if (id === "clearance") {
+                    openClearancePortal();
+                    return;
+                  }
+                  setActiveTab(id);
+                }}
                 className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
                   activeTab === id
                     ? isCopilot
@@ -1471,7 +1504,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {/* ✅ NEW: Digital Library tab */}
             {activeTab === "library" && (
               <motion.div
                 key="student-library-tab"
@@ -1824,26 +1856,11 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               onChange={(e) => setEvaluationCourseId(e.target.value)}
                             >
                               <option value="">-- Choose Course --</option>
-                              {courses
-                                .filter((c) =>
-                                  String(c.instructorId) ===
-                                  String(evaluatorInstructorId).replace(/\D/g, "")
-                                )
-                                .map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.courseCode} — {c.courseTitle}
-                                  </option>
-                                ))}
-                              {courses.filter(
-                                (c) =>
-                                  String(c.instructorId) ===
-                                  String(evaluatorInstructorId).replace(/\D/g, "")
-                              ).length === 0 &&
-                                courses.map((c) => (
-                                  <option key={c.id} value={c.id}>
-                                    {c.courseCode} — {c.courseTitle}
-                                  </option>
-                                ))}
+                              {evaluationCoursesToShow.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.courseCode} — {c.courseTitle}
+                                </option>
+                              ))}
                             </select>
                           </div>
                         )}
@@ -1929,7 +1946,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 ) : (
                   <div className="space-y-6">
                     <div
-                      className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-8 max-w-3xl shadow-xl border-t-8 border-t-amber-500 relative overflow-hidden"
+                      className="bg-white border-2 border-slate-200 rounded-2xl p-4 sm:p-8 max-w-3xl shadow-xl border-t-8 border-t-amber-500 relative overflow-hidden print:shadow-none print:border-0"
                       id="printable-transcript-view"
                     >
                       <div className="absolute inset-0 flex items-center justify-center opacity-[0.03] pointer-events-none">
@@ -2262,17 +2279,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
-            {activeTab === "clearance" && (
-              <motion.div
-                key="student-clearance-tab"
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-              >
-                <SmartClearancePortal user={user} />
-              </motion.div>
-            )}
-
             {activeTab === "facilities" && (
               <motion.div
                 key="student-facilities-tab"
@@ -2298,95 +2304,268 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         </main>
       </div>
 
-      {/* ACTIVE EXAM OVERLAY */}
-      {currentExam && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white w-full max-w-3xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh] border border-slate-200">
-            <div className="university-gradient text-white p-4 sm:p-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-b border-amber-500/20">
-              <div className="flex items-center space-x-3 min-w-0">
-                <UniversitySeal className="w-8 h-8 sm:w-10 sm:h-10 shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-[10px] sm:text-xs font-mono text-amber-300 tracking-widest uppercase font-bold truncate">{currentExam.courseTitle}</p>
-                  <h3 className="text-base sm:text-xl font-display font-bold mt-0.5 text-slate-100 truncate">{currentExam.examTitle}</h3>
-                </div>
-              </div>
-              <div className="flex items-center space-x-2 bg-slate-900/80 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-amber-500/30 self-start sm:self-auto shrink-0">
-                <Clock className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
-                <span className="font-mono text-base sm:text-lg font-bold text-amber-400">{formatTime(examTimeRemaining)}</span>
-              </div>
-            </div>
+      {/* ACTIVE EXAM OVERLAY — Styled to match reference image */}
+      {currentExam && (() => {
+        const total = currentExam.questions.length;
+        const answered = Object.keys(examAnswers).length;
+        const completedPct = total > 0 ? Math.round((answered / total) * 100) : 0;
+        const q = currentExam.questions[examCurrentIndex];
+        const isLast = examCurrentIndex === total - 1;
+        const isFirst = examCurrentIndex === 0;
 
-            <div className="p-4 sm:p-8 overflow-y-auto space-y-5 sm:space-y-8 flex-1">
-              <div className="bg-amber-50/80 border border-amber-200 text-amber-950 p-3 sm:p-4 rounded-xl flex items-start space-x-3">
-                <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 mt-0.5 text-amber-600" />
-                <p className="text-xs sm:text-sm">
-                  <strong>Academic Testing Instructions:</strong>{" "}
-                  {currentExam.instructions || "Do not refresh the page. The exam will submit automatically upon expiration."}
-                </p>
-              </div>
+        const goTo = (i: number) => {
+          if (i < 0 || i >= total) return;
+          setExamCurrentIndex(i);
+        };
 
-              {(currentExam.questions || []).map((q, qIdx) => (
-                <div key={qIdx} className="border-b border-slate-100 pb-5 sm:pb-6 space-y-3 sm:space-y-4">
-                  <div className="flex justify-between items-start gap-2">
-                    <h4 className="text-sm sm:text-base font-semibold text-slate-800 flex-1">
-                      Question {qIdx + 1}: <span className="font-normal text-slate-700">{q.questionText}</span>
-                    </h4>
-                    <span className="text-[10px] sm:text-xs font-mono bg-slate-100 px-2 py-1 rounded-md text-slate-600 font-bold border border-slate-200 shrink-0">
-                      {q.marks} Marks
-                    </span>
+        return (
+          <div className="fixed inset-0 z-50 bg-[#eef6f1] overflow-y-auto print:hidden">
+            <div className="max-w-6xl mx-auto p-4 sm:p-6 md:p-8">
+
+              {/* ── TOP STATUS BAR ─────────────────────────── */}
+              <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 px-4 sm:px-6 py-4 mb-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
+
+                  <div className="border-l-0 sm:border-l-0 lg:border-r border-slate-200 lg:pr-6">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 mb-1">
+                      Exam Type
+                    </p>
+                    <div className="flex items-center space-x-2 text-slate-800">
+                      <Clock className="w-4 h-4" />
+                      <span className="text-sm font-semibold">
+                        {currentExam.examTitle?.includes("Final")
+                          ? "Final Exam"
+                          : currentExam.examTitle?.includes("Quiz")
+                          ? "Quiz"
+                          : "Model Test"}
+                      </span>
+                    </div>
                   </div>
 
-                  {q.questionType === "short_answer" ? (
-                    <textarea
-                      rows={3}
-                      className="w-full border border-slate-200 focus:border-primary-600 focus:ring-2 focus:ring-primary-600/20 rounded-xl p-3 text-xs sm:text-sm"
-                      placeholder="Type your academic response and justification here..."
-                      value={examAnswers[qIdx] || ""}
-                      onChange={(e) => handleSelectAnswer(qIdx, e.target.value)}
-                    />
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {(q.options || []).map((opt, optIdx) => (
-                        <button
-                          key={optIdx}
-                          onClick={() => handleSelectAnswer(qIdx, opt)}
-                          className={`flex items-center space-x-3 p-3 sm:p-3.5 rounded-xl border text-left text-xs sm:text-sm font-medium transition ${
-                            examAnswers[qIdx] === opt
-                              ? "bg-blue-50 border-primary-600 text-primary-700 shadow-xs"
-                              : "border-slate-200 hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <div
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
-                              examAnswers[qIdx] === opt ? "border-primary bg-primary text-white" : "border-slate-300"
+                  <div className="lg:border-r border-slate-200 lg:pr-6">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 mb-1">
+                      Subject
+                    </p>
+                    <div className="flex items-center space-x-2 text-slate-800">
+                      <BookOpen className="w-4 h-4" />
+                      <span className="text-sm font-semibold truncate">
+                        {currentExam.courseTitle}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="lg:pr-6">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                        Completed ({answered}/{total})
+                      </span>
+                      <span className="text-[11px] font-bold text-emerald-700">
+                        {completedPct}%
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-emerald-600 transition-all duration-300"
+                        style={{ width: `${completedPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex lg:justify-end">
+                    <button
+                      onClick={submitExamManual}
+                      className="bg-[#2fa47a] hover:bg-[#288f6b] text-white px-6 py-2.5 rounded-full text-sm font-semibold shadow-sm transition w-full lg:w-auto"
+                    >
+                      Submit Answer
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── MAIN GRID ─────────────────────────────── */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+                {/* LEFT — Question card */}
+                <div className="lg:col-span-2 space-y-5">
+                  <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-5 sm:p-8">
+
+                    <span className="inline-block text-[11px] font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full mb-5">
+                      Question : {examCurrentIndex + 1}
+                    </span>
+
+                    <div className="flex items-start justify-between gap-4 mb-6">
+                      <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug flex-1">
+                        {q?.questionText}
+                      </h2>
+                      <span className="text-[11px] font-mono bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-bold shrink-0">
+                        {q?.marks} Marks
+                      </span>
+                    </div>
+
+                    {q?.questionType === "short_answer" ? (
+                      <textarea
+                        rows={5}
+                        className="w-full border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl p-3 text-sm"
+                        placeholder="Type your response here..."
+                        value={examAnswers[examCurrentIndex] || ""}
+                        onChange={(e) => handleSelectAnswer(examCurrentIndex, e.target.value)}
+                      />
+                    ) : (
+                      <div className="space-y-3">
+                        {(q?.options || []).map((opt, optIdx) => {
+                          const letter = String.fromCharCode(65 + optIdx); // A,B,C,D
+                          const selected = examAnswers[examCurrentIndex] === opt;
+                          return (
+                            <button
+                              key={optIdx}
+                              onClick={() => handleSelectAnswer(examCurrentIndex, opt)}
+                              className={`w-full flex items-center text-left rounded-xl border-2 transition group ${
+                                selected
+                                  ? "border-[#5b5bd6] bg-[#5b5bd6] text-white"
+                                  : "border-slate-200 bg-white text-slate-800 hover:border-[#5b5bd6]/50"
+                              }`}
+                            >
+                              <span
+                                className={`w-11 h-11 flex items-center justify-center font-bold text-sm rounded-l-lg border-r-2 shrink-0 ${
+                                  selected
+                                    ? "bg-white/15 border-white/20 text-white"
+                                    : "bg-slate-50 border-slate-200 text-slate-700"
+                                }`}
+                              >
+                                {letter}
+                              </span>
+                              <span className="px-4 py-3 text-sm font-medium flex-1">
+                                {opt}
+                              </span>
+                              {selected && <Check className="w-4 h-4 mr-4 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Navigation bar */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => goTo(0)}
+                      disabled={isFirst}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      First
+                    </button>
+                    <button
+                      onClick={() => goTo(examCurrentIndex - 1)}
+                      disabled={isFirst}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      Back
+                    </button>
+                    <span className="px-4 py-2 bg-[#5b5bd6] text-white rounded-lg text-xs font-bold">
+                      {examCurrentIndex + 1} / {total}
+                    </span>
+                    <button
+                      onClick={() => goTo(examCurrentIndex + 1)}
+                      disabled={isLast}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => goTo(total - 1)}
+                      disabled={isLast}
+                      className="px-4 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                    >
+                      Last
+                    </button>
+                  </div>
+                </div>
+
+                {/* RIGHT — Sidebar */}
+                <div className="space-y-5">
+
+                  {/* Timer card */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-6 flex flex-col items-center">
+                    <div className="relative w-32 h-32">
+                      <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="52" fill="none" stroke="#e2e8f0" strokeWidth="8" />
+                        <circle
+                          cx="60" cy="60" r="52"
+                          fill="none"
+                          stroke="#2fa47a"
+                          strokeWidth="8"
+                          strokeLinecap="round"
+                          strokeDasharray={`${2 * Math.PI * 52}`}
+                          strokeDashoffset={
+                            2 * Math.PI * 52 *
+                            (1 - examTimeRemaining / Math.max(1, currentExam.durationMinutes * 60))
+                          }
+                          className="transition-all duration-1000 ease-linear"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-xl font-bold text-slate-800 font-mono">
+                          {formatTime(examTimeRemaining)}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-3">Timer Remaining:</p>
+                  </div>
+
+                  {/* Question map / quick nav */}
+                  <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-5">
+                    <button
+                      onClick={() => goTo(examCurrentIndex)}
+                      className="w-full mb-3 px-4 py-2 bg-[#5b5bd6] hover:bg-[#4a4ac2] text-white rounded-full text-xs font-semibold"
+                    >
+                      View Bookmarked
+                    </button>
+                    <button
+                      onClick={() => {
+                        const firstUnanswered = currentExam.questions.findIndex(
+                          (_, i) => examAnswers[i] === undefined
+                        );
+                        if (firstUnanswered >= 0) goTo(firstUnanswered);
+                      }}
+                      className="w-full mb-3 px-4 py-2 bg-white border border-slate-200 rounded-full text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      View Un Answered
+                    </button>
+                    <button
+                      onClick={submitExamManual}
+                      className="w-full mb-4 px-4 py-2 bg-white border border-slate-200 rounded-full text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                    >
+                      Save for Revision
+                    </button>
+
+                    <div className="flex flex-wrap gap-1.5 justify-center">
+                      {currentExam.questions.map((_, idx) => {
+                        const isAnswered = examAnswers[idx] !== undefined;
+                        const isActive = idx === examCurrentIndex;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => goTo(idx)}
+                            className={`w-8 h-8 rounded-md text-xs font-bold transition ${
+                              isActive
+                                ? "bg-[#5b5bd6] text-white"
+                                : isAnswered
+                                ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                                : "bg-slate-100 text-slate-600 border border-slate-200"
                             }`}
                           >
-                            {examAnswers[qIdx] === opt && <Check className="w-3 h-3" />}
-                          </div>
-                          <span>{opt}</span>
-                        </button>
-                      ))}
+                            {idx + 1}
+                          </button>
+                        );
+                      })}
                     </div>
-                  )}
+                  </div>
                 </div>
-              ))}
-            </div>
-
-            <div className="bg-slate-50 border-t border-slate-200/80 px-4 sm:px-8 py-3 sm:py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-              <span className="text-xs text-slate-500 font-mono">
-                Answered <strong className="text-slate-800">{Object.keys(examAnswers).length}</strong> of{" "}
-                {currentExam.questions.length} questions
-              </span>
-              <button
-                onClick={submitExamManual}
-                className="university-gradient hover:opacity-95 text-white px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition shadow-md border border-amber-400/20 w-full sm:w-auto"
-              >
-                Submit Exam
-              </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <ExamResultsModal
         exam={exams.find((e) => e.id === viewingAttempt?.examId) ?? null}
