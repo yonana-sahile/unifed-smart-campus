@@ -21,7 +21,7 @@ class User(AbstractUser):
     is_active = models.BooleanField(default=True)
     
     # ✅ UPDATED: Stores the base64 image or URL for the ID photo
-    avatar_url = models.TextField(max_length=500, blank=True, null=True) 
+    avatar_url = models.TextField(blank=True, null=True) 
     # ✅ NEW: Tracks when the photo was uploaded
     avatar_updated_at = models.DateTimeField(blank=True, null=True)
     

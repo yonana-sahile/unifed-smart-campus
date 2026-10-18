@@ -24,6 +24,10 @@ class UserSerializer(serializers.ModelSerializer):
             'password',
         ]
         read_only_fields = ['id']
+        # ✅ FIX: Allow base64 image strings for avatar_url
+        extra_kwargs = {
+            'avatar_url': {'required': False, 'allow_blank': True, 'allow_null': True},
+        }
 
     def create(self, validated_data):
         password = validated_data.pop('password', None) or 'password'

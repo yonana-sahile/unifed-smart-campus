@@ -13,7 +13,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
 import { WebcamMonitor } from "./WebcamMonitor"; 
-
+import { FaceCaptureModal } from "./FaceCaptureModal"; 
 interface StudentDashboardProps {
   user: User;
   onLogout: () => void;
@@ -45,6 +45,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [evaluationCourseId, setEvaluationCourseId] = useState<string>("");
 
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
+    const [showFaceCapture, setShowFaceCapture] = useState(false); // ✅ ADD THIS
+  const [pendingExam, setPendingExam] = useState<Exam | null>(null); // ✅ ADD THIS
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null); // ✅ NEW
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
@@ -1694,9 +1696,16 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               </button>
                             ) : (
                               <button
-                                onClick={() => startExam(exam)}
-                                className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
-                              >
+  onClick={() => {
+    if (!user.avatarUrl) {
+      setPendingExam(exam);
+      setShowFaceCapture(true);
+    } else {
+      startExam(exam);
+    }
+  }}
+  className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
+>
                                 <Play className="w-3 h-3 fill-current" />
                                 <span>Start Examination</span>
                               </button>
@@ -2591,7 +2600,28 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         attempt={viewingAttempt}
         onClose={() => setViewingAttempt(null)}
       />
-
+ {/* ✅ ADD THIS */}
+      {showFaceCapture && (
+        <FaceCaptureModal
+          isOpen={showFaceCapture}
+          onClose={() => {
+            setShowFaceCapture(false);
+            setPendingExam(null);
+          }}
+          onCapture={async (base64Image) => {
+            try {
+              await CampusDatabase.uploadAvatar(user.id, base64Image);
+              setShowFaceCapture(false);
+              if (pendingExam) {
+                startExam(pendingExam);
+                setPendingExam(null);
+              }
+            } catch (err) {
+              alert("Failed to save photo. Please try again.");
+            }
+          }}
+        />
+      )}
       <AcademicFooter />
     </div>
   );
