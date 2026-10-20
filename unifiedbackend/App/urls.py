@@ -1,3 +1,4 @@
+# File: unifiedbackend/App/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from . import views
@@ -5,17 +6,17 @@ from . import views
 router = DefaultRouter()
 router.register(r'auth', views.AuthViewSet, basename='auth')
 router.register(r'users', views.UserViewSet)
-router.register(r'courses', views.CourseViewSet)
-router.register(r'materials', views.CourseMaterialViewSet)
+router.register(r'courses', views.CourseViewSet, basename='course')                     # ← ADD basename
+router.register(r'materials', views.CourseMaterialViewSet, basename='coursematerial')  # ← ADD basename
 router.register(r'questions', views.QuestionViewSet)
 router.register(r'announcements', views.AnnouncementViewSet)
-router.register(r'assignments', views.AssignmentViewSet)
-router.register(r'submissions', views.SubmissionViewSet)
-router.register(r'exams', views.ExamViewSet)
+router.register(r'assignments', views.AssignmentViewSet, basename='assignment')        # ← ADD basename
+router.register(r'submissions', views.SubmissionViewSet, basename='submission')        # ← ADD basename
+router.register(r'exams', views.ExamViewSet, basename='exam')                          # ← ADD basename
 router.register(r'exam-attempts', views.ExamAttemptViewSet, basename='examattempt')
-router.register(r'grades', views.GradeViewSet)
+router.register(r'grades', views.GradeViewSet, basename='grade')                       # ← ADD basename
 router.register(r'transcripts', views.TranscriptViewSet)
-router.register(r'attendance', views.AttendanceRecordViewSet)
+router.register(r'attendance', views.AttendanceRecordViewSet, basename='attendance')   # ← ADD basename
 router.register(r'library-resources', views.LibraryResourceViewSet)
 router.register(r'payments', views.PaymentTransactionViewSet)
 router.register(r'scholarships', views.ScholarshipViewSet)

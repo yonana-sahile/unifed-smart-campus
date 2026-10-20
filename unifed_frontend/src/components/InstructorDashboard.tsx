@@ -208,11 +208,12 @@
       try {
         const coursesData = await CampusDatabase.getCourses();
         const allCourses = Array.isArray(coursesData) ? coursesData : [];
-        const myCourses = allCourses.filter(
-          (c) => String(c.instructorId) === String(user.id)
-        );
-        const coursesToShow = myCourses.length > 0 ? myCourses : allCourses;
-        setCourses(coursesToShow);
+       // ✅ FIX: Instructors should NEVER fall back to all courses.
+// Backend already filters by instructor. If they have none, show none.
+const myCourses = allCourses.filter(
+  (c) => String(c.instructorId) === String(user.id)
+);
+setCourses(myCourses);
 
         const firstCourse = coursesToShow[0];
         if (firstCourse) {

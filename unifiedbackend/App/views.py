@@ -104,8 +104,17 @@ class UserViewSet(BaseViewSet):
 
 # ---------- COURSE ----------
 class CourseViewSet(BaseViewSet):
-    queryset = Course.objects.all()
     serializer_class = CourseSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Course.objects.none()
+        if user.role == 'INSTRUCTOR':
+            return Course.objects.filter(instructor=user)
+        if user.role in ('DEPARTMENT_HEAD', 'DEAN'):
+            return Course.objects.filter(department=user.department)
+        return Course.objects.all()
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def enroll(self, request, pk=None):
@@ -126,9 +135,18 @@ class CourseViewSet(BaseViewSet):
 
 # ---------- COURSE MATERIAL ----------
 class CourseMaterialViewSet(BaseViewSet):
-    queryset = CourseMaterial.objects.all().order_by('-uploaded_at')
     serializer_class = CourseMaterialSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        qs = CourseMaterial.objects.all().order_by('-uploaded_at')
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(course__instructor=user)
+        if user.role == 'STUDENT':
+            return qs
+        return qs
 
 # ---------- ANNOUNCEMENT ----------
 class AnnouncementViewSet(BaseViewSet):
@@ -138,14 +156,34 @@ class AnnouncementViewSet(BaseViewSet):
 
 # ---------- ASSIGNMENT ----------
 class AssignmentViewSet(BaseViewSet):
-    queryset = Assignment.objects.all()
     serializer_class = AssignmentSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Assignment.objects.all()
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(course__instructor=user)
+        if user.role == 'STUDENT':
+            return qs
+        return qs
 
 
 # ---------- SUBMISSION ----------
 class SubmissionViewSet(BaseViewSet):
-    queryset = Submission.objects.all()
     serializer_class = SubmissionSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Submission.objects.all()
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'STUDENT':
+            return qs.filter(student=user)
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(course__instructor=user)
+        return qs
 
 
 # ---------- QUESTION ----------
@@ -163,8 +201,16 @@ class QuestionViewSet(BaseViewSet):
 
 # ---------- EXAM ----------
 class ExamViewSet(BaseViewSet):
-    queryset = Exam.objects.all().order_by('-created_at')
     serializer_class = ExamSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Exam.objects.all().order_by('-created_at')
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(course__instructor=user)
+        return qs
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def submit_attempt(self, request, pk=None):
@@ -216,25 +262,41 @@ class ExamAttemptViewSet(BaseViewSet):
     def get_queryset(self):
         qs = ExamAttempt.objects.all().order_by('-submitted_at')
         user = self.request.user
-
-        # Students only see their own SUBMITTED attempts
         if user.role == 'STUDENT':
             return qs.filter(student=user, status='SUBMITTED')
-
-        # Other roles see everything (for grading/admin)
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(exam__course__instructor=user)
         return qs
 # ---------- GRADE ----------
 class GradeViewSet(BaseViewSet):
-    queryset = Grade.objects.all()
     serializer_class = GradeSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Grade.objects.all()
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'STUDENT':
+            return qs.filter(student=user)
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(course__instructor=user)
+        return qs
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def approve(self, request, pk=None):
         grade = self.get_object()
+        user = request.user
+
+        # ✅ Only these roles can approve grades
+        if user.role not in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'REGISTRAR', 'DEAN'):
+            return Response(
+                {'error': 'You do not have permission to approve grades.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         grade.status = 'APPROVED'
         grade.save()
         return Response({'message': 'Grade approved'})
-
 
 # ---------- TRANSCRIPT ----------
 class TranscriptViewSet(BaseViewSet):
@@ -244,9 +306,18 @@ class TranscriptViewSet(BaseViewSet):
 
 # ---------- ATTENDANCE RECORD ----------
 class AttendanceRecordViewSet(BaseViewSet):
-    queryset = AttendanceRecord.objects.all()
     serializer_class = AttendanceRecordSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        qs = AttendanceRecord.objects.all()
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(course__instructor=user)
+        if user.role == 'STUDENT':
+            return qs.filter(student=user)
+        return qs
 
 # ---------- INSTRUCTOR EVALUATION ----------
 class InstructorEvaluationViewSet(BaseViewSet):
