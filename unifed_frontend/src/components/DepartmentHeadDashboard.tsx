@@ -939,12 +939,18 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                     className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
                   >
                     <option value="">— Choose an instructor —</option>
-                    {instructors.map((i) => (
-                      <option key={i.id} value={i.id}>
-                        {i.fullName}
-                        {i.specialization ? ` • ${i.specialization}` : ""}
-                      </option>
-                    ))}
+                   {instructors
+  .filter(
+    (i) =>
+      String(i.department || "").trim().toLowerCase() ===
+      String(user.department || "").trim().toLowerCase()
+  )
+  .map((i) => (
+    <option key={i.id} value={i.id}>
+      {i.fullName}
+      {i.specialization ? ` • ${i.specialization}` : ""}
+    </option>
+  ))}
                   </select>
                 </div>
 
@@ -1139,4 +1145,4 @@ function RatingBadge({ average }: { average: number | null }) {
       REVIEW
     </span>
   );
-}
+} 

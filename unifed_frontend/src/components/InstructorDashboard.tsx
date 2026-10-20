@@ -210,10 +210,11 @@
         const allCourses = Array.isArray(coursesData) ? coursesData : [];
         // Backend (CourseViewSet.get_queryset) already filters by instructor.
         // Do NOT fall back to allCourses — that would leak other instructors' courses.
-        const myCourses = allCourses.filter(
-          (c) => String(c.instructorId) === String(user.id)
-        );
-        setCourses(myCourses);
+const normalizeId = (v: any) => String(v ?? "").replace(/^U_/, "");
+const myCourses = allCourses.filter(
+  (c) => normalizeId(c.instructorId) === normalizeId(user.id)
+);
+setCourses(myCourses);
         const firstCourse = myCourses[0];
         if (firstCourse) {
           setSelectedCourseId(String(firstCourse.id));

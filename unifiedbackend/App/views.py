@@ -130,13 +130,34 @@ class CourseViewSet(BaseViewSet):
         return Course.objects.all()
 
     # ✅ NEW: only Dept Head / Dean / Registrar / Admin can reassign a course.
+    # ✅ Dept Heads may only assign instructors within their own department.
     def _guard_instructor_change(self, request):
-        if 'instructor' in request.data:
-            if request.user.role not in ('DEPARTMENT_HEAD', 'DEAN', 'REGISTRAR', 'ADMIN'):
+        if 'instructor' not in request.data:
+            return None
+
+        if request.user.role not in ('DEPARTMENT_HEAD', 'DEAN', 'REGISTRAR', 'ADMIN'):
+            return Response(
+                {'error': 'Only a Department Head, Dean, Registrar, or Admin can reassign a course.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Dept Heads can only assign instructors in their own department
+        if request.user.role == 'DEPARTMENT_HEAD':
+            new_instructor_id = request.data['instructor']
+            dept = (getattr(request.user, 'department', None) or '').strip()
+            try:
+                new_instructor = User.objects.get(pk=new_instructor_id, role='INSTRUCTOR')
+            except (User.DoesNotExist, ValueError, TypeError):
                 return Response(
-                    {'error': 'Only a Department Head, Dean, Registrar, or Admin can reassign a course.'},
+                    {'error': 'The specified user is not an instructor.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            if (new_instructor.department or '').strip().lower() != dept.lower():
+                return Response(
+                    {'error': f'You can only assign instructors from your department ({dept}).'},
                     status=status.HTTP_403_FORBIDDEN,
                 )
+
         return None
 
     def update(self, request, *args, **kwargs):
