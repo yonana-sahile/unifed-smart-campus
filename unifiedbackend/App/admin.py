@@ -48,7 +48,7 @@ class CustomUserAdmin(BaseUserAdmin):
             'fields': ('username', 'password1', 'password2'),
         }),
         ('Role & Academic', {
-            'fields': ('role', 'student_id', 'instructor_id', 'staff_id', 'officer_id'),
+            'fields': ('role', 'department', 'student_id', 'instructor_id', 'staff_id', 'officer_id'),
         }),
     )
 

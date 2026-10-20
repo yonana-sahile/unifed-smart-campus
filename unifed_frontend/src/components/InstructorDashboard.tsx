@@ -206,16 +206,15 @@
     const loadData = async () => {
       // ✅ STEP 1: Load courses FIRST so the dropdown always populates
       try {
-        const coursesData = await CampusDatabase.getCourses();
+           const coursesData = await CampusDatabase.getCourses();
         const allCourses = Array.isArray(coursesData) ? coursesData : [];
-       // ✅ FIX: Instructors should NEVER fall back to all courses.
-// Backend already filters by instructor. If they have none, show none.
-const myCourses = allCourses.filter(
-  (c) => String(c.instructorId) === String(user.id)
-);
-setCourses(myCourses);
-
-        const firstCourse = coursesToShow[0];
+        // Backend (CourseViewSet.get_queryset) already filters by instructor.
+        // Do NOT fall back to allCourses — that would leak other instructors' courses.
+        const myCourses = allCourses.filter(
+          (c) => String(c.instructorId) === String(user.id)
+        );
+        setCourses(myCourses);
+        const firstCourse = myCourses[0];
         if (firstCourse) {
           setSelectedCourseId(String(firstCourse.id));
         }
@@ -2362,17 +2361,40 @@ setCourses(myCourses);
                                   </span>
                                 </td>
                                 <td className="p-4 text-right">
-                                  {g.status === "CALCULATED" ? (
-                                    <button
-                                      onClick={() => handleSubmitFinalGrade(g.id)}
-                                      className="bg-primary hover:bg-primary-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition"
-                                    >
-                                      Submit Final Grade
-                                    </button>
-                                  ) : (
-                                    <span className="text-xs text-slate-400 font-medium">Ready</span>
-                                  )}
-                                </td>
+  <div className="flex items-center justify-end space-x-2">
+    {g.status === "CALCULATED" && (
+      <button
+        onClick={() => handleSubmitFinalGrade(g.id)}
+        className="bg-primary hover:bg-primary-600 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition"
+      >
+        Submit Final Grade
+      </button>
+    )}
+
+    {g.status === "SUBMITTED" && (
+      <span className="text-xs text-blue-700 font-semibold flex items-center space-x-1 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200">
+        <Clock className="w-3.5 h-3.5" />
+        <span>Awaiting Registrar Approval</span>
+      </span>
+    )}
+
+    {g.status === "APPROVED" && (
+      <span className="text-xs text-emerald-700 font-semibold flex items-center space-x-1 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        <span>Approved & Locked</span>
+      </span>
+    )}
+
+    {g.status === "RETURNED" && (
+      <button
+        onClick={() => handleSubmitFinalGrade(g.id)}
+        className="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold transition"
+      >
+        Resubmit
+      </button>
+    )}
+  </div>
+</td>
                               </tr>
                             ))}
                         </tbody>

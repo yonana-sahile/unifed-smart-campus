@@ -49,10 +49,17 @@ class AuthViewSet(viewsets.GenericViewSet):
 
 # ---------- GENERIC BASE VIEWSET ----------
 class BaseViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
-
+    permission_classes = [permissions.IsAuthenticated]
     def perform_create(self, serializer):
         serializer.save()
+
+
+# ✅ NEW: derive course IDs a student is enrolled in (no Enrollment model exists)
+def _student_course_ids(user):
+    sub = Submission.objects.filter(student=user).values_list('course_id', flat=True)
+    grd = Grade.objects.filter(student=user).values_list('course_id', flat=True)
+    at = ExamAttempt.objects.filter(student=user).values_list('exam__course_id', flat=True)
+    return set(list(sub) + list(grd) + list(at))
 
 
 # ---------- USER ----------
@@ -113,8 +120,36 @@ class CourseViewSet(BaseViewSet):
         if user.role == 'INSTRUCTOR':
             return Course.objects.filter(instructor=user)
         if user.role in ('DEPARTMENT_HEAD', 'DEAN'):
-            return Course.objects.filter(department=user.department)
+            # ✅ Option B: match on the INSTRUCTOR's department (stable) instead of
+            # the free-text Course.department field (typo-prone).
+            dept = (getattr(user, 'department', None) or '').strip()
+            if not dept:
+                return Course.objects.none()
+            return Course.objects.filter(instructor__department__iexact=dept)
+
         return Course.objects.all()
+
+    # ✅ NEW: only Dept Head / Dean / Registrar / Admin can reassign a course.
+    def _guard_instructor_change(self, request):
+        if 'instructor' in request.data:
+            if request.user.role not in ('DEPARTMENT_HEAD', 'DEAN', 'REGISTRAR', 'ADMIN'):
+                return Response(
+                    {'error': 'Only a Department Head, Dean, Registrar, or Admin can reassign a course.'},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        return None
+
+    def update(self, request, *args, **kwargs):
+        denied = self._guard_instructor_change(request)
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = self._guard_instructor_change(request)
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def enroll(self, request, pk=None):
@@ -145,7 +180,7 @@ class CourseMaterialViewSet(BaseViewSet):
         if user.role == 'INSTRUCTOR':
             return qs.filter(course__instructor=user)
         if user.role == 'STUDENT':
-            return qs
+            return qs.filter(course_id__in=_student_course_ids(user))
         return qs
 
 # ---------- ANNOUNCEMENT ----------
@@ -166,7 +201,7 @@ class AssignmentViewSet(BaseViewSet):
         if user.role == 'INSTRUCTOR':
             return qs.filter(course__instructor=user)
         if user.role == 'STUDENT':
-            return qs
+            return qs.filter(course_id__in=_student_course_ids(user))
         return qs
 
 
@@ -210,6 +245,8 @@ class ExamViewSet(BaseViewSet):
             return qs.none()
         if user.role == 'INSTRUCTOR':
             return qs.filter(course__instructor=user)
+        if user.role == 'STUDENT':
+            return qs.filter(course_id__in=_student_course_ids(user))
         return qs
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
@@ -282,16 +319,47 @@ class GradeViewSet(BaseViewSet):
             return qs.filter(course__instructor=user)
         return qs
 
+    # ✅ NEW: APPROVED grades are immutable at the HTTP layer.
+    def _lock_if_approved(self):
+        grade = self.get_object()
+        if grade.status == 'APPROVED':
+            return Response(
+                {'error': 'This grade is APPROVED and locked. Contact the registrar to amend.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def update(self, request, *args, **kwargs):
+        denied = self._lock_if_approved()
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = self._lock_if_approved()
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def approve(self, request, pk=None):
         grade = self.get_object()
         user = request.user
 
-        # ✅ Only these roles can approve grades
-        if user.role not in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'REGISTRAR', 'DEAN'):
+        # ✅ Workflow A: instructors may NOT self-approve.
+        if user.role not in ('REGISTRAR', 'DEAN', 'DEPARTMENT_HEAD'):
             return Response(
-                {'error': 'You do not have permission to approve grades.'},
+                {'error': 'Only a Registrar, Dean, or Department Head can approve grades.'},
                 status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if grade.status == 'APPROVED':
+            return Response({'error': 'This grade is already APPROVED.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if grade.status != 'SUBMITTED':
+            return Response(
+                {'error': f'Only SUBMITTED grades can be approved. Current status: {grade.status}.'},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         grade.status = 'APPROVED'
@@ -560,8 +628,7 @@ _ENV_PATH = _Path(__file__).resolve().parent.parent / ".env"
 _load_dotenv(_ENV_PATH, override=True)
 
 _k = _os.environ.get("GROQ_API_KEY", "")
-print(f"[ai_chat] GROQ_API_KEY length: {len(_k)} | prefix: {(_k[:12] if _k else '(empty)')}")
-
+print(f"[ai_chat] GROQ_API_KEY loaded: {'yes' if _k else 'NO (missing)'}")
 _KB_PATH = _Path(__file__).resolve().parent.parent / "mau_info.txt"
 try:
     with open(_KB_PATH, "r", encoding="utf-8") as _f:
