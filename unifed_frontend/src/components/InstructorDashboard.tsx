@@ -1605,6 +1605,51 @@ setCourses(myCourses);
                     <p className="text-slate-500 text-xs sm:text-sm">Review uploaded files from students, evaluate continuous assessment points, and record feedback.</p>
                   </div>
 
+                  {/* ✅ NEW: Create Assignment form */}
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-3">
+                    <h3 className="font-display font-bold text-slate-800 text-base flex items-center space-x-2 border-b border-slate-100 pb-3">
+                      <PlusCircle className="w-5 h-5 text-primary" />
+                      <span>Create New Assignment</span>
+                    </h3>
+
+                    <div className="space-y-2 text-xs">
+                      <label className="block font-semibold text-slate-700">Title *</label>
+                      <input
+                        type="text"
+                        className="w-full border border-slate-200 rounded-lg p-2.5 text-xs"
+                        placeholder="e.g. Chapter 4 Lab Report"
+                        value={newAssignTitle}
+                        onChange={(e) => setNewAssignTitle(e.target.value)}
+                      />
+
+                      <label className="block font-semibold text-slate-700">Due Date *</label>
+                      <input
+                        type="datetime-local"
+                        className="w-full border border-slate-200 rounded-lg p-2.5 text-xs"
+                        value={newAssignDueDate}
+                        onChange={(e) => setNewAssignDueDate(e.target.value)}
+                      />
+
+                      <label className="block font-semibold text-slate-700">Description *</label>
+                      <textarea
+                        rows={3}
+                        className="w-full border border-slate-200 rounded-lg p-2.5 text-xs"
+                        placeholder="Instructions for students"
+                        value={newAssignDesc}
+                        onChange={(e) => setNewAssignDesc(e.target.value)}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={handleAddAssignment}
+                        disabled={!newAssignTitle || !newAssignDesc}
+                        className="w-full bg-primary hover:bg-primary-600 disabled:bg-slate-200 disabled:text-slate-400 text-white px-5 py-2.5 rounded-lg text-xs font-semibold shadow-sm transition flex items-center justify-center space-x-1.5"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>Publish Assignment to Students</span>
+                      </button>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                       <h3 className="font-display font-bold text-slate-800 text-base">Student Submissions</h3>
