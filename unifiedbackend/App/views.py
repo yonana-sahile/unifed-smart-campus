@@ -11,7 +11,8 @@ from .permissions import *
 import json
 import random
 import string
-
+import uuid
+from datetime import timedelta
 
 # ---------- AUTH ----------
 class AuthViewSet(viewsets.GenericViewSet):
@@ -207,11 +208,21 @@ class ExamViewSet(BaseViewSet):
 
 
 # ---------- EXAM ATTEMPT ----------
+# ---------- EXAM ATTEMPT ----------
 class ExamAttemptViewSet(BaseViewSet):
-    queryset = ExamAttempt.objects.all().order_by('-submitted_at')
     serializer_class = ExamAttemptSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
+    def get_queryset(self):
+        qs = ExamAttempt.objects.all().order_by('-submitted_at')
+        user = self.request.user
 
+        # Students only see their own SUBMITTED attempts
+        if user.role == 'STUDENT':
+            return qs.filter(student=user, status='SUBMITTED')
+
+        # Other roles see everything (for grading/admin)
+        return qs
 # ---------- GRADE ----------
 class GradeViewSet(BaseViewSet):
     queryset = Grade.objects.all()
@@ -400,82 +411,38 @@ class AIViewSet(viewsets.GenericViewSet):
 
     @action(detail=False, methods=['post'])
     def predict_risk(self, request):
-        # Accept both formats from the frontend
         raw_id = request.data.get('studentId') or request.data.get('student_id')
-
         if not raw_id:
-            return Response(
-                {'error': 'studentId is required.'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'studentId is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         raw_id = str(raw_id).strip()
 
-        # 1) Try by the real student_id field (e.g. "MAU1402271")
-        student = User.objects.filter(
-            role='STUDENT',
-            student_id__iexact=raw_id
-        ).first()
-
-        # 2) Fall back to username (e.g. "stud", "henoke")
+        student = User.objects.filter(role='STUDENT', student_id__iexact=raw_id).first()
         if student is None:
-            student = User.objects.filter(
-                role='STUDENT',
-                username__iexact=raw_id
-            ).first()
-
-        # 3) Fall back to Django numeric pk (e.g. "18")
+            student = User.objects.filter(role='STUDENT', username__iexact=raw_id).first()
         if student is None and raw_id.isdigit():
-            student = User.objects.filter(
-                role='STUDENT',
-                id=int(raw_id)
-            ).first()
+            student = User.objects.filter(role='STUDENT', id=int(raw_id)).first()
 
         if student is None:
-            return Response(
-                {
-                    'error': f"Student '{raw_id}' not found",
-                    'available_student_ids': list(
-                        User.objects.filter(role='STUDENT')
-                        .exclude(student_id__isnull=True)
-                        .exclude(student_id='')
-                        .values_list('student_id', flat=True)
-                    )
-                },
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({'error': f"Student '{raw_id}' not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        # Attendance
         attendance = AttendanceRecord.objects.filter(student=student)
-        avg_attendance = (
-            attendance.aggregate(Avg('attendance_percentage'))['attendance_percentage__avg'] or 0
-        )
+        avg_attendance = (attendance.aggregate(Avg('attendance_percentage'))['attendance_percentage__avg'] or 0)
 
-        # Grades
         grades = Grade.objects.filter(student=student)
-        avg_grade = (
-            grades.aggregate(Avg('total_grade'))['total_grade__avg'] or 0
-        )
+        avg_grade = (grades.aggregate(Avg('total_grade'))['total_grade__avg'] or 0)
 
-        # Dropout probability
         dropout_probability = 0.0
-        if avg_attendance < 80:
-            dropout_probability += 0.3
-        if avg_grade < 60:
-            dropout_probability += 0.4
-        if (student.outstanding_fees or 0) > 5000:
-            dropout_probability += 0.2
+        if avg_attendance < 80: dropout_probability += 0.3
+        if avg_grade < 60: dropout_probability += 0.4
+        if (student.outstanding_fees or 0) > 5000: dropout_probability += 0.2
 
         classification = 'NOT_AT_RISK'
-        if dropout_probability > 0.5:
-            classification = 'HIGH_RISK'
-        elif dropout_probability > 0.3:
-            classification = 'MODERATE_RISK'
+        if dropout_probability > 0.5: classification = 'HIGH_RISK'
+        elif dropout_probability > 0.3: classification = 'MODERATE_RISK'
 
-        # Build a display name from the actual User fields
         student_name = f"{student.first_name or ''} {student.last_name or ''}".strip()
-        if not student_name:
-            student_name = student.username
+        if not student_name: student_name = student.username
 
         return Response({
             'student_id': student.student_id or student.id,
@@ -486,15 +453,8 @@ class AIViewSet(viewsets.GenericViewSet):
             'continuous_assessment_avg': avg_grade,
             'dropout_probability': dropout_probability,
             'classification': classification,
-            'key_risk_factors': (
-                ['Low attendance', 'Poor grades']
-                if dropout_probability > 0.3 else []
-            ),
-            'recommended_action': (
-                'Academic intervention required'
-                if dropout_probability > 0.3
-                else 'Continue monitoring'
-            )
+            'key_risk_factors': ['Low attendance', 'Poor grades'] if dropout_probability > 0.3 else [],
+            'recommended_action': 'Academic intervention required' if dropout_probability > 0.3 else 'Continue monitoring'
         })
 
     @action(detail=False, methods=['post'])
@@ -512,11 +472,7 @@ class AIViewSet(viewsets.GenericViewSet):
                 'correctAnswer': 'Option A',
                 'marks': 5
             })
-
-        return Response({
-            'success': True,
-            'questions': questions
-        })
+        return Response({'success': True, 'questions': questions})
 
 
 # ============================================================================
@@ -529,14 +485,12 @@ import httpx
 from groq import Groq
 from rest_framework.decorators import api_view, permission_classes as _perm_classes
 
-# ---------- FORCE .env LOAD ----------
 _ENV_PATH = _Path(__file__).resolve().parent.parent / ".env"
 _load_dotenv(_ENV_PATH, override=True)
 
 _k = _os.environ.get("GROQ_API_KEY", "")
 print(f"[ai_chat] GROQ_API_KEY length: {len(_k)} | prefix: {(_k[:12] if _k else '(empty)')}")
 
-# ---------- KNOWLEDGE BASE ----------
 _KB_PATH = _Path(__file__).resolve().parent.parent / "mau_info.txt"
 try:
     with open(_KB_PATH, "r", encoding="utf-8") as _f:
@@ -546,7 +500,6 @@ except FileNotFoundError:
     _MAU_KNOWLEDGE = ""
     print(f"[ai_chat] WARNING: {_KB_PATH} not found")
 
-# ---------- OFFLINE JSON FALLBACK ----------
 _KB_JSON_PATH = _Path(__file__).resolve().parent.parent / "aiKnowledge.json"
 try:
     if _KB_JSON_PATH.exists():
@@ -580,7 +533,6 @@ def _generic_offline_reply(query: str) -> str:
     )
 
 
-# ---------- Short-message handler ----------
 _SHORT_MESSAGES = {
     "what", "huh", "sorry", "?", "??", "???", "what?", "ok", "okay", "k",
     "yes", "no", "nah", "hmm", "umm", "er",
@@ -596,8 +548,6 @@ _CLARIFICATION_REPLY = (
     "• Campus life"
 )
 
-
-# ---------- GROQ CLIENT ----------
 _groq_client = None
 
 
@@ -782,19 +732,15 @@ def ai_chat(request):
     if not message:
         return Response({"error": "message required"}, status=status.HTTP_400_BAD_REQUEST)
 
-    # ---- Pull prior conversation from the request ----
     history = request.data.get("history") or []
 
-    # ---- STEP 0: ultra-short ambiguous messages ----
     if message.lower() in _SHORT_MESSAGES:
         return Response({"reply": _CLARIFICATION_REPLY, "source": "offline"})
 
-    # ---- STEP 1: Offline JSON fast path ----
     offline = _lookup_local_kb(message)
     if offline:
         return Response({"reply": offline, "source": "offline"})
 
-    # ---- STEP 2: Groq with conversation history ----
     try:
         client = _get_groq_client()
     except RuntimeError as e:
@@ -803,17 +749,14 @@ def ai_chat(request):
             status=status.HTTP_200_OK,
         )
 
-    # Build the message list: system + prior turns + context + current
     groq_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    # Add the last 10 turns of conversation (memory)
     for turn in history[-10:]:
         role = turn.get("role")
         content = turn.get("content")
         if role in ("user", "assistant") and content:
             groq_messages.append({"role": role, "content": content})
 
-    # Add the current message with the knowledge base context
     context_message = f"""<context>
 {_MAU_KNOWLEDGE}
 </context>
@@ -845,7 +788,6 @@ Question: {message}"""
             last_error = f"{model_name}: {e}"
             continue
 
-    # ---- STEP 3: All Groq models failed → offline fallback ----
     return Response(
         {
             "reply": _generic_offline_reply(message),
@@ -866,20 +808,90 @@ class ExamMonitoringEventViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        # Students can only see their own monitoring events
         if user.role == 'STUDENT':
             return ExamMonitoringEvent.objects.filter(attempt__student=user)
-        # Instructors and Admins can see all
         return ExamMonitoringEvent.objects.all()
 
     def perform_create(self, serializer):
         attempt = serializer.validated_data.get('attempt')
-        
-        # ✅ SAFETY: Prevent 500 error if attempt is missing or invalid
         if not attempt:
             raise drf_serializers.ValidationError({"attempt": "Attempt ID is required."})
-            
         if self.request.user.role == 'STUDENT' and attempt.student != self.request.user:
             raise permissions.PermissionDenied("You can only log events for your own exam attempts.")
-            
         serializer.save()
+
+    # ✅ NEW: Only instructors/admin can review events
+    @action(detail=True, methods=['patch'], permission_classes=[permissions.IsAuthenticated])
+    def review(self, request, pk=None):
+        event = self.get_object()
+        
+        if request.user.role == 'STUDENT':
+            return Response({'error': 'Only instructors can review events.'}, status=status.HTTP_403_FORBIDDEN)
+
+        event.review_status = request.data.get('review_status', event.review_status)
+        event.is_resolved = request.data.get('is_resolved', event.is_resolved)
+        event.instructor_notes = request.data.get('instructor_notes', event.instructor_notes)
+        event.reviewed_by = request.user
+        event.save()
+
+        return Response(self.get_serializer(event).data)
+
+
+# ✅ NEW: EXAM MONITORING SETTINGS
+class ExamMonitoringSettingViewSet(viewsets.ModelViewSet):
+    queryset = ExamMonitoringSetting.objects.all()
+    serializer_class = ExamMonitoringSettingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == 'STUDENT':
+            return ExamMonitoringSetting.objects.all()
+        if user.role == 'INSTRUCTOR':
+            return ExamMonitoringSetting.objects.filter(exam__course__instructor=user)
+        return ExamMonitoringSetting.objects.all()
+
+    def create(self, request, *args, **kwargs):
+        if request.user.role == 'STUDENT':
+            return Response({'error': 'Students cannot modify settings.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if request.user.role == 'STUDENT':
+            return Response({'error': 'Students cannot modify settings.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+    
+
+# ---------- FACE VERIFICATION ----------
+class FaceVerificationViewSet(viewsets.GenericViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=False, methods=['post'])
+    def request_token(self, request):
+        if request.user.role != 'STUDENT':
+            return Response({'error': 'Only students can verify.'}, status=status.HTTP_403_FORBIDDEN)
+
+        exam_id = request.data.get('exam_id')
+        if not exam_id:
+            return Response({'error': 'exam_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            exam = Exam.objects.get(id=exam_id)
+        except Exam.DoesNotExist:
+            return Response({'error': 'Exam not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        token_str = str(uuid.uuid4())
+        expires_at = timezone.now() + timedelta(minutes=10)
+
+        FaceVerificationToken.objects.create(
+            student=request.user,
+            exam=exam,
+            token=token_str,
+            expires_at=expires_at,
+        )
+
+        return Response({
+            'token': token_str,
+            'expires_at': expires_at,
+            'message': 'Verification token issued. You may now start the exam.'
+        })

@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import * as faceapi from "@vladmandic/face-api";
-import { Camera, CameraOff, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { CameraOff, AlertTriangle, CheckCircle2 } from "lucide-react";
 
 interface WebcamMonitorProps {
   onEventDetected: (eventType: string, details: string) => void;
+  onResolved: () => void;           // ✅ NEW: Called when face is back or camera reconnects
+  onCriticalWarning: () => void;    // ✅ NEW: Called when a warning lasts > 15 seconds
 }
 
-export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
+export function WebcamMonitor({ onEventDetected, onResolved, onCriticalWarning }: WebcamMonitorProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [streamActive, setStreamActive] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [faceStatus, setFaceStatus] = useState<"LOADING" | "OK" | "NO_FACE" | "MULTI_FACE">("LOADING");
   
-  // Refs to prevent spamming the backend with the same event
   const lastEventRef = useRef<string>("");
   const noFaceTimerRef = useRef<number | null>(null);
+  const criticalTimerRef = useRef<number | null>(null); // ✅ NEW
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -22,11 +24,9 @@ export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
 
     const startCamera = async () => {
       try {
-        // 1. Load the Face Detection Models from a CDN (No need to download files manually)
         const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
         await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
         
-        // 2. Request Camera
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -34,7 +34,6 @@ export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
           onEventDetected("MONITORING_READY", "Camera started successfully");
         }
 
-        // 3. Start Face Detection Loop (every 1 second)
         detectionInterval = setInterval(async () => {
           if (!videoRef.current) return;
           
@@ -51,7 +50,18 @@ export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
             handleEventDebounce("MULTIPLE_FACES", `${detections.length} faces detected`);
           } else {
             setFaceStatus("OK");
-            lastEventRef.current = ""; // Reset event lock when student is back to normal
+            lastEventRef.current = "";
+            
+            // ✅ RESOLVED: Face is back to normal
+            if (criticalTimerRef.current) {
+              clearTimeout(criticalTimerRef.current);
+              criticalTimerRef.current = null;
+            }
+            if (noFaceTimerRef.current) {
+              clearTimeout(noFaceTimerRef.current);
+              noFaceTimerRef.current = null;
+            }
+            onResolved(); 
           }
         }, 1000);
 
@@ -70,34 +80,47 @@ export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
 
     startCamera();
 
-    // Cleanup: Stop camera and interval when exam is submitted or component unmounts
     return () => {
       if (detectionInterval) clearInterval(detectionInterval);
+      if (criticalTimerRef.current) clearTimeout(criticalTimerRef.current);
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
     };
   }, []);
 
-  // Helper: Prevents spamming the same event over and over (e.g. "MULTIPLE_FACES" 20 times a second)
   const handleEventDebounce = (type: string, details: string) => {
-    if (lastEventRef.current === type) return; // Ignore if it's the exact same event
+    if (lastEventRef.current === type) return; 
     
-    // If it's a NO_FACE event, wait 5 seconds before logging to avoid false positives
     if (type === "NO_FACE") {
       if (noFaceTimerRef.current) return;
       noFaceTimerRef.current = window.setTimeout(() => {
         onEventDetected(type, details);
         lastEventRef.current = type;
         noFaceTimerRef.current = null;
+
+        // ✅ NEW: Start 15-second critical timer
+        if (!criticalTimerRef.current) {
+          criticalTimerRef.current = window.setTimeout(() => {
+            onCriticalWarning();
+            criticalTimerRef.current = null;
+          }, 15000);
+        }
       }, 5000);
     } else {
       onEventDetected(type, details);
       lastEventRef.current = type;
+
+      // ✅ NEW: Start 15-second critical timer for MULTIPLE_FACES too
+      if (!criticalTimerRef.current) {
+        criticalTimerRef.current = window.setTimeout(() => {
+          onCriticalWarning();
+          criticalTimerRef.current = null;
+        }, 15000);
+      }
     }
   };
 
-  // If camera fails, show a red box
   if (errorMsg) {
     return (
       <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-start space-x-3 text-red-800">
@@ -110,7 +133,6 @@ export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
     );
   }
 
-  // Otherwise, show the camera preview and status
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 relative">
       <div className="flex items-center justify-between mb-2">
@@ -126,10 +148,9 @@ export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
           autoPlay
           muted
           playsInline
-          className="w-full h-full object-cover scale-x-[-1]" // Mirror image (scale-x-[-1]) so it feels like a mirror
+          className="w-full h-full object-cover scale-x-[-1]" 
         />
         
-        {/* Warning overlay for Multiple Faces */}
         {faceStatus === "MULTI_FACE" && (
           <div className="absolute inset-0 bg-red-900/60 flex flex-col items-center justify-center p-2 text-center">
             <AlertTriangle className="w-6 h-6 text-white mb-1" />
@@ -139,7 +160,6 @@ export function WebcamMonitor({ onEventDetected }: WebcamMonitorProps) {
           </div>
         )}
 
-        {/* Warning overlay for No Face */}
         {faceStatus === "NO_FACE" && (
           <div className="absolute inset-0 bg-amber-900/60 flex flex-col items-center justify-center p-2 text-center">
             <AlertTriangle className="w-6 h-6 text-white mb-1" />

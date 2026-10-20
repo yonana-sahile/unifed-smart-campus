@@ -772,16 +772,63 @@ class ExamMonitoringEvent(models.Model):
         ('CAMERA_DISCONNECTED', 'Camera disconnected'),
         ('CAMERA_UNAVAILABLE', 'Camera permission denied or unavailable'),
         ('MONITORING_READY', 'Camera and monitoring ready'),
-        ('NOISE_DETECTED', 'Loud noise or speaking detected'), # ✅ NEW
+        ('NOISE_DETECTED', 'Loud noise or speaking detected'),
     )
 
     attempt = models.ForeignKey(ExamAttempt, on_delete=models.CASCADE, related_name='monitoring_events')
     event_type = models.CharField(max_length=50, choices=EVENT_TYPES)
     timestamp = models.DateTimeField(auto_now_add=True)
-    details = models.TextField(blank=True, null=True) # e.g., "Chrome 120, Windows 11"
+    details = models.TextField(blank=True, null=True)
+    
+    # ✅ NEW: Review and Resolution fields
+    duration_seconds = models.IntegerField(default=0)
+    is_resolved = models.BooleanField(default=False)
+    requires_review = models.BooleanField(default=False)
+    review_status = models.CharField(
+        max_length=20, 
+        choices=(('PENDING', 'Pending'), ('APPROVED', 'Approved'), ('DISMISSED', 'Dismissed')), 
+        default='PENDING'
+    )
+    instructor_notes = models.TextField(blank=True, null=True)
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_events')
 
     class Meta:
         ordering = ['-timestamp']
 
     def __str__(self):
         return f"{self.event_type} - Attempt {self.attempt.id}"
+
+
+# ---------- EXAM MONITORING SETTINGS ----------
+class ExamMonitoringSetting(models.Model):
+    exam = models.OneToOneField(Exam, on_delete=models.CASCADE, related_name='monitoring_setting')
+    
+    # Feature Toggles
+    webcam_required = models.BooleanField(default=True)
+    detect_multiple_faces = models.BooleanField(default=True)
+    detect_face_visibility = models.BooleanField(default=True)
+    progressive_blur_enabled = models.BooleanField(default=True)
+    
+    # Thresholds (in seconds)
+    face_missing_grace_period = models.IntegerField(default=5, help_text="Seconds before showing a warning")
+    persistent_issue_threshold = models.IntegerField(default=15, help_text="Seconds before blurring the screen")
+    blur_duration = models.IntegerField(default=10, help_text="How long the screen stays blurred after resolution")
+    
+    # Review Criteria
+    require_review_for_multiple_faces = models.BooleanField(default=True)
+    
+    def __str__(self):
+        return f"Settings for {self.exam.exam_title}"
+
+
+# ---------- FACE VERIFICATION TOKEN ----------
+class FaceVerificationToken(models.Model):
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='verification_tokens')
+    exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='verification_tokens')
+    token = models.CharField(max_length=100, unique=True)
+    is_used = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    def __str__(self):
+        return f"Token for {self.student.username} - {self.exam.exam_title}"

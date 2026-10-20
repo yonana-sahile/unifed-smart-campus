@@ -140,6 +140,16 @@ const numericId = (id: string | number, prefix?: string): string => {
   return prefix ? s.replace(new RegExp(`^${prefix}`), '') : s.replace(/^[A-Z]+_/, '');
 };
 
+// ✅ Helper: coerce any ID (numeric, "5", "U_5", "PAY_3", etc.) to a plain integer
+const toPk = (id: string | number | null | undefined): number | null => {
+  if (id == null || id === '') return null;
+  if (typeof id === 'number') return Number.isFinite(id) ? id : null;
+  const digits = String(id).replace(/\D/g, '');
+  if (!digits) return null;
+  const n = parseInt(digits, 10);
+  return Number.isFinite(n) ? n : null;
+};
+
 // ---------- MAPPERS ----------
 const mapUser = (u: any): User => ({
   id: `U_${u.id}`,
@@ -310,7 +320,7 @@ export const saveUsers = (users: User[]): Promise<User[]> =>
   api.put('/users/', users).then(r => r.data);
 
 export const updateUser = (user: User): Promise<User> =>
-  api.put(`/users/${user.id}/`, user).then(r => r.data);
+  api.put(`/users/${numericId(user.id, 'U_')}/`, user).then(r => r.data);
 
 export const addUser = (payload: any): Promise<User> =>
   api.post('/users/', payload).then(r => mapUser(r.data));
@@ -332,10 +342,12 @@ export const login = async (username: string, password: string) => {
 export const logout = () => {
   clearTokens();
 };
+
 // ---------- USER AVATAR UPLOAD ----------
 export const uploadAvatar = (userId: string, base64Image: string): Promise<any> =>
   api.post(`/users/${numericId(userId, 'U_')}/upload_avatar/`, { image: base64Image })
      .then(r => r.data);
+
 // ---------- COURSES ----------
 export const getCourses = (): Promise<Course[]> =>
   api.get('/courses/').then(r => unwrapList<any>(r.data).map(mapCourse));
@@ -437,18 +449,88 @@ export const saveExams = (exams: Exam[]): Promise<Exam[]> =>
 // ---------- EXAM ATTEMPTS ----------
 export const getExamAttempts = (): Promise<ExamAttempt[]> =>
   api.get('/exam-attempts/').then(r => unwrapList<any>(r.data).map(mapExamAttempt));
+
 export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> =>
   api.put('/exam-attempts/', attempts).then(r => r.data);
-export const createExamAttempt = (attempt: any): Promise<ExamAttempt> =>
-  api.post('/exam-attempts/', attempt).then(r => mapExamAttempt(r.data));
-export const updateExamAttempt = (id: string, patch: any): Promise<ExamAttempt> =>
-  api.patch(`/exam-attempts/${numericId(id)}/`, patch).then(r => mapExamAttempt(r.data));
+
+// ✅ FIX: strip "U_5" / "5" → 5 so DRF gets a valid ForeignKey pk
+export const createExamAttempt = (attempt: any): Promise<ExamAttempt> => {
+  const examPk = toPk(attempt.exam);
+  const studentPk = toPk(attempt.student);
+
+  if (examPk == null || studentPk == null) {
+    const msg = `createExamAttempt: invalid IDs — exam=${JSON.stringify(attempt.exam)} student=${JSON.stringify(attempt.student)}`;
+    console.error(msg);
+    return Promise.reject(new Error(msg));
+  }
+
+  const payload = {
+    ...attempt,
+    exam: examPk,
+    student: studentPk,
+  };
+
+  console.log('[createExamAttempt] sending:', payload);
+  return api.post('/exam-attempts/', payload).then(r => mapExamAttempt(r.data));
+};
+export const updateExamAttempt = async (id: string, patch: any): Promise<ExamAttempt> => {
+  const attemptPk = numericId(id);
+
+  try {
+    // First try to PATCH the existing attempt
+    const res = await api.patch(`/exam-attempts/${attemptPk}/`, patch);
+    return mapExamAttempt(res.data);
+  } catch (patchErr: any) {
+    if (patchErr?.response?.status !== 404) {
+      // Real error (400, 401, 500) — bubble it up
+      throw patchErr;
+    }
+
+    // ⚠️ 404: The attempt was deleted. Create a new one from the patch data.
+    console.warn(`⚠️ Attempt #${attemptPk} not found. Creating fresh attempt.`);
+
+    const fallbackPayload: any = {
+      exam: toPk(patch.exam),
+      student: toPk(patch.student),
+      student_name: patch.student_name || patch.studentName || '',
+      exam_title: patch.exam_title || patch.examTitle || '',
+      answers: patch.answers ?? {},
+      score: patch.score ?? 0,
+      status: patch.status ?? 'SUBMITTED',
+      submitted_at: patch.submitted_at ?? new Date().toISOString(),
+    };
+
+    if (fallbackPayload.exam == null || fallbackPayload.student == null) {
+      throw new Error(
+        `Cannot recreate attempt — exam/student IDs missing. ` +
+        `exam=${patch.exam}, student=${patch.student}`
+      );
+    }
+
+    console.log('[updateExamAttempt] fallback POST payload:', fallbackPayload);
+    const created = await api.post('/exam-attempts/', fallbackPayload);
+    return mapExamAttempt(created.data);
+  }
+};
 export const deleteExamAttempt = (id: string): Promise<void> =>
   api.delete(`/exam-attempts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- MONITORING EVENTS ----------
-export const logMonitoringEvent = (data: { attempt: number | string; event_type: string; details: string }): Promise<any> =>
-  api.post('/monitoring-events/', data).then(r => r.data);
+// ✅ FIX: coerce `attempt` to a pk so monitoring-event POSTs don't fail silently
+export const logMonitoringEvent = (data: {
+  attempt: number | string;
+  event_type: string;
+  details: string;
+}): Promise<any> => {
+  const attemptPk = toPk(data.attempt);
+  if (attemptPk == null) {
+    console.warn('[logMonitoringEvent] invalid attempt id:', data.attempt);
+    return Promise.resolve(null);
+  }
+  return api
+    .post('/monitoring-events/', { ...data, attempt: attemptPk })
+    .then(r => r.data);
+};
 
 export const getMonitoringEvents = (): Promise<any[]> =>
   api.get('/monitoring-events/').then(r => unwrapList<any>(r.data));
@@ -545,13 +627,11 @@ export const saveEvaluations = (evaluations: InstructorEvaluation[]): Promise<In
 
 export const addEvaluation = (evaluation: any): Promise<any> => {
   const payload: any = {
-    student: parseInt(String(evaluation.studentId).replace(/\D/g, '')) || evaluation.studentId,
+    student: toPk(evaluation.studentId),
     student_name: evaluation.studentName || '',
-    instructor: parseInt(String(evaluation.instructorId).replace(/\D/g, '')) || evaluation.instructorId,
+    instructor: toPk(evaluation.instructorId),
     instructor_name: evaluation.instructorName || '',
-    course: evaluation.courseId
-      ? parseInt(String(evaluation.courseId).replace(/\D/g, '')) || evaluation.courseId
-      : null,
+    course: evaluation.courseId ? toPk(evaluation.courseId) : null,
     course_code: evaluation.courseCode || '',
     clarity: evaluation.clarity ?? 0,
     punctuality: evaluation.punctuality ?? 0,
@@ -667,8 +747,8 @@ export const addAuditLog = async (
 
   try {
     const res = await api.post('/audit-logs/', {
-      user: userId,
-      user_id: userId,
+      user: numericId(userId, 'U_'),
+      user_id: numericId(userId, 'U_'),
       user_name: userName,
       user_role: userRole,
       action,
@@ -830,7 +910,8 @@ export const CampusDatabase = {
   deleteUser,
   login,
   logout,
- uploadAvatar,
+  uploadAvatar,
+
   // Courses
   getCourses,
   saveCourses,

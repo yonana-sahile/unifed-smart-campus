@@ -13,6 +13,7 @@ export function FaceCaptureModal({ isOpen, onClose, onCapture }: FaceCaptureModa
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (isOpen && !capturedImage) {
@@ -21,6 +22,7 @@ export function FaceCaptureModal({ isOpen, onClose, onCapture }: FaceCaptureModa
     return () => {
       stopCamera();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, capturedImage]);
 
   const startCamera = async () => {
@@ -43,30 +45,51 @@ export function FaceCaptureModal({ isOpen, onClose, onCapture }: FaceCaptureModa
     }
   };
 
-  const takePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-        setCapturedImage(dataUrl);
-        stopCamera();
-      }
+ const takePhoto = () => {
+  if (videoRef.current && canvasRef.current) {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    // Resize to max 400x400 for small file size
+    const maxDim = 400;
+    let w = video.videoWidth;
+    let h = video.videoHeight;
+    if (w > maxDim || h > maxDim) {
+      const ratio = Math.min(maxDim / w, maxDim / h);
+      w = Math.round(w * ratio);
+      h = Math.round(h * ratio);
     }
-  };
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, w, h);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+      console.log("📸 Photo captured. Size (KB):", ((dataUrl.length * 0.75) / 1024).toFixed(1));
+      setCapturedImage(dataUrl);
+      stopCamera();
+    }
+  }
+};
 
   const retakePhoto = () => {
     setCapturedImage(null);
     startCamera();
   };
 
-  const confirmPhoto = () => {
-    if (capturedImage) {
-      onCapture(capturedImage);
+  // ✅ FIX: call onCapture AND onClose so the parent can unmount this modal
+  //    and show the FaceVerificationModal on top.
+  const confirmPhoto = async () => {
+    if (!capturedImage || saving) return;
+    setSaving(true);
+    try {
+      await Promise.resolve(onCapture(capturedImage));
+      onClose();
+    } catch (err) {
+      console.error("FaceCaptureModal: onCapture threw", err);
+      setSaving(false);
+      setError("Failed to save photo. Please try again.");
     }
   };
 
@@ -84,7 +107,8 @@ export function FaceCaptureModal({ isOpen, onClose, onCapture }: FaceCaptureModa
 
         <div className="p-6 flex flex-col items-center space-y-4">
           <p className="text-xs text-slate-500 text-center">
-            Please ensure your face is clearly visible and well-lit. This photo will be used as your reference for online exams.
+            Please ensure your face is clearly visible and well-lit. This photo will be used as
+            your reference for online exams.
           </p>
 
           {error && (
@@ -109,7 +133,11 @@ export function FaceCaptureModal({ isOpen, onClose, onCapture }: FaceCaptureModa
                 </div>
               </>
             ) : (
-              <img src={capturedImage} alt="Captured" className="w-full h-full object-cover scale-x-[-1]" />
+              <img
+                src={capturedImage}
+                alt="Captured"
+                className="w-full h-full object-cover scale-x-[-1]"
+              />
             )}
             <canvas ref={canvasRef} className="hidden" />
           </div>
@@ -128,17 +156,19 @@ export function FaceCaptureModal({ isOpen, onClose, onCapture }: FaceCaptureModa
               <>
                 <button
                   onClick={retakePhoto}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold flex items-center justify-center space-x-2 transition"
+                  disabled={saving}
+                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold flex items-center justify-center space-x-2 transition disabled:opacity-50"
                 >
                   <RefreshCw className="w-4 h-4" />
                   <span>Retake</span>
                 </button>
                 <button
                   onClick={confirmPhoto}
-                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold flex items-center justify-center space-x-2 transition"
+                  disabled={saving}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold flex items-center justify-center space-x-2 transition disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Save Photo</span>
+                  <span>{saving ? "Saving..." : "Save Photo"}</span>
                 </button>
               </>
             )}

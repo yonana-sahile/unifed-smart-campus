@@ -12,7 +12,7 @@ router.register(r'announcements', views.AnnouncementViewSet)
 router.register(r'assignments', views.AssignmentViewSet)
 router.register(r'submissions', views.SubmissionViewSet)
 router.register(r'exams', views.ExamViewSet)
-router.register(r'exam-attempts', views.ExamAttemptViewSet)
+router.register(r'exam-attempts', views.ExamAttemptViewSet, basename='examattempt')
 router.register(r'grades', views.GradeViewSet)
 router.register(r'transcripts', views.TranscriptViewSet)
 router.register(r'attendance', views.AttendanceRecordViewSet)
@@ -32,8 +32,12 @@ router.register(r'media-posts', views.CampusMediaPostViewSet)
 router.register(r'zoom-sessions', views.ZoomClassSessionViewSet)
 router.register(r'ai', views.AIViewSet, basename='ai')
 
-# ✅ ADDED: Monitoring Events
+# ✅ Monitoring
 router.register(r'monitoring-events', views.ExamMonitoringEventViewSet, basename='monitoring-events')
+router.register(r'monitoring-settings', views.ExamMonitoringSettingViewSet, basename='monitoring-settings')
+
+# ✅ Face Verification
+router.register(r'face-verification', views.FaceVerificationViewSet, basename='face-verification')
 
 urlpatterns = [
     path('ai/chat/', views.ai_chat, name='ai-chat'),

@@ -147,16 +147,9 @@ class ExamSerializer(serializers.ModelSerializer):
         }
 
     def create(self, validated_data):
-        import sys
-        print("=" * 60, file=sys.stderr)
-        print("[ExamSerializer.create] CALLED", file=sys.stderr)
-        print("[ExamSerializer.create] keys:", list(validated_data.keys()), file=sys.stderr)
         questions = validated_data.pop('questions', [])
-        print(f"[ExamSerializer.create] questions count: {len(questions)}", file=sys.stderr)
         exam = Exam.objects.create(**validated_data)
         exam.questions.set(questions)
-        print(f"[ExamSerializer.create] exam {exam.id} now has {exam.questions.count()} questions", file=sys.stderr)
-        print("=" * 60, file=sys.stderr)
         return exam
 
     def update(self, instance, validated_data):
@@ -170,6 +163,9 @@ class ExamSerializer(serializers.ModelSerializer):
 
 
 # ---------- EXAM ATTEMPT ----------
+# ✅ FIXED: Removed broken validate_student / validate_exam methods.
+#    DRF's PrimaryKeyRelatedField already converts "19" → <User>, "15" → <Exam>
+#    BEFORE these validators run, so they were always raising "Invalid ... reference".
 class ExamAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamAttempt
@@ -187,11 +183,14 @@ class ExamAttemptSerializer(serializers.ModelSerializer):
         exam = validated_data.get('exam')
         student = validated_data.get('student')
 
+        # Auto-fill human-readable copies so the model's non-blank CharFields pass
         if exam and not validated_data.get('exam_title'):
             validated_data['exam_title'] = exam.exam_title
 
         if student and not validated_data.get('student_name'):
-            validated_data['student_name'] = student.full_name or student.username
+            validated_data['student_name'] = (
+                getattr(student, 'full_name', None) or student.username or 'Student'
+            )
 
         return super().create(validated_data)
 
@@ -352,3 +351,10 @@ class ExamMonitoringEventSerializer(serializers.ModelSerializer):
         model = ExamMonitoringEvent
         fields = '__all__'
         read_only_fields = ['id', 'timestamp']
+
+
+# ✅ NEW: EXAM MONITORING SETTINGS
+class ExamMonitoringSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExamMonitoringSetting
+        fields = '__all__'

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { User } from "../types";
 import { useTheme } from "../context/ThemeContext";
 import { Clock, Shield, Award, Calendar, Bell, Globe, CheckCircle2, ChevronDown, BookOpen, Sun, Moon, UserCog, Camera, Edit3, Menu, X } from "lucide-react";
@@ -8,8 +8,6 @@ import { UpdateProfileModal } from "./UpdateProfileModal";
 
 /**
  * Official Federal Democratic Republic of Ethiopia Flag Component
- * Rendered with exact SVG geometry, authentic tricolor ratios (#078930 Green, #FCDD09 Yellow, #DA121A Red),
- * and the central Blue Star Emblem with radiant golden rays.
  */
 export function EthiopianFlag({
   className = "w-6 h-4",
@@ -56,18 +54,7 @@ export function EthiopianFlag({
             <line x1="60" y1="30" x2="52.36" y2="19.48" />
           </g>
           <polygon
-            points="
-              60,19
-              62.64,26.36
-              70.46,26.6
-              64.28,31.39
-              66.47,38.9
-              60,34.5
-              53.53,38.9
-              55.72,31.39
-              49.54,26.6
-              57.36,26.36
-            "
+            points="60,19 62.64,26.36 70.46,26.6 64.28,31.39 66.47,38.9 60,34.5 53.53,38.9 55.72,31.39 49.54,26.6 57.36,26.36"
             fill="#FCDD09"
             stroke="#FCDD09"
             strokeWidth="0.5"
@@ -117,21 +104,13 @@ export function DigitalClock({ className = "" }: { className?: string }) {
 
       <div className="flex flex-col text-left leading-tight">
         <div className="flex items-baseline space-x-0.5 font-mono">
-          <span className="text-[11px] sm:text-xs font-bold text-amber-300 tracking-tight">
-            {hours}
-          </span>
+          <span className="text-[11px] sm:text-xs font-bold text-amber-300 tracking-tight">{hours}</span>
           <span className="text-amber-400 font-bold animate-pulse text-[11px] sm:text-xs">:</span>
-          <span className="text-[11px] sm:text-xs font-bold text-amber-300 tracking-tight">
-            {minutes}
-          </span>
+          <span className="text-[11px] sm:text-xs font-bold text-amber-300 tracking-tight">{minutes}</span>
           <span className="text-amber-400 font-bold animate-pulse text-[11px] sm:text-xs">:</span>
-          <span className="text-[10px] font-semibold text-amber-400/90 tracking-tight">
-            {seconds}
-          </span>
+          <span className="text-[10px] font-semibold text-amber-400/90 tracking-tight">{seconds}</span>
           {!is24Hour && (
-            <span className="text-[8px] font-bold text-amber-200/90 bg-amber-500/25 px-1 py-0.2 rounded ml-1">
-              {ampm}
-            </span>
+            <span className="text-[8px] font-bold text-amber-200/90 bg-amber-500/25 px-1 py-0.2 rounded ml-1">{ampm}</span>
           )}
         </div>
         <div className="flex items-center space-x-1 text-[8px] sm:text-[9px] font-mono text-slate-400">
@@ -210,259 +189,119 @@ export function UniversitySeal({
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
         >
-        <defs>
-          <linearGradient id="mauSkyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#1cd0ff" />
-            <stop offset="50%" stopColor="#00bdf7" />
-            <stop offset="100%" stopColor="#00a3e0" />
-          </linearGradient>
+          <defs>
+            <linearGradient id="mauSkyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#1cd0ff" />
+              <stop offset="50%" stopColor="#00bdf7" />
+              <stop offset="100%" stopColor="#00a3e0" />
+            </linearGradient>
+            <linearGradient id="mauWheatGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#d97706" />
+              <stop offset="50%" stopColor="#f59e0b" />
+              <stop offset="100%" stopColor="#fde047" />
+            </linearGradient>
+            <linearGradient id="mauGearGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#f1f5f9" />
+              <stop offset="50%" stopColor="#cbd5e1" />
+              <stop offset="100%" stopColor="#64748b" />
+            </linearGradient>
+            <linearGradient id="mauFlameGradient" x1="0%" y1="100%" x2="0%" y2="0%">
+              <stop offset="0%" stopColor="#b91c1c" />
+              <stop offset="35%" stopColor="#dc2626" />
+              <stop offset="70%" stopColor="#f97316" />
+              <stop offset="100%" stopColor="#fbbf24" />
+            </linearGradient>
+            <linearGradient id="mauMountainGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#854d0e" />
+              <stop offset="40%" stopColor="#65a30d" />
+              <stop offset="100%" stopColor="#4d7c0f" />
+            </linearGradient>
+            <clipPath id="mauDiamondClip">
+              <polygon points="100,6 194,100 100,194 6,100" />
+            </clipPath>
+            <path id="mauAmharicPath" d="M 28,95 L 94,29" />
+            <path id="mauEnglishPath" d="M 106,29 L 174,97" />
+          </defs>
 
-          <linearGradient id="mauWheatGradient" x1="0%" y1="100%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#d97706" />
-            <stop offset="50%" stopColor="#f59e0b" />
-            <stop offset="100%" stopColor="#fde047" />
-          </linearGradient>
+          <polygon points="100,6 194,100 100,194 6,100" fill="url(#mauSkyGradient)" stroke="#008cb8" strokeWidth="1.5" />
+          <polygon points="100,10 190,100 100,190 10,100" fill="none" stroke="#ffffff" strokeWidth="0.8" strokeOpacity="0.4" />
 
-          <linearGradient id="mauGearGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#f1f5f9" />
-            <stop offset="50%" stopColor="#cbd5e1" />
-            <stop offset="100%" stopColor="#64748b" />
-          </linearGradient>
+          <g transform="translate(100, 36)" stroke="#0284c7" strokeWidth="1.8" fill="none">
+            <ellipse cx="0" cy="0" rx="6.5" ry="15" />
+            <ellipse cx="0" cy="0" rx="6.5" ry="15" transform="rotate(60)" />
+            <ellipse cx="0" cy="0" rx="6.5" ry="15" transform="rotate(-60)" />
+            <circle cx="0" cy="0" r="2.2" fill="#0284c7" />
+          </g>
 
-          <linearGradient id="mauFlameGradient" x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" stopColor="#b91c1c" />
-            <stop offset="35%" stopColor="#dc2626" />
-            <stop offset="70%" stopColor="#f97316" />
-            <stop offset="100%" stopColor="#fbbf24" />
-          </linearGradient>
-
-          <linearGradient id="mauMountainGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#854d0e" />
-            <stop offset="40%" stopColor="#65a30d" />
-            <stop offset="100%" stopColor="#4d7c0f" />
-          </linearGradient>
-
-          <clipPath id="mauDiamondClip">
-            <polygon points="100,6 194,100 100,194 6,100" />
-          </clipPath>
-
-          <path id="mauAmharicPath" d="M 28,95 L 94,29" />
-          <path id="mauEnglishPath" d="M 106,29 L 174,97" />
-        </defs>
-
-        <polygon
-          points="100,6 194,100 100,194 6,100"
-          fill="url(#mauSkyGradient)"
-          stroke="#008cb8"
-          strokeWidth="1.5"
-        />
-
-        <polygon
-          points="100,10 190,100 100,190 10,100"
-          fill="none"
-          stroke="#ffffff"
-          strokeWidth="0.8"
-          strokeOpacity="0.4"
-        />
-
-        <g transform="translate(100, 36)" stroke="#0284c7" strokeWidth="1.8" fill="none">
-          <ellipse cx="0" cy="0" rx="6.5" ry="15" />
-          <ellipse cx="0" cy="0" rx="6.5" ry="15" transform="rotate(60)" />
-          <ellipse cx="0" cy="0" rx="6.5" ry="15" transform="rotate(-60)" />
-          <circle cx="0" cy="0" r="2.2" fill="#0284c7" />
-        </g>
-
-        <text
-          fill="#dc2626"
-          fontSize="11"
-          fontWeight="900"
-          letterSpacing="0.4"
-          style={{ textShadow: "0 0 1px #ffffff" }}
-        >
-          <textPath href="#mauAmharicPath" startOffset="50%" textAnchor="middle">
-            መቅደላ አምባ ዩኒቨርሲቲ
-          </textPath>
-        </text>
-
-        <text
-          fill="#dc2626"
-          fontSize="9.5"
-          fontWeight="800"
-          fontFamily="sans-serif"
-          letterSpacing="0.2"
-          style={{ textShadow: "0 0 1px #ffffff" }}
-        >
-          <textPath href="#mauEnglishPath" startOffset="50%" textAnchor="middle">
-            Mekdela Amba University
-          </textPath>
-        </text>
-
-        <g clipPath="url(#mauDiamondClip)">
-          <path
-            d="M 50,150 L 75,130 L 100,122 L 125,130 L 150,150 L 100,194 Z"
-            fill="url(#mauMountainGradient)"
-          />
-          <path
-            d="M 85,132 C 85,115 92,102 100,102 C 108,102 115,115 115,132 Z"
-            fill="#0284c7"
-            fillOpacity="0.35"
-          />
-          <circle cx="100" cy="120" r="14" fill="#0369a1" fillOpacity="0.25" />
-        </g>
-
-        <g>
-          <path
-            d="M 80,146 C 72,130 68,110 74,90 C 78,82 86,76 96,74"
-            fill="none"
-            stroke="#d97706"
-            strokeWidth="1.8"
-          />
-          {[
-            { cx: 80, cy: 142, rx: 4, ry: 7, rot: -25 },
-            { cx: 75, cy: 132, rx: 4.5, ry: 7.5, rot: -35 },
-            { cx: 72, cy: 121, rx: 4.5, ry: 7.5, rot: -45 },
-            { cx: 71, cy: 110, rx: 4.5, ry: 7.5, rot: -55 },
-            { cx: 72, cy: 99, rx: 4.5, ry: 7.5, rot: -65 },
-            { cx: 76, cy: 89, rx: 4, ry: 7, rot: -75 },
-            { cx: 83, cy: 81, rx: 3.5, ry: 6.5, rot: -85 },
-            { cx: 92, cy: 76, rx: 3, ry: 6, rot: -95 },
-          ].map((grain, idx) => (
-            <ellipse
-              key={idx}
-              cx={grain.cx}
-              cy={grain.cy}
-              rx={grain.rx}
-              ry={grain.ry}
-              transform={`rotate(${grain.rot} ${grain.cx} ${grain.cy})`}
-              fill="url(#mauWheatGradient)"
-              stroke="#b45309"
-              strokeWidth="0.6"
-            />
-          ))}
-          <path
-            d="M 72,100 L 60,92 M 76,90 L 66,80 M 83,82 L 76,70 M 92,76 L 90,64"
-            stroke="#d97706"
-            strokeWidth="0.8"
-            strokeLinecap="round"
-          />
-        </g>
-
-        <g>
-          <path
-            d="M 124,146 C 132,130 136,110 130,90 C 126,82 118,76 108,74"
-            fill="none"
-            stroke="#475569"
-            strokeWidth="3.5"
-          />
-          <path
-            d="M 124,146 C 132,130 136,110 130,90 C 126,82 118,76 108,74"
-            fill="none"
-            stroke="url(#mauGearGradient)"
-            strokeWidth="2.5"
-          />
-          {[
-            { x: 126, y: 142, angle: 25 },
-            { x: 131, y: 132, angle: 35 },
-            { x: 134, y: 121, angle: 45 },
-            { x: 135, y: 110, angle: 55 },
-            { x: 133, y: 99, angle: 65 },
-            { x: 129, y: 89, angle: 75 },
-            { x: 122, y: 80, angle: 85 },
-            { x: 112, y: 75, angle: 95 },
-          ].map((tooth, idx) => (
-            <rect
-              key={idx}
-              x={tooth.x - 2.5}
-              y={tooth.y - 2}
-              width="5"
-              height="4"
-              rx="0.8"
-              transform={`rotate(${tooth.angle} ${tooth.x} ${tooth.y})`}
-              fill="#e2e8f0"
-              stroke="#475569"
-              strokeWidth="0.7"
-            />
-          ))}
-        </g>
-
-        <g>
-          <path
-            d="M 92,126 L 108,126 L 105,142 L 95,142 Z"
-            fill="#0369a1"
-            stroke="#075985"
-            strokeWidth="0.8"
-          />
-          <line x1="100" y1="142" x2="100" y2="152" stroke="#0369a1" strokeWidth="3" strokeLinecap="round" />
-
-          <path
-            d="M 100,78 C 94,92 90,106 94,124 C 98,126 102,126 106,124 C 110,106 106,92 100,78 Z"
-            fill="url(#mauFlameGradient)"
-          />
-          <path
-            d="M 97,88 C 93,98 92,108 96,122 C 98,114 96,104 97,88 Z"
-            fill="#ef4444"
-          />
-          <path
-            d="M 103,88 C 107,98 108,108 104,122 C 102,114 104,104 103,88 Z"
-            fill="#ea580c"
-          />
-          <path
-            d="M 100,94 C 97,104 97,112 100,123 C 103,112 103,104 100,94 Z"
-            fill="#fde047"
-          />
-        </g>
-
-        <g transform="translate(100, 146)">
-          <path
-            d="M -32,0 C -18,-5 -6,-2 0,2 C 6,-2 18,-5 32,0 L 32,16 C 18,11 6,14 0,18 C -6,14 -18,11 -32,16 Z"
-            fill="#0f172a"
-          />
-          <path
-            d="M -30,-1 C -16,-6 -5,-3 0,1 C 5,-3 16,-6 30,-1 L 30,14 C 16,9 5,12 0,16 C -5,12 -16,9 -30,14 Z"
-            fill="#ffffff"
-            stroke="#334155"
-            strokeWidth="0.8"
-          />
-          <line x1="0" y1="1" x2="0" y2="16" stroke="#0f172a" strokeWidth="1.2" />
-
-          <line x1="-24" y1="3" x2="-6" y2="1" stroke="#64748b" strokeWidth="0.8" />
-          <line x1="-24" y1="6" x2="-6" y2="4" stroke="#64748b" strokeWidth="0.8" />
-          <line x1="-24" y1="9" x2="-8" y2="7" stroke="#64748b" strokeWidth="0.8" />
-          <line x1="6" y1="1" x2="24" y2="3" stroke="#64748b" strokeWidth="0.8" />
-          <line x1="6" y1="4" x2="24" y2="6" stroke="#64748b" strokeWidth="0.8" />
-          <line x1="8" y1="7" x2="24" y2="9" stroke="#64748b" strokeWidth="0.8" />
-        </g>
-
-        <g transform="translate(100, 175)">
-          <text
-            x="0"
-            y="0"
-            textAnchor="middle"
-            fill="#facc15"
-            stroke="#facc15"
-            strokeWidth="3.5"
-            strokeLinejoin="round"
-            fontSize="15"
-            fontWeight="900"
-            fontFamily="sans-serif"
-            letterSpacing="1"
-          >
-            MAU
+          <text fill="#dc2626" fontSize="11" fontWeight="900" letterSpacing="0.4" style={{ textShadow: "0 0 1px #ffffff" }}>
+            <textPath href="#mauAmharicPath" startOffset="50%" textAnchor="middle">መቅደላ አምባ ዩኒቨርሲቲ</textPath>
           </text>
-          <text
-            x="0"
-            y="0"
-            textAnchor="middle"
-            fill="#dc2626"
-            fontSize="15"
-            fontWeight="900"
-            fontFamily="sans-serif"
-            letterSpacing="1"
-          >
-            MAU
+          <text fill="#dc2626" fontSize="9.5" fontWeight="800" fontFamily="sans-serif" letterSpacing="0.2" style={{ textShadow: "0 0 1px #ffffff" }}>
+            <textPath href="#mauEnglishPath" startOffset="50%" textAnchor="middle">Mekdela Amba University</textPath>
           </text>
-        </g>
-      </svg>
+
+          <g clipPath="url(#mauDiamondClip)">
+            <path d="M 50,150 L 75,130 L 100,122 L 125,130 L 150,150 L 100,194 Z" fill="url(#mauMountainGradient)" />
+            <path d="M 85,132 C 85,115 92,102 100,102 C 108,102 115,115 115,132 Z" fill="#0284c7" fillOpacity="0.35" />
+            <circle cx="100" cy="120" r="14" fill="#0369a1" fillOpacity="0.25" />
+          </g>
+
+          <g>
+            <path d="M 80,146 C 72,130 68,110 74,90 C 78,82 86,76 96,74" fill="none" stroke="#d97706" strokeWidth="1.8" />
+            {[
+              { cx: 80, cy: 142, rx: 4, ry: 7, rot: -25 },
+              { cx: 75, cy: 132, rx: 4.5, ry: 7.5, rot: -35 },
+              { cx: 72, cy: 121, rx: 4.5, ry: 7.5, rot: -45 },
+              { cx: 71, cy: 110, rx: 4.5, ry: 7.5, rot: -55 },
+              { cx: 72, cy: 99, rx: 4.5, ry: 7.5, rot: -65 },
+              { cx: 76, cy: 89, rx: 4, ry: 7, rot: -75 },
+              { cx: 83, cy: 81, rx: 3.5, ry: 6.5, rot: -85 },
+              { cx: 92, cy: 76, rx: 3, ry: 6, rot: -95 },
+            ].map((grain, idx) => (
+              <ellipse key={idx} cx={grain.cx} cy={grain.cy} rx={grain.rx} ry={grain.ry} transform={`rotate(${grain.rot} ${grain.cx} ${grain.cy})`} fill="url(#mauWheatGradient)" stroke="#b45309" strokeWidth="0.6" />
+            ))}
+            <path d="M 72,100 L 60,92 M 76,90 L 66,80 M 83,82 L 76,70 M 92,76 L 90,64" stroke="#d97706" strokeWidth="0.8" strokeLinecap="round" />
+          </g>
+
+          <g>
+            <path d="M 124,146 C 132,130 136,110 130,90 C 126,82 118,76 108,74" fill="none" stroke="#475569" strokeWidth="3.5" />
+            <path d="M 124,146 C 132,130 136,110 130,90 C 126,82 118,76 108,74" fill="none" stroke="url(#mauGearGradient)" strokeWidth="2.5" />
+            {[
+              { x: 126, y: 142, angle: 25 }, { x: 131, y: 132, angle: 35 },
+              { x: 134, y: 121, angle: 45 }, { x: 135, y: 110, angle: 55 },
+              { x: 133, y: 99, angle: 65 }, { x: 129, y: 89, angle: 75 },
+              { x: 122, y: 80, angle: 85 }, { x: 112, y: 75, angle: 95 },
+            ].map((tooth, idx) => (
+              <rect key={idx} x={tooth.x - 2.5} y={tooth.y - 2} width="5" height="4" rx="0.8" transform={`rotate(${tooth.angle} ${tooth.x} ${tooth.y})`} fill="#e2e8f0" stroke="#475569" strokeWidth="0.7" />
+            ))}
+          </g>
+
+          <g>
+            <path d="M 92,126 L 108,126 L 105,142 L 95,142 Z" fill="#0369a1" stroke="#075985" strokeWidth="0.8" />
+            <line x1="100" y1="142" x2="100" y2="152" stroke="#0369a1" strokeWidth="3" strokeLinecap="round" />
+            <path d="M 100,78 C 94,92 90,106 94,124 C 98,126 102,126 106,124 C 110,106 106,92 100,78 Z" fill="url(#mauFlameGradient)" />
+            <path d="M 97,88 C 93,98 92,108 96,122 C 98,114 96,104 97,88 Z" fill="#ef4444" />
+            <path d="M 103,88 C 107,98 108,108 104,122 C 102,114 104,104 103,88 Z" fill="#ea580c" />
+            <path d="M 100,94 C 97,104 97,112 100,123 C 103,112 103,104 100,94 Z" fill="#fde047" />
+          </g>
+
+          <g transform="translate(100, 146)">
+            <path d="M -32,0 C -18,-5 -6,-2 0,2 C 6,-2 18,-5 32,0 L 32,16 C 18,11 6,14 0,18 C -6,14 -18,11 -32,16 Z" fill="#0f172a" />
+            <path d="M -30,-1 C -16,-6 -5,-3 0,1 C 5,-3 16,-6 30,-1 L 30,14 C 16,9 5,12 0,16 C -5,12 -16,9 -30,14 Z" fill="#ffffff" stroke="#334155" strokeWidth="0.8" />
+            <line x1="0" y1="1" x2="0" y2="16" stroke="#0f172a" strokeWidth="1.2" />
+            <line x1="-24" y1="3" x2="-6" y2="1" stroke="#64748b" strokeWidth="0.8" />
+            <line x1="-24" y1="6" x2="-6" y2="4" stroke="#64748b" strokeWidth="0.8" />
+            <line x1="-24" y1="9" x2="-8" y2="7" stroke="#64748b" strokeWidth="0.8" />
+            <line x1="6" y1="1" x2="24" y2="3" stroke="#64748b" strokeWidth="0.8" />
+            <line x1="6" y1="4" x2="24" y2="6" stroke="#64748b" strokeWidth="0.8" />
+            <line x1="8" y1="7" x2="24" y2="9" stroke="#64748b" strokeWidth="0.8" />
+          </g>
+
+          <g transform="translate(100, 175)">
+            <text x="0" y="0" textAnchor="middle" fill="#facc15" stroke="#facc15" strokeWidth="3.5" strokeLinejoin="round" fontSize="15" fontWeight="900" fontFamily="sans-serif" letterSpacing="1">MAU</text>
+            <text x="0" y="0" textAnchor="middle" fill="#dc2626" fontSize="15" fontWeight="900" fontFamily="sans-serif" letterSpacing="1">MAU</text>
+          </g>
+        </svg>
       )}
     </div>
   );
@@ -493,6 +332,24 @@ export function UniversityTopBar({
 }: UniversityTopBarProps) {
   const [currentUser, setCurrentUser] = useState<User>(initialUser);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  const { theme, toggleTheme } = useTheme();
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    if (isDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isDropdownOpen]);
 
   useEffect(() => {
     setCurrentUser(initialUser);
@@ -531,7 +388,7 @@ export function UniversityTopBar({
     <>
       <header className="university-gradient text-white border-b border-slate-700/80 sticky top-0 z-40 px-3 sm:px-6 py-2 sm:py-3 shadow-lg select-none font-sans">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-2 md:gap-3">
-          {/* Left Side: Mobile Menu Button + University Seal + Bilingual Title + National Flag Badge */}
+          {/* LEFT SIDE */}
           <div className="flex items-center space-x-2 sm:space-x-3.5 min-w-0 w-full md:w-auto">
             {onToggleMobileNav && (
               <button
@@ -566,14 +423,12 @@ export function UniversityTopBar({
             </div>
           </div>
 
-          {/* Right Side: Digital Clock + Academic Calendar + Theme Toggle + User Profile + Logout */}
-          <div className="flex items-center justify-between md:justify-end space-x-1.5 sm:space-x-3 shrink-0 w-full md:w-auto">
-            {/* Live Digital Clock (hidden on tiny screens) */}
+          {/* RIGHT SIDE — Clock, Calendar, and Profile */}
+          <div className="flex items-center justify-between md:justify-end space-x-1.5 sm:space-x-3 shrink-0 w-full md:w-auto md:ml-auto">
             <div className="hidden sm:block">
               <DigitalClock />
             </div>
 
-            {/* Official Academic Calendar Pill (desktop only) */}
             <div className="hidden lg:flex flex-col items-end text-right border-r border-slate-700/80 pr-3 leading-snug">
               <div className="flex items-center space-x-1.5 text-xs font-mono text-slate-200 font-semibold">
                 <EthiopianFlag className="w-3.5 h-2.5 rounded-xs" />
@@ -582,84 +437,150 @@ export function UniversityTopBar({
               <span className="text-[10px] text-slate-400 font-mono">የካቲት 2018 ዓ.ም. (EC)</span>
             </div>
 
-            {/* Theme Toggle Button */}
-            <ThemeToggle />
-
-            {/* User Profile Info */}
-            <div className="flex items-center space-x-1 sm:space-x-2 pl-0.5">
+            {/* ✅ Profile Dropdown — forced to the right edge */}
+            <div className="relative flex items-center" ref={dropdownRef}>
               <button
                 type="button"
-                onClick={() => setIsProfileModalOpen(true)}
-                title="Click to edit profile • መገለጫዎን ለማዘመን ይጫኑ"
-                className="group flex items-center space-x-1.5 sm:space-x-2.5 p-1 rounded-xl hover:bg-white/10 transition text-left cursor-pointer border border-transparent hover:border-amber-400/40"
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                title="Click to open profile menu • የመገለጫ ምናሌ ለመክፈት ይጫኑ"
+                className="group flex items-center space-x-1 p-1 rounded-full hover:bg-white/10 transition cursor-pointer border border-transparent hover:border-amber-400/40"
               >
-                <div className="text-right leading-tight hidden md:block">
-                  <div className="flex items-center justify-end space-x-1.5">
-                    <span className="text-xs sm:text-sm font-bold text-slate-100 group-hover:text-amber-300 transition-colors truncate max-w-[130px]">
-                      {currentUser.fullName}
-                    </span>
-                    <Edit3 className="w-3 h-3 text-slate-400 group-hover:text-amber-300 opacity-70 group-hover:opacity-100 transition-opacity shrink-0" />
-                  </div>
-                  <div className="flex items-center justify-end space-x-1 mt-0.5">
-                    <span className={`text-[9px] sm:text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border ${getBadgeStyle()}`}>
-                      {badgeText || currentUser.role}
-                    </span>
-                    {currentUser.studentId && (
-                      <span className="text-[10px] font-mono text-slate-400 font-medium">
-                        {currentUser.studentId}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Avatar with hover camera icon */}
                 <div className="relative shrink-0">
                   {currentUser.avatarUrl ? (
                     <img
                       src={currentUser.avatarUrl}
                       alt={currentUser.fullName}
                       referrerPolicy="no-referrer"
-                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg border border-amber-500/60 object-cover shadow-xs group-hover:border-amber-400 transition"
+                      className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full border-2 object-cover shadow-xs group-hover:border-amber-400 transition ${
+                        isDropdownOpen ? "border-amber-400 ring-2 ring-amber-400/30" : "border-amber-500/60"
+                      }`}
                     />
                   ) : (
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-amber-400 font-display font-bold text-xs shadow-xs group-hover:border-amber-400 transition">
+                    <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-slate-800 border-2 flex items-center justify-center text-amber-400 font-display font-bold text-sm shadow-xs group-hover:border-amber-400 transition ${
+                      isDropdownOpen ? "border-amber-400 ring-2 ring-amber-400/30" : "border-slate-700"
+                    }`}>
                       {currentUser.fullName.charAt(0)}
                     </div>
                   )}
-                  <div className="absolute -bottom-1 -right-1 bg-amber-500 text-slate-950 p-0.5 rounded-md shadow-xs opacity-80 group-hover:opacity-100 transition-opacity">
-                    <Camera className="w-2 h-2" />
+                </div>
+
+                <ChevronDown className={`hidden sm:block w-3.5 h-3.5 text-slate-400 group-hover:text-amber-300 transition-transform duration-200 ${isDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Dropdown Menu */}
+              {isDropdownOpen && (
+                <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 top-full">
+                  {/* Header */}
+                  <div className="bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-slate-800 dark:to-slate-800/80 p-4 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex items-center space-x-3">
+                      {currentUser.avatarUrl ? (
+                        <img
+                          src={currentUser.avatarUrl}
+                          alt={currentUser.fullName}
+                          referrerPolicy="no-referrer"
+                          className="w-12 h-12 rounded-full border-2 border-amber-400 object-cover shadow-sm"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-amber-400 flex items-center justify-center text-amber-400 font-display font-bold text-lg shadow-sm">
+                          {currentUser.fullName.charAt(0)}
+                        </div>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {currentUser.fullName}
+                        </h3>
+                        <p className="text-[11px] font-mono text-slate-600 dark:text-slate-400 truncate">
+                          {currentUser.email || "student@mau.edu.et"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Menu items */}
+                  <div className="p-2">
+                    {/* Update Profile */}
+                    <button
+                      onClick={() => {
+                        setIsDropdownOpen(false);
+                        setIsProfileModalOpen(true);
+                      }}
+                      className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-slate-800 hover:text-amber-700 dark:hover:text-amber-300 transition group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0 group-hover:bg-amber-200 dark:group-hover:bg-amber-900/50 transition">
+                        <UserCog className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-xs">Update Profile</div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">መገለጫ አዘምን</div>
+                      </div>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                    {/* Theme Toggle */}
+                    <button
+                      onClick={toggleTheme}
+                      className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-left text-sm text-slate-700 dark:text-slate-300 hover:bg-amber-50 dark:hover:bg-slate-800 hover:text-amber-700 dark:hover:text-amber-300 transition group"
+                    >
+                      <div className="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0 group-hover:bg-amber-200 dark:group-hover:bg-amber-900/50 transition">
+                        {theme === "dark" ? (
+                          <Moon className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+                        ) : (
+                          <Sun className="w-4 h-4 text-amber-700 dark:text-amber-400" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-xs">
+                          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+                        </div>
+                        <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                          {theme === "dark" ? "የብርሃን ገጽታ" : "ጨለማ ገጽ"}
+                        </div>
+                      </div>
+                      <div
+                        className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+                          theme === "dark" ? "bg-amber-500" : "bg-slate-300"
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200 ${
+                            theme === "dark" ? "left-[18px]" : "left-0.5"
+                          }`}
+                        />
+                      </div>
+                    </button>
+
+                    <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                    <div className="px-3 py-2">
+                      <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                        {currentUser.role === "STUDENT" ? "Student" : currentUser.role} • {currentUser.role === "STUDENT" ? "ተማሪ" : ""}
+                      </div>
+                      <div className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Mekdela Amba University
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Sign out */}
+                  <div className="bg-slate-50 dark:bg-slate-950/50 p-2 border-t border-slate-200 dark:border-slate-800">
+                    <button
+                      onClick={() => {
+                        setIsDropdownOpen(false);
+                        onLogout();
+                      }}
+                      className="w-full flex items-center justify-center space-x-2 px-3 py-2 rounded-lg text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition"
+                    >
+                      <span>Sign Out • ውጣ</span>
+                    </button>
                   </div>
                 </div>
-              </button>
-
-              {/* Dedicated "Edit Profile" Button (desktop only) */}
-              <button
-                type="button"
-                onClick={() => setIsProfileModalOpen(true)}
-                className="hidden xl:flex items-center space-x-1 px-2 py-1 rounded-md bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-300 text-[11px] font-semibold transition cursor-pointer"
-                title="Update Profile, Name, Password & Avatar"
-              >
-                <UserCog className="w-3 h-3" />
-                <span>Edit Profile</span>
-              </button>
+              )}
             </div>
-
-            <div className="h-5 w-px bg-slate-700/80 hidden sm:block" />
-
-            {/* Logout Button */}
-            <button
-              type="button"
-              onClick={onLogout}
-              className="px-2 sm:px-2.5 py-1 sm:py-1.5 bg-slate-800/90 hover:bg-red-950/60 border border-slate-700 hover:border-red-500/50 text-slate-200 hover:text-red-200 rounded-lg text-[11px] sm:text-xs font-semibold transition duration-150 shadow-xs cursor-pointer shrink-0"
-            >
-              <span className="hidden sm:inline">Sign Out</span>
-              <span className="sm:hidden">Exit</span>
-            </button>
           </div>
         </div>
       </header>
 
-      {/* Update Profile Modal */}
       <UpdateProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}

@@ -8,12 +8,14 @@ import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { ExamResultsModal } from "./ExamResultsModal";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
-  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock
+  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock, LayoutGrid, List
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
 import { WebcamMonitor } from "./WebcamMonitor"; 
 import { FaceCaptureModal } from "./FaceCaptureModal"; 
+import { FaceVerificationModal } from "./FaceVerificationModal";
+
 interface StudentDashboardProps {
   user: User;
   onLogout: () => void;
@@ -45,9 +47,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [evaluationCourseId, setEvaluationCourseId] = useState<string>("");
 
   const [currentExam, setCurrentExam] = useState<Exam | null>(null);
-    const [showFaceCapture, setShowFaceCapture] = useState(false); // ✅ ADD THIS
-  const [pendingExam, setPendingExam] = useState<Exam | null>(null); // ✅ ADD THIS
-  const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null); // ✅ NEW
+  const [isQuestionsBlurred, setIsQuestionsBlurred] = useState(false);
+  const [showFaceCapture, setShowFaceCapture] = useState(false);
+  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | undefined>(user.avatarUrl);
+  const [pendingExam, setPendingExam] = useState<Exam | null>(null);
+  const [showVerification, setShowVerification] = useState(false);
+  const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
   const [examCurrentIndex, setExamCurrentIndex] = useState<number>(0); 
@@ -70,6 +75,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const [courseSearch, setCourseSearch] = useState("");
   const [materialSearch, setMaterialSearch] = useState("");
+  const [materialViewMode, setMaterialViewMode] = useState<"EXTRA_LARGE" | "LIST">("EXTRA_LARGE");
   const [assignmentSearch, setAssignmentSearch] = useState("");
   const [downloadProgress, setDownloadProgress] = useState<{ [id: string]: number }>({});
 
@@ -318,31 +324,76 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     }
   };
 
-  // ✅ NEW: Create the Exam Attempt in the DB *before* the exam starts
   const startExam = async (exam: Exam) => {
+    if (!exam) {
+      alert("No exam selected.");
+      return;
+    }
+
     try {
+      const API = import.meta.env.VITE_API_URL || "https://unifed-smart-campus.onrender.com/api";
+      const token = localStorage.getItem("access_token");
+
+      if (!token) {
+        throw new Error("No access_token in localStorage — please log out and log in again.");
+      }
+
+      // 1. Request verification token
+      const tokenRes = await fetch(`${API}/face-verification/request_token/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ exam_id: exam.id }),
+      });
+
+      if (!tokenRes.ok) {
+        const errText = await tokenRes.text();
+        throw new Error(`Token request failed (${tokenRes.status}): ${errText}`);
+      }
+
+      const tokenData = await tokenRes.json();
+
+      // 2. Create exam attempt
       const createdAttempt: any = await CampusDatabase.createExamAttempt({
-        exam: parseInt(String(exam.id).replace(/\D/g, "")) || exam.id,
-        student: parseInt(String(user.id).replace(/\D/g, "")) || user.id,
+        exam: exam.id,
+        student: user.id,
         student_name: user.fullName,
         answers: {},
         status: "IN_PROGRESS",
       });
 
+      if (!createdAttempt || createdAttempt.id == null) {
+        throw new Error(
+          "Attempt creation returned no id. Server said: " + JSON.stringify(createdAttempt)
+        );
+      }
+
+      // 3. Open exam
       setCurrentAttemptId(Number(createdAttempt.id));
       setCurrentExam(exam);
       setExamAnswers({});
       setExamTimeRemaining(exam.durationMinutes * 60);
-      setExamCurrentIndex(0); 
+      setExamCurrentIndex(0);
       isExamSubmittingRef.current = false;
-      
+
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Start Exam", "Exam", exam.id,
         `Started online exam: ${exam.examTitle}`
       );
     } catch (err: any) {
-      console.error(err);
-      alert("Failed to start exam: " + (err?.response?.data?.detail || err?.message || "Unknown error"));
+      console.error("START EXAM FAILED:", err);
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        (err?.response?.data && typeof err.response.data === "object"
+          ? JSON.stringify(err.response.data)
+          : null) ||
+        err?.message ||
+        String(err);
+
+      alert("Failed to start exam:\n\n" + detail);
     }
   };
 
@@ -371,11 +422,16 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
     try {
       const updated: any = await CampusDatabase.updateExamAttempt(String(currentAttemptId), {
-        answers: examAnswers,
-        score: calculatedScore,
-        status: "SUBMITTED",
-        submitted_at: new Date().toISOString(),
-      });
+  answers: examAnswers,
+  score: calculatedScore,
+  status: "SUBMITTED",
+  submitted_at: new Date().toISOString(),
+  // ✅ Fallback fields: in case the attempt was deleted and we need to recreate it
+  exam: currentExam.id,
+  student: user.id,
+  student_name: user.fullName,
+  exam_title: currentExam.examTitle,
+});
 
       const normalizedAttempt: ExamAttempt = {
         id: String(updated?.id ?? currentAttemptId),
@@ -523,6 +579,55 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       submissions.some((s) => s.assignmentId === a.id && s.studentId === user.id)
     ).length;
     return Math.round((submittedCount / courseAssignments.length) * 100);
+  };
+
+  // ✅ NEW: Preview Material
+  const handlePreviewMaterial = (material: CourseMaterial) => {
+    if (!material.fileData) {
+      alert(`No preview available for "${material.title}". Contact your instructor.`);
+      return;
+    }
+
+    try {
+      const newWindow = window.open();
+      if (newWindow) {
+        const fileData = material.fileData;
+        let content = "";
+
+        if (material.fileType === "Video") {
+          content = `<video src="${fileData}" controls autoplay style="width: 100%; height: 100vh; object-fit: contain;"></video>`;
+        } else if (fileData.startsWith("data:image")) {
+          content = `<img src="${fileData}" alt="${material.title}" style="max-width: 100%; height: auto; margin: 20px auto; display: block; box-shadow: 0 4px 6px rgba(0,0,0,0.1);" />`;
+        } else {
+          content = `<iframe src="${fileData}" style="width: 100%; height: 100vh; border: none;"></iframe>`;
+        }
+
+        newWindow.document.write(`
+          <html>
+            <head>
+              <title>${material.title} - Preview</title>
+              <style>
+                body { margin: 0; padding: 0; background-color: #f1f5f9; font-family: sans-serif; }
+                .header { background: #1e293b; color: white; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; }
+                .header h1 { margin: 0; font-size: 16px; }
+                .header a { color: #fbbf24; text-decoration: none; font-weight: bold; font-size: 14px; }
+              </style>
+            </head>
+            <body>
+              <div class="header">
+                <h1>${material.title}</h1>
+                <a href="${fileData}" download="${material.fileName || 'download'}">Download Original</a>
+              </div>
+              ${content}
+            </body>
+          </html>
+        `);
+        newWindow.document.close();
+      }
+    } catch (err) {
+      alert("Could not open preview. File might be corrupted or too large.");
+      console.error("Preview error:", err);
+    }
   };
 
   const handleRealDownload = async (material: CourseMaterial) => {
@@ -1427,85 +1532,166 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       Access lecture syllabus slides, digital books, and stream video content shared by instructors.
                     </p>
                   </div>
-                  <div className="relative w-full sm:w-72">
-                    <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search by title, type, or description..."
-                      value={materialSearch}
-                      onChange={(e) => setMaterialSearch(e.target.value)}
-                      className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-xs focus:outline-none focus:border-primary"
-                    />
+                  
+                  {/* View Switcher Buttons */}
+                  <div className="flex items-center space-x-2 bg-white border border-slate-200 p-1.5 rounded-xl shadow-sm">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">View:</span>
+                    <button
+                      onClick={() => setMaterialViewMode("EXTRA_LARGE")}
+                      className={`p-1.5 rounded-lg transition ${materialViewMode === "EXTRA_LARGE" ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}
+                      title="Extra Large Icons"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setMaterialViewMode("LIST")}
+                      className={`p-1.5 rounded-lg transition ${materialViewMode === "LIST" ? "bg-primary text-white shadow-sm" : "text-slate-500 hover:bg-slate-100"}`}
+                      title="List View"
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
-                <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                  <div className="divide-y divide-slate-100">
+                {/* Search Bar */}
+                <div className="relative w-full sm:w-72">
+                  <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search by title, type, or description..."
+                    value={materialSearch}
+                    onChange={(e) => setMaterialSearch(e.target.value)}
+                    className="w-full border border-slate-200 rounded-lg pl-9 pr-3 py-2.5 text-xs focus:outline-none focus:border-primary"
+                  />
+                </div>
+
+                {/* ✅ EXTRA LARGE ICONS VIEW */}
+                {materialViewMode === "EXTRA_LARGE" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {filteredMaterials.map((m) => {
                       const associatedCourse = courses.find((c) => c.id === m.courseId);
                       const progress = downloadProgress[m.id];
                       const isDownloading = progress !== undefined && progress < 100;
                       return (
-                        <div
-                          key={m.id}
-                          className="p-4 sm:p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 transition"
-                        >
-                          <div className="space-y-1.5">
-                            <div className="flex items-center space-x-2">
-                              <span className="text-[10px] font-mono font-bold text-primary uppercase bg-blue-50 px-2 py-0.5 rounded">
-                                {associatedCourse?.courseCode || "General"}
-                              </span>
-                              <span className="text-[10px] text-slate-400 font-mono">
-                                Uploaded: {new Date(m.uploadedAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <h3 className="font-semibold text-slate-800 text-sm md:text-base">{m.title}</h3>
-                            <p className="text-xs text-slate-500 line-clamp-2">{m.description}</p>
-                            {isDownloading && (
-                              <div className="w-full max-w-[200px] h-1 bg-slate-100 rounded-full overflow-hidden mt-2">
-                                <div
-                                  className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
-                                  style={{ width: `${progress}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                          <div className="flex items-center space-x-3 flex-shrink-0 w-full md:w-auto">
-                            <span className="text-xs font-semibold px-3 py-1 rounded bg-slate-100 text-slate-600 font-mono">
+                        <div key={m.id} className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col items-center text-center shadow-sm hover:shadow-lg hover:border-primary/30 transition group">
+                          <div className="w-full aspect-square max-h-[160px] bg-slate-50 rounded-xl flex flex-col items-center justify-center border border-slate-100 mb-4 group-hover:bg-blue-50/50 transition">
+                            <FileText className="w-14 h-14 text-slate-300 group-hover:text-primary transition" />
+                            <span className="text-[10px] font-mono font-bold text-slate-400 mt-2 bg-white px-2 py-0.5 rounded shadow-sm border border-slate-100">
                               {m.fileType}
                             </span>
+                          </div>
+                          
+                          <span className="text-[10px] font-mono font-bold text-primary bg-blue-50 px-2 py-0.5 rounded uppercase mb-2">
+                            {associatedCourse?.courseCode || "General"}
+                          </span>
+                          <h3 className="font-semibold text-slate-800 text-sm line-clamp-2 leading-tight w-full">{m.title}</h3>
+                          <p className="text-[10px] text-slate-400 mt-1">Uploaded: {new Date(m.uploadedAt).toLocaleDateString()}</p>
+                          
+                          <div className="mt-4 w-full flex items-center space-x-2">
+                            <button
+                              onClick={() => handlePreviewMaterial(m)}
+                              className="flex-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 py-2 rounded-lg flex items-center justify-center space-x-1.5 text-xs font-bold transition shadow-sm"
+                            >
+                              <BookOpen className="w-3.5 h-3.5" />
+                              <span>View</span>
+                            </button>
                             <button
                               onClick={() => handleRealDownload(m)}
                               disabled={isDownloading}
-                              className="bg-primary hover:bg-primary-600 disabled:opacity-70 text-white p-2.5 rounded-lg flex items-center justify-center transition shadow-sm min-w-[44px] relative overflow-hidden"
+                              className="flex-1 bg-primary hover:bg-primary-600 disabled:opacity-70 text-white py-2 rounded-lg flex items-center justify-center space-x-1.5 text-xs font-bold transition shadow-sm relative overflow-hidden"
                             >
                               {progress !== undefined ? (
-                                <span className="text-[10px] font-mono font-bold relative z-10">
-                                  {progress < 100 ? `${progress}%` : "✓"}
-                                </span>
+                                <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "✓"}</span>
                               ) : (
-                                <Download className="w-4 h-4 relative z-10" />
+                                <>
+                                  <Download className="w-3.5 h-3.5 relative z-10" />
+                                  <span className="relative z-10">Save</span>
+                                </>
                               )}
-                              {isDownloading && (
-                                <div
-                                  className="absolute inset-0 bg-emerald-500/60 transition-all"
-                                  style={{ width: `${progress}%` }}
-                                />
-                              )}
+                              {isDownloading && <div className="absolute inset-0 bg-emerald-500/60 transition-all" style={{ width: `${progress}%` }} />}
                             </button>
                           </div>
                         </div>
                       );
                     })}
-                    {filteredMaterials.length === 0 && (
-                      <div className="text-center py-12 text-slate-400 text-xs">
-                        {materials.length === 0
-                          ? "No materials available yet."
-                          : `No materials match "${materialSearch}"`}
-                      </div>
-                    )}
                   </div>
-                </div>
+                )}
+
+                {/* ✅ LIST VIEW */}
+                {materialViewMode === "LIST" && (
+                  <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className="divide-y divide-slate-100">
+                      {filteredMaterials.map((m) => {
+                        const associatedCourse = courses.find((c) => c.id === m.courseId);
+                        const progress = downloadProgress[m.id];
+                        const isDownloading = progress !== undefined && progress < 100;
+                        return (
+                          <div key={m.id} className="p-4 sm:p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:bg-slate-50/50 transition">
+                            <div className="flex items-start space-x-4 flex-1 min-w-0">
+                              <div className="w-12 h-12 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0 mt-1">
+                                <FileText className="w-6 h-6 text-slate-400" />
+                              </div>
+                              <div className="space-y-1 min-w-0">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-[10px] font-mono font-bold text-primary uppercase bg-blue-50 px-2 py-0.5 rounded">
+                                    {associatedCourse?.courseCode || "General"}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {new Date(m.uploadedAt).toLocaleDateString()}
+                                  </span>
+                                </div>
+                                <h3 className="font-semibold text-slate-800 text-sm md:text-base truncate">{m.title}</h3>
+                                <p className="text-xs text-slate-500 line-clamp-1">{m.description}</p>
+                                {isDownloading && (
+                                  <div className="w-full max-w-[200px] h-1.5 bg-slate-100 rounded-full overflow-hidden mt-2">
+                                    <div className="h-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center space-x-3 shrink-0 w-full md:w-auto justify-end">
+                              <span className="text-xs font-semibold px-3 py-1 rounded bg-slate-100 text-slate-600 font-mono hidden sm:block">
+                                {m.fileType}
+                              </span>
+                              <button
+                                onClick={() => handlePreviewMaterial(m)}
+                                className="bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 px-3 py-2 rounded-lg flex items-center space-x-1.5 text-xs font-bold transition shadow-sm"
+                              >
+                                <BookOpen className="w-3.5 h-3.5" />
+                                <span>View</span>
+                              </button>
+                              <button
+                                onClick={() => handleRealDownload(m)}
+                                disabled={isDownloading}
+                                className="bg-primary hover:bg-primary-600 disabled:opacity-70 text-white px-3 py-2 rounded-lg flex items-center justify-center space-x-1.5 text-xs font-bold transition shadow-sm relative overflow-hidden min-w-[44px]"
+                              >
+                                {progress !== undefined ? (
+                                  <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "✓"}</span>
+                                ) : (
+                                  <>
+                                    <Download className="w-3.5 h-3.5 relative z-10" />
+                                    <span className="relative z-10">Save</span>
+                                  </>
+                                )}
+                                {isDownloading && <div className="absolute inset-0 bg-emerald-500/60 transition-all" style={{ width: `${progress}%` }} />}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Empty State */}
+                {filteredMaterials.length === 0 && (
+                  <div className="text-center py-16 text-slate-400 text-xs bg-white border border-slate-200 rounded-xl shadow-sm">
+                    {materials.length === 0
+                      ? "No materials available yet."
+                      : `No materials match "${materialSearch}"`}
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -1650,10 +1836,18 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   {exams
                     .filter((e) => e.status !== "DRAFT" && (e.isPushed || e.status === "ACTIVE" || e.status === "SCHEDULED"))
                     .map((exam) => {
-                      const attempt = examAttempts.find(
-                        (att) => att.examId === exam.id && att.studentId === user.id
-                      );
-                      const isAttempted = !!attempt;
+                      const attempt = examAttempts
+  .filter(
+    (att) =>
+      String(att.examId).replace(/\D/g, "") === String(exam.id).replace(/\D/g, "") &&
+      String(att.studentId).replace(/\D/g, "") === String(user.id).replace(/\D/g, "")
+  )
+  // Only count SUBMITTED attempts (ignore IN_PROGRESS/stale)
+  .filter((att) => att.status === "SUBMITTED")
+  // Pick the most recent submitted attempt
+  .sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime())[0] || null;
+
+const isAttempted = !!attempt;
                       return (
                         <div key={exam.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
                           <div className="p-6 space-y-4">
@@ -1697,13 +1891,16 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             ) : (
                               <button
   onClick={() => {
-    if (!user.avatarUrl) {
-      setPendingExam(exam);
-      setShowFaceCapture(true);
-    } else {
-      startExam(exam);
-    }
-  }}
+  if (!user.avatarUrl) {
+    // No photo → capture first
+    setPendingExam(exam);
+    setShowFaceCapture(true);
+  } else {
+    // Has photo → verify
+    setPendingExam(exam);
+    setShowVerification(true);
+  }
+}}
   className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
 >
                                 <Play className="w-3 h-3 fill-current" />
@@ -2399,65 +2596,81 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
                 {/* LEFT — Question card */}
                 <div className="lg:col-span-2 space-y-5">
-                  <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-5 sm:p-8">
-
-                    <span className="inline-block text-[11px] font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full mb-5">
-                      Question : {examCurrentIndex + 1}
-                    </span>
-
-                    <div className="flex items-start justify-between gap-4 mb-6">
-                      <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug flex-1">
-                        {q?.questionText}
-                      </h2>
-                      <span className="text-[11px] font-mono bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-bold shrink-0">
-                        {q?.marks} Marks
-                      </span>
+                  {/* ✅ NEW: Warning banner when blurred */}
+                  {isQuestionsBlurred && (
+                    <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
+                      <p className="text-sm font-bold text-red-800">⚠️ Your questions are temporarily hidden.</p>
+                      <p className="text-xs text-red-700 mt-1">
+                        Please return your face to the center of the camera to resume the exam.
+                      </p>
                     </div>
+                  )}
 
-                    {q?.questionType === "short_answer" ? (
-                      <textarea
-                        rows={5}
-                        className="w-full border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl p-3 text-sm"
-                        placeholder="Type your response here..."
-                        value={examAnswers[examCurrentIndex] || ""}
-                        onChange={(e) => handleSelectAnswer(examCurrentIndex, e.target.value)}
-                      />
-                    ) : (
-                      <div className="space-y-3">
-                        {(q?.options || []).map((opt, optIdx) => {
-                          const letter = String.fromCharCode(65 + optIdx); // A,B,C,D
-                          const selected = examAnswers[examCurrentIndex] === opt;
-                          return (
-                            <button
-                              key={optIdx}
-                              onClick={() => handleSelectAnswer(examCurrentIndex, opt)}
-                              className={`w-full flex items-center text-left rounded-xl border-2 transition group ${
-                                selected
-                                  ? "border-[#5b5bd6] bg-[#5b5bd6] text-white"
-                                  : "border-slate-200 bg-white text-slate-800 hover:border-[#5b5bd6]/50"
-                              }`}
-                            >
-                              <span
-                                className={`w-11 h-11 flex items-center justify-center font-bold text-sm rounded-l-lg border-r-2 shrink-0 ${
+                  {/* ✅ NEW: Blur wrapper */}
+                  <div
+                    className={`transition-all duration-500 ${
+                      isQuestionsBlurred ? "blur-md pointer-events-none select-none" : ""
+                    }`}
+                  >
+                    <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-5 sm:p-8">
+                      <span className="inline-block text-[11px] font-semibold text-slate-600 bg-slate-100 px-3 py-1 rounded-full mb-5">
+                        Question : {examCurrentIndex + 1}
+                      </span>
+
+                      <div className="flex items-start justify-between gap-4 mb-6">
+                        <h2 className="text-xl sm:text-2xl font-bold text-slate-900 leading-snug flex-1">
+                          {q?.questionText}
+                        </h2>
+                        <span className="text-[11px] font-mono bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1 rounded-full font-bold shrink-0">
+                          {q?.marks} Marks
+                        </span>
+                      </div>
+
+                      {q?.questionType === "short_answer" ? (
+                        <textarea
+                          rows={5}
+                          className="w-full border border-slate-200 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 rounded-xl p-3 text-sm"
+                          placeholder="Type your response here..."
+                          value={examAnswers[examCurrentIndex] || ""}
+                          onChange={(e) => handleSelectAnswer(examCurrentIndex, e.target.value)}
+                        />
+                      ) : (
+                        <div className="space-y-3">
+                          {(q?.options || []).map((opt, optIdx) => {
+                            const letter = String.fromCharCode(65 + optIdx);
+                            const selected = examAnswers[examCurrentIndex] === opt;
+                            return (
+                              <button
+                                key={optIdx}
+                                onClick={() => handleSelectAnswer(examCurrentIndex, opt)}
+                                className={`w-full flex items-center text-left rounded-xl border-2 transition group ${
                                   selected
-                                    ? "bg-white/15 border-white/20 text-white"
-                                    : "bg-slate-50 border-slate-200 text-slate-700"
+                                    ? "border-[#5b5bd6] bg-[#5b5bd6] text-white"
+                                    : "border-slate-200 bg-white text-slate-800 hover:border-[#5b5bd6]/50"
                                 }`}
                               >
-                                {letter}
-                              </span>
-                              <span className="px-4 py-3 text-sm font-medium flex-1">
-                                {opt}
-                              </span>
-                              {selected && <Check className="w-4 h-4 mr-4 shrink-0" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
+                                <span
+                                  className={`w-11 h-11 flex items-center justify-center font-bold text-sm rounded-l-lg border-r-2 shrink-0 ${
+                                    selected
+                                      ? "bg-white/15 border-white/20 text-white"
+                                      : "bg-slate-50 border-slate-200 text-slate-700"
+                                  }`}
+                                >
+                                  {letter}
+                                </span>
+                                <span className="px-4 py-3 text-sm font-medium flex-1">
+                                  {opt}
+                                </span>
+                                {selected && <Check className="w-4 h-4 mr-4 shrink-0" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Navigation bar */}
+                  {/* Navigation bar (stays outside blur so student can still navigate) */}
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => goTo(0)}
@@ -2499,7 +2712,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   {/* ✅ NEW: Camera Monitoring Widget */}
                   <WebcamMonitor 
                     onEventDetected={async (type, details) => {
-                      if (!currentAttemptId) return; // ✅ Wait for attempt to exist
+                      if (!currentAttemptId) return;
                       try {
                         await CampusDatabase.logMonitoringEvent({
                           attempt: currentAttemptId, 
@@ -2510,6 +2723,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         console.error("Failed to log monitoring event", err);
                       }
                     }} 
+                    onResolved={() => setIsQuestionsBlurred(false)}         // ✅ NEW
+                    onCriticalWarning={() => setIsQuestionsBlurred(true)}   // ✅ NEW
                   />
 
                   {/* Timer card */}
@@ -2602,26 +2817,59 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       />
  {/* ✅ ADD THIS */}
       {showFaceCapture && (
-        <FaceCaptureModal
-          isOpen={showFaceCapture}
-          onClose={() => {
-            setShowFaceCapture(false);
-            setPendingExam(null);
-          }}
-          onCapture={async (base64Image) => {
-            try {
-              await CampusDatabase.uploadAvatar(user.id, base64Image);
-              setShowFaceCapture(false);
-              if (pendingExam) {
-                startExam(pendingExam);
-                setPendingExam(null);
-              }
-            } catch (err) {
-              alert("Failed to save photo. Please try again.");
-            }
-          }}
-        />
-      )}
+  <FaceCaptureModal
+    isOpen={showFaceCapture}
+    onClose={() => {
+      setShowFaceCapture(false);
+    }}
+        onCapture={async (base64Image) => {
+      console.log("🔵 onCapture START. pendingExam =", pendingExam);
+      try {
+        await CampusDatabase.uploadAvatar(user.id, base64Image);
+        console.log("🟢 upload done. Setting local avatar.");
+        setLocalAvatarUrl(base64Image); // ✅ Update local state so the modal can render!
+        setShowFaceCapture(false);
+        if (pendingExam) {
+          console.log("✅ Opening verification modal");
+          setShowVerification(true);
+        }
+     } catch (err: any) {
+  console.error("🔴 AVATAR UPLOAD FAILED:");
+  console.error("  name:", err?.name);
+  console.error("  message:", err?.message);
+  console.error("  code:", err?.code);
+  console.error("  status:", err?.response?.status);
+  console.error("  data:", err?.response?.data);
+  alert("Failed to save photo: " + (err?.message || err?.response?.data?.detail || "Unknown"));
+}
+    }}
+  />
+)}
+
+{/* ✅ NEW: Face Verification Modal */}
+{showVerification && pendingExam && (localAvatarUrl || user.avatarUrl) && (  <FaceVerificationModal
+    isOpen={showVerification}
+savedPhotoUrl={localAvatarUrl || user.avatarUrl || ""}        onVerified={async () => {
+      const examToStart = pendingExam;
+      setShowVerification(false);
+      setPendingExam(null);
+      if (!examToStart) {
+        alert("No exam selected. Please click Start Examination again.");
+        return;
+      }
+      await startExam(examToStart);
+    }}
+    onFailed={(reason) => {
+      alert("Verification failed: " + reason + "\n\nYou cannot take this exam. Please contact your instructor.");
+      setShowVerification(false);
+      setPendingExam(null);
+    }}
+    onClose={() => {
+      setShowVerification(false);
+      setPendingExam(null);
+    }}
+  />
+)}
       <AcademicFooter />
     </div>
   );
