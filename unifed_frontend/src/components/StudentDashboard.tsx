@@ -216,39 +216,40 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       };
       setCourses((prev) => prev.map((c) => (c.id === course.id ? normalized : c)));
 // ✅ Persist the Grade row to the server so _student_course_ids() picks it up
-const createdGrade: any = await CampusDatabase.addGrade({
-  student: Number(String(user.id).replace(/^U_/, "")),
-  student_name: user.fullName,
-  course: Number(String(course.id)),
-  course_title: course.courseTitle,
-  course_code: course.courseCode,
-  credit_hours: course.creditHours,
-  continuous_assessment_score: 0,
-  mid_exam_score: 0,
-  final_exam_score: 0,
-  total_grade: 0,
-  semester: course.semester,
-  status: "CALCULATED",
-});
+      // ✅ Persist the Grade row so _student_course_ids() picks it up
+      const createdGrade: any = await CampusDatabase.addGrade({
+        student: Number(String(user.id).replace(/^U_/, "")),
+        student_name: user.fullName,
+        course: Number(String(course.id)),
+        course_title: course.courseTitle,
+        course_code: course.courseCode,
+        credit_hours: course.creditHours,
+        continuous_assessment_score: 0,
+        mid_exam_score: 0,
+        final_exam_score: 0,
+        total_grade: 0,
+        semester: course.semester,
+        status: "CALCULATED",
+      });
 
-const newGrade: Grade = {
-  id: String(createdGrade?.id ?? "G_" + Date.now()),
-  studentId: user.id,
-  studentName: user.fullName,
-  courseId: course.id,
-  courseTitle: course.courseTitle,
-  courseCode: course.courseCode,
-  creditHours: course.creditHours,
-  continuousAssessmentScore: 0,
-  midExamScore: 0,
-  finalExamScore: 0,
-  totalGrade: 0,
-  letterGrade: "-",
-  gradePoint: 0,
-  semester: course.semester,
-  status: "CALCULATED",
-};
-setGrades((prev) => [...prev, newGrade]);
+      const newGrade: Grade = {
+        id: String(createdGrade?.id ?? "G_" + Date.now()),
+        studentId: user.id,
+        studentName: user.fullName,
+        courseId: course.id,
+        courseTitle: course.courseTitle,
+        courseCode: course.courseCode,
+        creditHours: course.creditHours,
+        continuousAssessmentScore: 0,
+        midExamScore: 0,
+        finalExamScore: 0,
+        totalGrade: 0,
+        letterGrade: "-",
+        gradePoint: 0,
+        semester: course.semester,
+        status: "CALCULATED",
+      };
+      setGrades((prev) => [...prev, newGrade]);
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Enroll Course", "Course", course.id,
         `Student registered for course: ${course.courseCode} - ${course.courseTitle}${force ? " (dev override)" : ""}`
