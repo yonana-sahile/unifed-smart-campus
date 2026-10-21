@@ -32,7 +32,7 @@ services:
       - DJANGO_SETTINGS_MODULE=unifiedbackend.settings
       - DB_NAME=smartcampus_db
       - DB_USER=postgres
-      - DB_PASSWORD=postgres
+      - DB_PASSWORD=tadesse   # FIXED: Matches database password safely
       - DB_HOST=db
       - DB_PORT=5432
     depends_on:
@@ -48,7 +48,7 @@ services:
       - "5173:5173"
     volumes:
       - ./unifed_frontend:/app
-      - /app/node_modules
+      - /app/node_modules   # Protects container packages from host volume overwrites
     environment:
       - VITE_API_URL=http://localhost:8000/api
     depends_on:

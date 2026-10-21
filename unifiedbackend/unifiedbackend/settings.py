@@ -1,8 +1,11 @@
+# unifiedbackend/settings.py
+
 import os
 from pathlib import Path
 from datetime import timedelta
 import dj_database_url
 from dotenv import load_dotenv
+from corsheaders.defaults import default_headers  # ✅ ADDED
 
 load_dotenv()
 
@@ -72,9 +75,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'unifiedbackend.wsgi.application'
 
+# Safe Database configuration enforcing port 5432 for Postgres
+db_port = os.getenv('DB_PORT', '5432')
+if db_port == '3306':  # Prevent accidental MySQL port mapping
+    db_port = '5432'
+
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'tadesse')}@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}/{os.getenv('DB_NAME', 'smartcampus_db')}",
+        default=f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'tadesse')}@{os.getenv('DB_HOST', 'localhost')}:{db_port}/{os.getenv('DB_NAME', 'smartcampus_db')}",
         conn_max_age=600,
         conn_health_checks=True,
     )
@@ -116,6 +124,11 @@ CORS_ALLOWED_ORIGINS = [
 EXTRA_CORS_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '')
 if EXTRA_CORS_ORIGINS:
     CORS_ALLOWED_ORIGINS.extend([origin.strip() for origin in EXTRA_CORS_ORIGINS.split(',') if origin.strip()])
+
+# ✅ ADDED: Allow custom headers (X-API-Key) for external integrations
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-api-key',
+]
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost:5173",

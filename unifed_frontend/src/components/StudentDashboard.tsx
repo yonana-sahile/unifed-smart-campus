@@ -8,29 +8,35 @@ import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { ExamResultsModal } from "./ExamResultsModal";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
-  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock, LayoutGrid, List
+  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock, LayoutGrid, List, ArrowLeft, Maximize2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
-import { WebcamMonitor } from "./WebcamMonitor"; 
-import { FaceCaptureModal } from "./FaceCaptureModal"; 
+import { WebcamMonitor } from "./WebcamMonitor";
+import { FaceCaptureModal } from "./FaceCaptureModal";
 import { FaceVerificationModal } from "./FaceVerificationModal";
 import {
   deriveNotifications,
   getReadIds,
   markRead,
   markAllRead,
-  type DerivedNotification,
 } from "../utils/notifications";
+
 interface StudentDashboardProps {
   user: User;
   onLogout: () => void;
 }
 
+// The full University Clearance System frontend (embedded in the Clearance tab)
+const CLEARANCE_PORTAL_URL = "https://university-clearance-system-lake.vercel.app";
+
+// Compare ids regardless of format ("U_5", "5", 5)
+const digits = (v: unknown) => String(v ?? "").replace(/\D/g, "");
+
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
   const [activeTab, setActiveTab] = useState<
     "dashboard" | "courses" | "materials" | "library" | "exams" | "zoom" | "grades" |
-    "transcript" | "fees" | "copilot" | "facilities" | "alerts"
+    "transcript" | "fees" | "copilot" | "facilities" | "alerts" | "clearance"
   >("dashboard");
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -61,10 +67,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [currentAttemptId, setCurrentAttemptId] = useState<number | null>(null);
   const [examAnswers, setExamAnswers] = useState<{ [index: number]: string }>({});
   const [examTimeRemaining, setExamTimeRemaining] = useState<number>(0);
-  const [examCurrentIndex, setExamCurrentIndex] = useState<number>(0); 
-  
+  const [examCurrentIndex, setExamCurrentIndex] = useState<number>(0);
+
   const examTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const isExamSubmittingRef = useRef(false); 
+  const isExamSubmittingRef = useRef(false);
 
   const [viewingAttempt, setViewingAttempt] = useState<ExamAttempt | null>(null);
 
@@ -88,12 +94,70 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogSort, setCatalogSort] = useState<"code" | "title" | "credits" | "enrollment">("code");
   const [catalogDept, setCatalogDept] = useState("ALL");
-const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
-const [loading, setLoading] = useState(true);  useEffect(() => {
+  const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
+  const [loading, setLoading] = useState(true);
+
+  // Clearance iframe layout
+  const clearanceFrameRef = useRef<HTMLDivElement | null>(null);
+  const [clearanceHeight, setClearanceHeight] = useState<number | null>(null);
+  const [clearanceFullscreen, setClearanceFullscreen] = useState(false);
+
+  // True when an id from the API ("5") refers to the logged-in user ("U_5")
+  const isMe = (id: unknown) => digits(id) !== "" && digits(id) === digits(user.id);
+
+  useEffect(() => {
     loadData();
   }, []);
 
-const loadData = async () => {
+  // Fit the Clearance iframe exactly to the visible screen (no overlap, no double scroll)
+  useEffect(() => {
+    if (activeTab !== "clearance" || clearanceFullscreen) return;
+
+    const measure = () => {
+      const el = clearanceFrameRef.current;
+      if (!el) return;
+      const absoluteTop = el.getBoundingClientRect().top + window.scrollY;
+      const vh = window.visualViewport?.height ?? window.innerHeight;
+      setClearanceHeight(Math.max(480, Math.round(vh - absoluteTop)));
+    };
+
+    window.scrollTo({ top: 0 });
+    measure();
+    const t1 = setTimeout(measure, 150);
+    const t2 = setTimeout(measure, 450); // after the tab animation settles
+    window.addEventListener("resize", measure);
+    window.addEventListener("orientationchange", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("orientationchange", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, [activeTab, clearanceFullscreen, isMobileNavOpen]);
+
+  // Full-screen Clearance: lock page scroll + Escape to exit
+  useEffect(() => {
+    if (!clearanceFullscreen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setClearanceFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [clearanceFullscreen]);
+
+  // Leaving the Clearance tab always exits full screen
+  useEffect(() => {
+    if (activeTab !== "clearance") setClearanceFullscreen(false);
+  }, [activeTab]);
+
+  const loadData = async () => {
     setLoading(true);
     try {
       const results = await Promise.allSettled([
@@ -112,8 +176,8 @@ const loadData = async () => {
 
       const getSafe = (index: number, defaultVal: any) => {
         const res = results[index];
-        return res.status === "fulfilled" && res.value !== undefined && res.value !== null 
-          ? res.value 
+        return res.status === "fulfilled" && res.value !== undefined && res.value !== null
+          ? res.value
           : defaultVal;
       };
 
@@ -169,7 +233,7 @@ const loadData = async () => {
   }, [currentExam, examTimeRemaining]);
 
   const isAlreadyRegistered = (courseId: string) =>
-    grades.some((g) => g.studentId === user.id && g.courseId === courseId);
+    grades.some((g) => isMe(g.studentId) && String(g.courseId) === String(courseId));
 
   const checkPrerequisites = (course: Course): { ok: boolean; missing: string[] } => {
     if (!course.prerequisites || course.prerequisites.length === 0) {
@@ -179,7 +243,7 @@ const loadData = async () => {
     course.prerequisites.forEach((p) => {
       const prereqCode = p.split(" ")[0];
       const passed = grades.some(
-        (g) => g.studentId === user.id && g.courseCode === prereqCode && g.totalGrade >= 50
+        (g) => isMe(g.studentId) && g.courseCode === prereqCode && g.totalGrade >= 50
       );
       if (!passed) missing.push(p);
     });
@@ -224,8 +288,7 @@ const loadData = async () => {
           updated?.enrolled_students_count ?? updated?.enrolledStudentsCount ?? course.enrolledStudentsCount + 1,
       };
       setCourses((prev) => prev.map((c) => (c.id === course.id ? normalized : c)));
-// ✅ Persist the Grade row to the server so _student_course_ids() picks it up
-      // ✅ Persist the Grade row so _student_course_ids() picks it up
+
       const createdGrade: any = await CampusDatabase.addGrade({
         student: Number(String(user.id).replace(/^U_/, "")),
         student_name: user.fullName,
@@ -377,7 +440,7 @@ const loadData = async () => {
         throw new Error(`Token request failed (${tokenRes.status}): ${errText}`);
       }
 
-      const tokenData = await tokenRes.json();
+      await tokenRes.json();
 
       // 2. Create exam attempt
       const createdAttempt: any = await CampusDatabase.createExamAttempt({
@@ -446,16 +509,15 @@ const loadData = async () => {
 
     try {
       const updated: any = await CampusDatabase.updateExamAttempt(String(currentAttemptId), {
-  answers: examAnswers,
-  score: calculatedScore,
-  status: "SUBMITTED",
-  submitted_at: new Date().toISOString(),
-  // ✅ Fallback fields: in case the attempt was deleted and we need to recreate it
-  exam: currentExam.id,
-  student: user.id,
-  student_name: user.fullName,
-  exam_title: currentExam.examTitle,
-});
+        answers: examAnswers,
+        score: calculatedScore,
+        status: "SUBMITTED",
+        submitted_at: new Date().toISOString(),
+        exam: currentExam.id,
+        student: user.id,
+        student_name: user.fullName,
+        exam_title: currentExam.examTitle,
+      });
 
       const normalizedAttempt: ExamAttempt = {
         id: String(updated?.id ?? currentAttemptId),
@@ -469,13 +531,13 @@ const loadData = async () => {
         startedAt: updated.started_at || new Date().toISOString(),
         submittedAt: updated.submitted_at || new Date().toISOString(),
       };
-      
+
       setExamAttempts((prev) => [...prev, normalizedAttempt]);
 
       const allGrades = await CampusDatabase.getGrades();
       const gradeList = Array.isArray(allGrades) ? allGrades : [];
       const existingGrade = gradeList.find(
-        (g) => String(g.studentId) === String(user.id) && String(g.courseId) === String(currentExam.courseId)
+        (g) => isMe(g.studentId) && String(g.courseId) === String(currentExam.courseId)
       );
 
       if (existingGrade) {
@@ -573,11 +635,11 @@ const loadData = async () => {
     }
 
     try {
-      const updatedUser: any = await CampusDatabase.updateUser({
+      await CampusDatabase.updateUser({
         ...user,
         outstandingFees: Math.max(0, (user.outstandingFees || 0) - payAmount),
       } as any);
-      
+
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Pay Fees", "User", user.id,
         `Paid ${payAmount} ETB online. Card digits: ****${cardNumber.slice(-4)}`
@@ -594,18 +656,18 @@ const loadData = async () => {
     }
   };
 
-  const getMyGrades = () => grades.filter((g) => g.studentId === user.id);
+  const getMyGrades = () => grades.filter((g) => isMe(g.studentId));
+
+  const hasSubmitted = (assignmentId: string) =>
+    submissions.some((s) => String(s.assignmentId) === String(assignmentId) && isMe(s.studentId));
 
   const getCourseProgress = (courseId: string) => {
     const courseAssignments = assignments.filter((a) => a.courseId === courseId);
     if (courseAssignments.length === 0) return 100;
-    const submittedCount = courseAssignments.filter((a) =>
-      submissions.some((s) => s.assignmentId === a.id && s.studentId === user.id)
-    ).length;
+    const submittedCount = courseAssignments.filter((a) => hasSubmitted(a.id)).length;
     return Math.round((submittedCount / courseAssignments.length) * 100);
   };
 
-  // ✅ NEW: Preview Material
   const handlePreviewMaterial = (material: CourseMaterial) => {
     if (!material.fileData) {
       alert(`No preview available for "${material.title}". Contact your instructor.`);
@@ -783,51 +845,42 @@ const loadData = async () => {
     .filter((g) => g.totalGrade >= 50)
     .reduce((sum, g) => sum + (g.creditHours || 0), 0);
   const degreeProgressPercent = Math.min(100, Math.round((creditsEarned / totalCreditsRequired) * 100));
-const SkeletonBox = ({ className = "" }: { className?: string }) => (
-  <div className={`bg-slate-200 rounded animate-pulse ${className}`} />
-);
+
+  const SkeletonBox = ({ className = "" }: { className?: string }) => (
+    <div className={`bg-slate-200 rounded animate-pulse ${className}`} />
+  );
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
-// ✅ NEW: compute countdown text + colour for assignment due dates
-const getDueStatus = (dueDate: string) => {
-  const now = new Date();
-  const due = new Date(dueDate);
-  const diffMs = due.getTime() - now.getTime();
-  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays < 0) {
-    const overdue = Math.abs(diffDays);
-    return {
-      label: `Overdue by ${overdue} day${overdue !== 1 ? "s" : ""}`,
-      className: "bg-red-50 text-red-700 border-red-200",
-    };
-  }
-  if (diffDays === 0) {
-    return {
-      label: "Due today",
-      className: "bg-red-50 text-red-700 border-red-200",
-    };
-  }
-  if (diffDays === 1) {
-    return {
-      label: "Due tomorrow",
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
-  if (diffDays <= 7) {
-    return {
-      label: `Due in ${diffDays} days`,
-      className: "bg-amber-50 text-amber-700 border-amber-200",
-    };
-  }
-  return {
-    label: `Due in ${diffDays} days`,
-    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  const getDueStatus = (dueDate: string) => {
+    const now = new Date();
+    const due = new Date(dueDate);
+    const diffMs = due.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) {
+      const overdue = Math.abs(diffDays);
+      return {
+        label: `Overdue by ${overdue} day${overdue !== 1 ? "s" : ""}`,
+        className: "bg-red-50 text-red-700 border-red-200",
+      };
+    }
+    if (diffDays === 0) {
+      return { label: "Due today", className: "bg-red-50 text-red-700 border-red-200" };
+    }
+    if (diffDays === 1) {
+      return { label: "Due tomorrow", className: "bg-amber-50 text-amber-700 border-amber-200" };
+    }
+    if (diffDays <= 7) {
+      return { label: `Due in ${diffDays} days`, className: "bg-amber-50 text-amber-700 border-amber-200" };
+    }
+    return { label: `Due in ${diffDays} days`, className: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   };
-};
+
   const visibleLibraryResources = libraryResources
     .filter((r) => r.accessLevel !== "FACULTY_ONLY")
     .filter((r) => libraryType === "ALL" || r.resourceType === libraryType)
@@ -886,13 +939,12 @@ const getDueStatus = (dueDate: string) => {
     { id: "alerts", label: "Campus Alerts", shortLabel: "Alerts", Icon: Radio },
   ] as const;
 
-  const CLEARANCE_PORTAL_URL = "https://university-clearance-system-lake.vercel.app";
+  const clearancePortalSrc = user.studentId
+    ? `${CLEARANCE_PORTAL_URL}?studentId=${encodeURIComponent(user.studentId)}`
+    : CLEARANCE_PORTAL_URL;
 
   const openClearancePortal = () => {
-    const url = user.studentId
-      ? `${CLEARANCE_PORTAL_URL}?studentId=${encodeURIComponent(user.studentId)}`
-      : CLEARANCE_PORTAL_URL;
-    window.open(url, "_blank", "noopener,noreferrer");
+    window.open(clearancePortalSrc, "_blank", "noopener,noreferrer");
   };
 
   const goToTab = (id: string) => {
@@ -900,86 +952,85 @@ const getDueStatus = (dueDate: string) => {
     setIsMobileNavOpen(false);
   };
 
-  const evaluationCoursesToShow = 
+  const evaluationCoursesToShow =
     courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, "")).length > 0
       ? courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, ""))
       : courses;
-// ✅ NEW: derive notifications from state
-const derivedNotifications = deriveNotifications({
-  user,
-  grades,
-  assignments,
-  exams,
-  materials,
-  announcements,
-  courses,
-});
 
-const notificationsWithReadState = derivedNotifications.map((n) => ({
-  ...n,
-  read: readIds.has(n.id),
-}));
+  const derivedNotifications = deriveNotifications({
+    user,
+    grades,
+    assignments,
+    exams,
+    materials,
+    announcements,
+    courses,
+  });
 
-const handleNotificationClick = (targetTab: string, id: string) => {
-  const next = markRead(id);
-  setReadIds(new Set(next));
-  setActiveTab(targetTab as any);
-};
+  const notificationsWithReadState = derivedNotifications.map((n) => ({
+    ...n,
+    read: readIds.has(n.id),
+  }));
 
-const handleMarkAllRead = () => {
-  const next = markAllRead(derivedNotifications.map((n) => n.id));
-  setReadIds(new Set(next));
-};
+  const handleNotificationClick = (targetTab: string, id: string) => {
+    const next = markRead(id);
+    setReadIds(new Set(next));
+    setActiveTab(targetTab as any);
+  };
 
-// ✅ NEW: Hero greeting helpers
-const pendingTasksCount = assignments.filter(
-  (a) => !submissions.some((s) => s.assignmentId === a.id && s.studentId === user.id)
-).length;
+  const handleMarkAllRead = () => {
+    const next = markAllRead(derivedNotifications.map((n) => n.id));
+    setReadIds(new Set(next));
+  };
 
-const now = new Date();
-const hours = now.getHours();
-const greeting =
-  hours < 12 ? "Good morning" : hours < 17 ? "Good afternoon" : "Good evening";
-const firstName = (user.fullName || "").split(" ")[0] || "Student";
-const todayLabel = now.toLocaleDateString("en-US", {
-  weekday: "long",
-  month: "long",
-  day: "numeric",
-});
+  const pendingTasksCount = assignments.filter((a) => !hasSubmitted(a.id)).length;
 
-const nextExam = exams
-  .filter((e) => {
-    const d = new Date(e.examDate).getTime();
-    return d > now.getTime() && e.status !== "DRAFT";
-  })
-  .sort(
-    (a, b) => new Date(a.examDate).getTime() - new Date(b.examDate).getTime()
-  )[0];
+  const now = new Date();
+  const hours = now.getHours();
+  const greeting =
+    hours < 12 ? "Good morning" : hours < 17 ? "Good afternoon" : "Good evening";
+  const firstName = (user.fullName || "").split(" ")[0] || "Student";
+  const todayLabel = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
 
-const daysToNextExam = nextExam
-  ? Math.max(
-      0,
-      Math.ceil(
-        (new Date(nextExam.examDate).getTime() - now.getTime()) /
-          (1000 * 60 * 60 * 24)
+  const nextExam = exams
+    .filter((e) => {
+      const d = new Date(e.examDate).getTime();
+      return d > now.getTime() && e.status !== "DRAFT";
+    })
+    .sort(
+      (a, b) => new Date(a.examDate).getTime() - new Date(b.examDate).getTime()
+    )[0];
+
+  const daysToNextExam = nextExam
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(nextExam.examDate).getTime() - now.getTime()) /
+            (1000 * 60 * 60 * 24)
+        )
       )
-    )
-  : null;
+    : null;
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="student_dashboard_main">
-<UniversityTopBar
-  user={user}
-  onLogout={onLogout}
-  portalTitle="Student Information System (SIS)"
-  portalSubtitle="College of Informatics & Technology • Software Engineering"
-  badgeText={user.studentId ? `STUDENT • ${user.studentId}` : "STUDENT"}
-  badgeType="student"
-  onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
-  isMobileNavOpen={isMobileNavOpen}
-  notifications={notificationsWithReadState}
-  onNotificationClick={handleNotificationClick}
-  onMarkAllRead={handleMarkAllRead}
-/>
+      <UniversityTopBar
+        user={user}
+        onLogout={onLogout}
+        portalTitle="Student Information System (SIS)"
+        portalSubtitle="College of Informatics & Technology • Software Engineering"
+        badgeText={user.studentId ? `STUDENT • ${user.studentId}` : "STUDENT"}
+        badgeType="student"
+        onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
+        isMobileNavOpen={isMobileNavOpen}
+        notifications={notificationsWithReadState}
+        onNotificationClick={handleNotificationClick}
+        onMarkAllRead={handleMarkAllRead}
+      />
+
       {/* MOBILE SLIDE-OUT DRAWER */}
       <AnimatePresence>
         {isMobileNavOpen && (
@@ -1043,14 +1094,7 @@ const daysToNextExam = nextExam
                 {smartItems.map(({ id, label, Icon }) => (
                   <button
                     key={id}
-                    onClick={() => {
-                      if (id === "clearance") {
-                        openClearancePortal();
-                        setIsMobileNavOpen(false);
-                        return;
-                      }
-                      goToTab(id);
-                    }}
+                    onClick={() => goToTab(id)}
                     className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
                       activeTab === id
                         ? "bg-primary text-white border border-amber-400/20 shadow-xs"
@@ -1083,13 +1127,7 @@ const daysToNextExam = nextExam
         {[...navItems, ...smartItems].map(({ id, shortLabel, Icon }) => (
           <button
             key={id}
-            onClick={() => {
-              if (id === "clearance") {
-                openClearancePortal();
-                return;
-              }
-              setActiveTab(id as any);
-            }}
+            onClick={() => setActiveTab(id as any)}
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
               activeTab === id
                 ? "bg-primary text-white border border-amber-400/40 shadow-xs"
@@ -1141,13 +1179,7 @@ const daysToNextExam = nextExam
             {smartItems.map(({ id, label, Icon, isCopilot }: any) => (
               <button
                 key={id}
-                onClick={() => {
-                  if (id === "clearance") {
-                    openClearancePortal();
-                    return;
-                  }
-                  setActiveTab(id);
-                }}
+                onClick={() => setActiveTab(id)}
                 className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
                   activeTab === id
                     ? isCopilot
@@ -1202,7 +1234,11 @@ const daysToNextExam = nextExam
           </div>
         </aside>
 
-        <main className="flex-1 p-3.5 sm:p-6 md:p-8 overflow-y-auto min-w-0">
+        <main
+          className={`flex-1 min-w-0 ${
+            activeTab === "clearance" ? "p-0 overflow-x-hidden" : "p-3.5 sm:p-6 md:p-8 overflow-y-auto"
+          }`}
+        >
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
               <motion.div
@@ -1212,194 +1248,137 @@ const daysToNextExam = nextExam
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
               >
-{/* ✅ NEW: Hero Greeting Card */}
-<div className="relative rounded-2xl p-5 sm:p-7 bg-gradient-to-br from-blue-950 via-indigo-900 to-slate-900 text-white shadow-xl border border-blue-800/40 overflow-hidden">
-  {/* Decorative glows */}
-  <div className="absolute top-0 right-0 w-72 h-72 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
-  <div className="absolute bottom-0 left-1/3 w-56 h-56 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
+                {/* Hero Greeting Card */}
+                <div className="relative rounded-2xl p-5 sm:p-7 bg-gradient-to-br from-blue-950 via-indigo-900 to-slate-900 text-white shadow-xl border border-blue-800/40 overflow-hidden">
+                  <div className="absolute top-0 right-0 w-72 h-72 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute bottom-0 left-1/3 w-56 h-56 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
 
-  <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
-    <div className="min-w-0">
-      <p className="text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest text-amber-400">
-        {todayLabel}
-      </p>
-      <h1 className="mt-1.5 text-2xl sm:text-3xl font-display font-bold leading-tight">
-        {greeting}, {firstName} <span className="inline-block">👋</span>
-      </h1>
-      <p className="mt-1.5 text-xs sm:text-sm text-blue-200 max-w-xl">
-        {pendingTasksCount > 0
-          ? `You have ${pendingTasksCount} pending task${pendingTasksCount !== 1 ? "s" : ""}${
-              daysToNextExam !== null
-                ? ` and ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam`
-                : ""
-            }.`
-          : daysToNextExam !== null
-          ? `All caught up! ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam.`
-          : "You're all caught up. Keep up the good work."}
-      </p>
-    </div>
+                  <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest text-amber-400">
+                        {todayLabel}
+                      </p>
+                      <h1 className="mt-1.5 text-2xl sm:text-3xl font-display font-bold leading-tight">
+                        {greeting}, {firstName} <span className="inline-block">👋</span>
+                      </h1>
+                      <p className="mt-1.5 text-xs sm:text-sm text-blue-200 max-w-xl">
+                        {pendingTasksCount > 0
+                          ? `You have ${pendingTasksCount} pending task${pendingTasksCount !== 1 ? "s" : ""}${
+                              daysToNextExam !== null
+                                ? ` and ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam`
+                                : ""
+                            }.`
+                          : daysToNextExam !== null
+                          ? `All caught up! ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam.`
+                          : "You're all caught up. Keep up the good work."}
+                      </p>
+                    </div>
 
-    {/* CGPA badge */}
-    <div className="shrink-0 flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/15 rounded-xl px-4 py-3">
-      <div>
-        <p className="text-[9px] font-mono uppercase tracking-wider text-blue-200">
-          CGPA
-        </p>
-        <p className="text-xl font-display font-bold text-white leading-tight">
-          {user.cgpa?.toFixed(2) || "0.00"}
-        </p>
-      </div>
-      <div className="w-px h-9 bg-white/20" />
-      <div>
-        <p className="text-[9px] font-mono uppercase tracking-wider text-blue-200">
-          Credits
-        </p>
-        <p className="text-xl font-display font-bold text-amber-300 leading-tight">
-          {creditsEarned}
-        </p>
-      </div>
-    </div>
-  </div>
-</div>
-{/* ✅ NEW: Summary Stats Row */}
-{loading ? (
-  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-    {[0, 1, 2, 3].map((i) => (
-      <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-2">
-          <SkeletonBox className="w-9 h-9 rounded-lg" />
-          <SkeletonBox className="w-12 h-3" />
-        </div>
-        <SkeletonBox className="w-16 h-7 mb-1" />
-        <SkeletonBox className="w-20 h-3" />
-      </div>
-    ))}
-  </div>
-) : (
-<div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-  {/* Registered Courses */}
-  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
-    <div className="flex items-center justify-between mb-2">
-      <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
-        <BookOpen className="w-4 h-4 text-primary" />
-      </div>
-      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-        Courses
-      </span>
-    </div>
-    <p className="text-2xl font-display font-bold text-slate-900">
-      {grades.length}
-    </p>
-    <p className="text-[11px] text-slate-500 mt-0.5">
-      Active enrollments
-    </p>
-  </div>
+                    <div className="shrink-0 flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/15 rounded-xl px-4 py-3">
+                      <div>
+                        <p className="text-[9px] font-mono uppercase tracking-wider text-blue-200">CGPA</p>
+                        <p className="text-xl font-display font-bold text-white leading-tight">
+                          {user.cgpa?.toFixed(2) || "0.00"}
+                        </p>
+                      </div>
+                      <div className="w-px h-9 bg-white/20" />
+                      <div>
+                        <p className="text-[9px] font-mono uppercase tracking-wider text-blue-200">Credits</p>
+                        <p className="text-xl font-display font-bold text-amber-300 leading-tight">
+                          {creditsEarned}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-  {/* CGPA */}
-  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
-    <div className="flex items-center justify-between mb-2">
-      <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
-        <Award className="w-4 h-4 text-amber-600" />
-      </div>
-      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-        CGPA
-      </span>
-    </div>
-    <p className="text-2xl font-display font-bold text-slate-900">
-      {user.cgpa?.toFixed(2) || "0.00"}
-    </p>
-    <p className="text-[11px] text-slate-500 mt-0.5">
-      Out of 4.00
-    </p>
-  </div>
+                {/* Summary Stats Row */}
+                {loading ? (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <SkeletonBox className="w-9 h-9 rounded-lg" />
+                          <SkeletonBox className="w-12 h-3" />
+                        </div>
+                        <SkeletonBox className="w-16 h-7 mb-1" />
+                        <SkeletonBox className="w-20 h-3" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+                          <BookOpen className="w-4 h-4 text-primary" />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Courses</span>
+                      </div>
+                      <p className="text-2xl font-display font-bold text-slate-900">{getMyGrades().length}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Active enrollments</p>
+                    </div>
 
-  {/* Pending Assignments */}
-  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
-    <div className="flex items-center justify-between mb-2">
-      <div
-        className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
-          assignments.filter(
-            (a) =>
-              !submissions.some(
-                (s) => s.assignmentId === a.id && s.studentId === user.id
-              )
-          ).length > 0
-            ? "bg-amber-50 border-amber-200"
-            : "bg-emerald-50 border-emerald-200"
-        }`}
-      >
-        <FileText
-          className={`w-4 h-4 ${
-            assignments.filter(
-              (a) =>
-                !submissions.some(
-                  (s) => s.assignmentId === a.id && s.studentId === user.id
-                )
-            ).length > 0
-              ? "text-amber-600"
-              : "text-emerald-600"
-          }`}
-        />
-      </div>
-      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-        Tasks
-      </span>
-    </div>
-    <p className="text-2xl font-display font-bold text-slate-900">
-      {
-        assignments.filter(
-          (a) =>
-            !submissions.some(
-              (s) => s.assignmentId === a.id && s.studentId === user.id
-            )
-        ).length
-      }
-    </p>
-    <p className="text-[11px] text-slate-500 mt-0.5">
-      {assignments.filter(
-        (a) =>
-          !submissions.some(
-            (s) => s.assignmentId === a.id && s.studentId === user.id
-          )
-      ).length > 0
-        ? "Pending submissions"
-        : "All caught up ✓"}
-    </p>
-  </div>
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
+                          <Award className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">CGPA</span>
+                      </div>
+                      <p className="text-2xl font-display font-bold text-slate-900">
+                        {user.cgpa?.toFixed(2) || "0.00"}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Out of 4.00</p>
+                    </div>
 
-  {/* Outstanding Fees */}
-  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
-    <div className="flex items-center justify-between mb-2">
-      <div
-        className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
-          (user.outstandingFees ?? 0) > 0
-            ? "bg-red-50 border-red-200"
-            : "bg-emerald-50 border-emerald-200"
-        }`}
-      >
-        <CreditCard
-          className={`w-4 h-4 ${
-            (user.outstandingFees ?? 0) > 0 ? "text-red-600" : "text-emerald-600"
-          }`}
-        />
-      </div>
-      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
-        Fees
-      </span>
-    </div>
-    <p className="text-2xl font-display font-bold text-slate-900">
-      {(user.outstandingFees ?? 0) > 0
-        ? `${(user.outstandingFees ?? 0).toLocaleString()}`
-        : "0"}
-    </p>
-    <p className="text-[11px] text-slate-500 mt-0.5">
-      {(user.outstandingFees ?? 0) > 0 ? "ETB due now" : "Cleared ✓"}
-    </p>
-  </div>
-</div>
-         )}
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                      <div className="flex items-center justify-between mb-2">
+                        <div
+                          className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
+                            pendingTasksCount > 0 ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"
+                          }`}
+                        >
+                          <FileText
+                            className={`w-4 h-4 ${pendingTasksCount > 0 ? "text-amber-600" : "text-emerald-600"}`}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Tasks</span>
+                      </div>
+                      <p className="text-2xl font-display font-bold text-slate-900">{pendingTasksCount}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {pendingTasksCount > 0 ? "Pending submissions" : "All caught up ✓"}
+                      </p>
+                    </div>
+
+                    <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+                      <div className="flex items-center justify-between mb-2">
+                        <div
+                          className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
+                            (user.outstandingFees ?? 0) > 0
+                              ? "bg-red-50 border-red-200"
+                              : "bg-emerald-50 border-emerald-200"
+                          }`}
+                        >
+                          <CreditCard
+                            className={`w-4 h-4 ${
+                              (user.outstandingFees ?? 0) > 0 ? "text-red-600" : "text-emerald-600"
+                            }`}
+                          />
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Fees</span>
+                      </div>
+                      <p className="text-2xl font-display font-bold text-slate-900">
+                        {(user.outstandingFees ?? 0) > 0 ? `${(user.outstandingFees ?? 0).toLocaleString()}` : "0"}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {(user.outstandingFees ?? 0) > 0 ? "ETB due now" : "Cleared ✓"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 <div className="rounded-2xl p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-
                   <div className="flex items-center space-x-3">
                     <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">
                       <Video className="w-5 h-5 text-blue-400" />
@@ -1486,21 +1465,21 @@ const daysToNextExam = nextExam
                             </div>
                           );
                         })}
-{filteredCourses.length === 0 && (
-  <div className="col-span-full text-center py-10">
-    <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
-      <BookOpen className="w-7 h-7 text-slate-400" />
-    </div>
-    <h4 className="font-semibold text-slate-700 text-sm">
-      {courses.length === 0 ? "No courses enrolled yet" : "No matches"}
-    </h4>
-    <p className="text-xs text-slate-500 mt-1">
-      {courses.length === 0
-        ? "Browse the course catalog to register for your first course."
-        : "Try a different search term."}
-    </p>
-  </div>
-)}
+                        {filteredCourses.length === 0 && (
+                          <div className="col-span-full text-center py-10">
+                            <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                              <BookOpen className="w-7 h-7 text-slate-400" />
+                            </div>
+                            <h4 className="font-semibold text-slate-700 text-sm">
+                              {courses.length === 0 ? "No courses enrolled yet" : "No matches"}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {courses.length === 0
+                                ? "Browse the course catalog to register for your first course."
+                                : "Try a different search term."}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -1523,9 +1502,7 @@ const daysToNextExam = nextExam
                       </div>
                       <div className="space-y-4">
                         {filteredAssignments.map((as) => {
-                          const isSubmitted = submissions.some(
-                            (sub) => sub.assignmentId === as.id && sub.studentId === user.id
-                          );
+                          const isSubmitted = hasSubmitted(as.id);
                           return (
                             <div
                               key={as.id}
@@ -1542,20 +1519,18 @@ const daysToNextExam = nextExam
                             >
                               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                                 <div>
-                                  <h4 className="font-semibold text-slate-800 text-sm md:text-base">
-                                    {as.title}
-                                  </h4>
+                                  <h4 className="font-semibold text-slate-800 text-sm md:text-base">{as.title}</h4>
                                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{as.description}</p>
-{(() => {
-  const status = getDueStatus(as.dueDate);
-  return (
-    <span
-      className={`inline-block text-xs font-mono mt-2 px-2 py-0.5 rounded border ${status.className}`}
-    >
-      {status.label}
-    </span>
-  );
-})()}
+                                  {(() => {
+                                    const status = getDueStatus(as.dueDate);
+                                    return (
+                                      <span
+                                        className={`inline-block text-xs font-mono mt-2 px-2 py-0.5 rounded border ${status.className}`}
+                                      >
+                                        {status.label}
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="w-full md:w-auto text-right flex flex-col items-end gap-2 flex-shrink-0">
                                   {isSubmitted ? (
@@ -1567,9 +1542,7 @@ const daysToNextExam = nextExam
                                     <div className="w-full">
                                       <div className="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center cursor-pointer hover:border-primary transition">
                                         <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-                                        <p className="text-[10px] text-slate-500">
-                                          Drag file here or click to upload
-                                        </p>
+                                        <p className="text-[10px] text-slate-500">Drag file here or click to upload</p>
                                         <input
                                           type="file"
                                           className="hidden"
@@ -1590,21 +1563,21 @@ const daysToNextExam = nextExam
                             </div>
                           );
                         })}
-{filteredAssignments.length === 0 && (
-  <div className="text-center py-12">
-    <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
-      <FileText className="w-7 h-7 text-slate-400" />
-    </div>
-    <h4 className="font-semibold text-slate-700 text-sm">
-      {assignments.length === 0 ? "No assignments yet" : "No matches"}
-    </h4>
-    <p className="text-xs text-slate-500 mt-1">
-      {assignments.length === 0
-        ? "Your instructors haven't posted any assignments. Check back soon."
-        : `Try a different search term.`}
-    </p>
-  </div>
-)}
+                        {filteredAssignments.length === 0 && (
+                          <div className="text-center py-12">
+                            <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
+                              <FileText className="w-7 h-7 text-slate-400" />
+                            </div>
+                            <h4 className="font-semibold text-slate-700 text-sm">
+                              {assignments.length === 0 ? "No assignments yet" : "No matches"}
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              {assignments.length === 0
+                                ? "Your instructors haven't posted any assignments. Check back soon."
+                                : "Try a different search term."}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -1621,9 +1594,7 @@ const daysToNextExam = nextExam
                             <span className="text-[10px] font-mono text-slate-400">
                               {new Date(an.postedAt).toLocaleDateString()} • {an.postedBy}
                             </span>
-                            <h4 className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-1">
-                              {an.title}
-                            </h4>
+                            <h4 className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-1">{an.title}</h4>
                             <p className="text-xs text-slate-500 line-clamp-2">{an.content}</p>
                           </div>
                         ))}
@@ -1756,12 +1727,8 @@ const daysToNextExam = nextExam
                             <span className="text-xs text-slate-400 font-mono">{c.creditHours} CH</span>
                           </div>
                           <div>
-                            <h3 className="font-display font-bold text-lg text-slate-800 line-clamp-1">
-                              {c.courseTitle}
-                            </h3>
-                            <p className="text-xs text-slate-400 mt-1">
-                              Instructor: {c.instructorName}
-                            </p>
+                            <h3 className="font-display font-bold text-lg text-slate-800 line-clamp-1">{c.courseTitle}</h3>
+                            <p className="text-xs text-slate-400 mt-1">Instructor: {c.instructorName}</p>
                           </div>
                           <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">{c.description}</p>
                           {c.prerequisites && c.prerequisites.length > 0 && (
@@ -1825,28 +1792,26 @@ const daysToNextExam = nextExam
                       </div>
                     );
                   })}
-{catalogCourses.length === 0 && (
-  <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
-    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
-      <Search className="w-8 h-8 text-slate-400" />
-    </div>
-    <h4 className="font-display font-bold text-slate-800 text-sm">
-      No courses match your filters
-    </h4>
-    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-      Try adjusting the search or department filter, or clear all filters to see the full catalog.
-    </p>
-    <button
-      onClick={() => {
-        setCatalogSearch("");
-        setCatalogDept("ALL");
-      }}
-      className="mt-4 inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-600 text-white text-xs font-semibold transition"
-    >
-      Clear filters
-    </button>
-  </div>
-)}
+                  {catalogCourses.length === 0 && (
+                    <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                        <Search className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h4 className="font-display font-bold text-slate-800 text-sm">No courses match your filters</h4>
+                      <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                        Try adjusting the search or department filter, or clear all filters to see the full catalog.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setCatalogSearch("");
+                          setCatalogDept("ALL");
+                        }}
+                        className="mt-4 inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-600 text-white text-xs font-semibold transition"
+                      >
+                        Clear filters
+                      </button>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -1868,8 +1833,7 @@ const daysToNextExam = nextExam
                       Access lecture syllabus slides, digital books, and stream video content shared by instructors.
                     </p>
                   </div>
-                  
-                  {/* View Switcher Buttons */}
+
                   <div className="flex items-center space-x-2 bg-white border border-slate-200 p-1.5 rounded-xl shadow-sm">
                     <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider px-2">View:</span>
                     <button
@@ -1889,7 +1853,6 @@ const daysToNextExam = nextExam
                   </div>
                 </div>
 
-                {/* Search Bar */}
                 <div className="relative w-full sm:w-72">
                   <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                   <input
@@ -1901,7 +1864,6 @@ const daysToNextExam = nextExam
                   />
                 </div>
 
-                {/* ✅ EXTRA LARGE ICONS VIEW */}
                 {materialViewMode === "EXTRA_LARGE" && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                     {filteredMaterials.map((m) => {
@@ -1916,13 +1878,13 @@ const daysToNextExam = nextExam
                               {m.fileType}
                             </span>
                           </div>
-                          
+
                           <span className="text-[10px] font-mono font-bold text-primary bg-blue-50 px-2 py-0.5 rounded uppercase mb-2">
                             {associatedCourse?.courseCode || "General"}
                           </span>
                           <h3 className="font-semibold text-slate-800 text-sm line-clamp-2 leading-tight w-full">{m.title}</h3>
                           <p className="text-[10px] text-slate-400 mt-1">Uploaded: {new Date(m.uploadedAt).toLocaleDateString()}</p>
-                          
+
                           <div className="mt-4 w-full flex items-center space-x-2">
                             <button
                               onClick={() => handlePreviewMaterial(m)}
@@ -1953,7 +1915,6 @@ const daysToNextExam = nextExam
                   </div>
                 )}
 
-                {/* ✅ LIST VIEW */}
                 {materialViewMode === "LIST" && (
                   <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                     <div className="divide-y divide-slate-100">
@@ -1985,7 +1946,7 @@ const daysToNextExam = nextExam
                                 )}
                               </div>
                             </div>
-                            
+
                             <div className="flex items-center space-x-3 shrink-0 w-full md:w-auto justify-end">
                               <span className="text-xs font-semibold px-3 py-1 rounded bg-slate-100 text-slate-600 font-mono hidden sm:block">
                                 {m.fileType}
@@ -2020,22 +1981,21 @@ const daysToNextExam = nextExam
                   </div>
                 )}
 
-                {/* Empty State */}
-{filteredMaterials.length === 0 && (
-  <div className="text-center py-16 bg-white border border-slate-200 rounded-xl shadow-sm">
-    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
-      <FileText className="w-8 h-8 text-slate-400" />
-    </div>
-    <h4 className="font-display font-bold text-slate-800 text-sm">
-      {materials.length === 0 ? "No materials available yet" : "No materials match your search"}
-    </h4>
-    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-      {materials.length === 0
-        ? "Your instructors haven't uploaded any course materials. Check back soon."
-        : `Try a different keyword, or clear "${materialSearch}".`}
-    </p>
-  </div>
-)}
+                {filteredMaterials.length === 0 && (
+                  <div className="text-center py-16 bg-white border border-slate-200 rounded-xl shadow-sm">
+                    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                      <FileText className="w-8 h-8 text-slate-400" />
+                    </div>
+                    <h4 className="font-display font-bold text-slate-800 text-sm">
+                      {materials.length === 0 ? "No materials available yet" : "No materials match your search"}
+                    </h4>
+                    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                      {materials.length === 0
+                        ? "Your instructors haven't uploaded any course materials. Check back soon."
+                        : `Try a different keyword, or clear "${materialSearch}".`}
+                    </p>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -2109,26 +2069,18 @@ const daysToNextExam = nextExam
                         </div>
 
                         <div>
-                          <h3 className="font-semibold text-slate-800 text-sm line-clamp-2">
-                            {res.title}
-                          </h3>
+                          <h3 className="font-semibold text-slate-800 text-sm line-clamp-2">{res.title}</h3>
                           <p className="text-xs text-slate-500 mt-1">
                             By <span className="font-medium text-slate-700">{res.author}</span>
                           </p>
                         </div>
 
-                        <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
-                          {res.description}
-                        </p>
+                        <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">{res.description}</p>
 
                         <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                            {res.category}
-                          </span>
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600">{res.category}</span>
                           {res.isbn && (
-                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500">
-                              ISBN: {res.isbn}
-                            </span>
+                            <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-500">ISBN: {res.isbn}</span>
                           )}
                         </div>
                       </div>
@@ -2148,21 +2100,21 @@ const daysToNextExam = nextExam
                     </div>
                   ))}
 
-{visibleLibraryResources.length === 0 && (
-  <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
-    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
-      <BookOpen className="w-8 h-8 text-slate-400" />
-    </div>
-    <h4 className="font-display font-bold text-slate-800 text-sm">
-      {libraryResources.length === 0 ? "Library is empty" : "No resources match your filters"}
-    </h4>
-    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
-      {libraryResources.length === 0
-        ? "The University Library Directorate hasn't published any resources yet. Check back soon."
-        : "Try a different media type or clear your search."}
-    </p>
-  </div>
-)}
+                  {visibleLibraryResources.length === 0 && (
+                    <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                        <BookOpen className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h4 className="font-display font-bold text-slate-800 text-sm">
+                        {libraryResources.length === 0 ? "Library is empty" : "No resources match your filters"}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                        {libraryResources.length === 0
+                          ? "The University Library Directorate hasn't published any resources yet. Check back soon."
+                          : "Try a different media type or clear your search."}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </motion.div>
             )}
@@ -2184,15 +2136,13 @@ const daysToNextExam = nextExam
                   </p>
                 </div>
 
-<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {exams.filter((e) => e.status !== "DRAFT" && (e.isPushed || e.status === "ACTIVE" || e.status === "SCHEDULED")).length === 0 && (
                     <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
                       <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
                         <Play className="w-8 h-8 text-slate-400" />
                       </div>
-                      <h4 className="font-display font-bold text-slate-800 text-sm">
-                        No active exams
-                      </h4>
+                      <h4 className="font-display font-bold text-slate-800 text-sm">No active exams</h4>
                       <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
                         Your instructors haven't scheduled any online examinations yet. Exams appear here when pushed live.
                       </p>
@@ -2202,17 +2152,15 @@ const daysToNextExam = nextExam
                     .filter((e) => e.status !== "DRAFT" && (e.isPushed || e.status === "ACTIVE" || e.status === "SCHEDULED"))
                     .map((exam) => {
                       const attempt = examAttempts
-  .filter(
-    (att) =>
-      String(att.examId).replace(/\D/g, "") === String(exam.id).replace(/\D/g, "") &&
-      String(att.studentId).replace(/\D/g, "") === String(user.id).replace(/\D/g, "")
-  )
-  // Only count SUBMITTED attempts (ignore IN_PROGRESS/stale)
-  .filter((att) => att.status === "SUBMITTED")
-  // Pick the most recent submitted attempt
-  .sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime())[0] || null;
+                        .filter(
+                          (att) =>
+                            digits(att.examId) === digits(exam.id) &&
+                            digits(att.studentId) === digits(user.id)
+                        )
+                        .filter((att) => att.status === "SUBMITTED")
+                        .sort((a, b) => new Date(b.submittedAt || 0).getTime() - new Date(a.submittedAt || 0).getTime())[0] || null;
 
-const isAttempted = !!attempt;
+                      const isAttempted = !!attempt;
                       return (
                         <div key={exam.id} className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm flex flex-col justify-between">
                           <div className="p-6 space-y-4">
@@ -2255,19 +2203,17 @@ const isAttempted = !!attempt;
                               </button>
                             ) : (
                               <button
-  onClick={() => {
-  if (!user.avatarUrl) {
-    // No photo → capture first
-    setPendingExam(exam);
-    setShowFaceCapture(true);
-  } else {
-    // Has photo → verify
-    setPendingExam(exam);
-    setShowVerification(true);
-  }
-}}
-  className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
->
+                                onClick={() => {
+                                  if (!user.avatarUrl) {
+                                    setPendingExam(exam);
+                                    setShowFaceCapture(true);
+                                  } else {
+                                    setPendingExam(exam);
+                                    setShowVerification(true);
+                                  }
+                                }}
+                                className="bg-primary hover:bg-primary-600 text-white px-5 py-2 rounded-lg text-xs font-semibold shadow-sm flex items-center space-x-1.5 transition"
+                              >
                                 <Play className="w-3 h-3 fill-current" />
                                 <span>Start Examination</span>
                               </button>
@@ -2311,9 +2257,7 @@ const isAttempted = !!attempt;
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   <div className="lg:col-span-2 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                     <div className="p-4 sm:p-6 border-b border-slate-100 bg-slate-50/50">
-                      <h3 className="font-display font-bold text-slate-800 text-base">
-                        Semester Score Sheet
-                      </h3>
+                      <h3 className="font-display font-bold text-slate-800 text-base">Semester Score Sheet</h3>
                     </div>
                     <div className="divide-y divide-slate-100">
                       {getMyGrades().map((g) => (
@@ -2333,24 +2277,18 @@ const isAttempted = !!attempt;
                             <div className="flex items-center space-x-4 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 flex-shrink-0">
                               <div className="text-center border-r border-slate-200 pr-4">
                                 <span className="block text-[10px] text-slate-400 font-mono font-bold">GRADE</span>
-                                <span className="text-2xl font-display font-bold text-slate-800">
-                                  {g.letterGrade}
-                                </span>
+                                <span className="text-2xl font-display font-bold text-slate-800">{g.letterGrade}</span>
                               </div>
                               <div className="text-center">
                                 <span className="block text-[10px] text-slate-400 font-mono font-bold">TOTAL</span>
-                                <span className="text-lg font-mono font-bold text-slate-700">
-                                  {g.totalGrade}%
-                                </span>
+                                <span className="text-lg font-mono font-bold text-slate-700">{g.totalGrade}%</span>
                               </div>
                             </div>
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-center text-xs font-mono">
                             <div className="bg-slate-50 p-2.5 rounded border border-slate-100">
                               <span className="block text-[10px] text-slate-400 uppercase">Assessment (50%)</span>
-                              <span className="font-bold text-slate-700">
-                                {g.continuousAssessmentScore} / 50
-                              </span>
+                              <span className="font-bold text-slate-700">{g.continuousAssessmentScore} / 50</span>
                             </div>
                             <div className="bg-slate-50 p-2.5 rounded border border-slate-100">
                               <span className="block text-[10px] text-slate-400 uppercase">Mid-Exam (20%)</span>
@@ -2381,9 +2319,7 @@ const isAttempted = !!attempt;
                         <label className="block text-xs font-medium text-slate-700">
                           Select Instructor{" "}
                           {instructors.length > 0 && (
-                            <span className="text-slate-400 font-normal">
-                              ({instructors.length} available)
-                            </span>
+                            <span className="text-slate-400 font-normal">({instructors.length} available)</span>
                           )}
                         </label>
                         <select
@@ -2396,9 +2332,7 @@ const isAttempted = !!attempt;
                         >
                           <option value="">-- Choose Instructor --</option>
                           {instructors.length === 0 ? (
-                            <option value="" disabled>
-                              No instructors available
-                            </option>
+                            <option value="" disabled>No instructors available</option>
                           ) : (
                             instructors.map((inst) => (
                               <option key={inst.id} value={inst.id}>
@@ -2421,9 +2355,7 @@ const isAttempted = !!attempt;
 
                         {evaluatorInstructorId && (
                           <div>
-                            <label className="block text-xs font-medium text-slate-700 mb-1 mt-2">
-                              Select Course
-                            </label>
+                            <label className="block text-xs font-medium text-slate-700 mb-1 mt-2">Select Course</label>
                             <select
                               value={evaluationCourseId}
                               className="w-full border border-slate-200 rounded-lg p-2.5 text-xs bg-white focus:outline-none focus:border-primary"
@@ -2465,11 +2397,7 @@ const isAttempted = !!attempt;
                         />
                         <button
                           onClick={submitInstructorEvaluation}
-                          disabled={
-                            !evaluatorInstructorId ||
-                            !evaluationCourseId ||
-                            !evaluationFeedback
-                          }
+                          disabled={!evaluatorInstructorId || !evaluationCourseId || !evaluationFeedback}
                           className="w-full bg-primary hover:bg-primary-600 disabled:bg-slate-200 disabled:text-slate-400 text-white py-2 rounded-lg text-xs font-semibold transition"
                         >
                           Submit Anonymous Evaluation
@@ -2628,7 +2556,7 @@ const isAttempted = !!attempt;
                                       </span>
                                     </td>
                                     <td className="py-3 px-3 text-center font-mono font-bold">
-                                      {g.gradePoint.toFixed(2)}
+                                      {(g.gradePoint ?? 0).toFixed(2)}
                                     </td>
                                   </tr>
                                 ))}
@@ -2640,13 +2568,9 @@ const isAttempted = !!attempt;
                         <div className="border-t-2 border-slate-200 pt-6 mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4 items-center">
                           <div className="text-center space-y-1">
                             <div className="h-10 border-b border-slate-300 flex items-end justify-center pb-1">
-                              <span className="font-serif italic text-xs text-slate-600">
-                                Dr. Befekadu Mengistu
-                              </span>
+                              <span className="font-serif italic text-xs text-slate-600">Dr. Befekadu Mengistu</span>
                             </div>
-                            <p className="text-[10px] font-mono text-slate-500 uppercase">
-                              Head, Dept. of Software Eng.
-                            </p>
+                            <p className="text-[10px] font-mono text-slate-500 uppercase">Head, Dept. of Software Eng.</p>
                           </div>
                           <div className="text-center flex flex-col items-center justify-center">
                             <div className="w-16 h-16 rounded-full border-2 border-dashed border-amber-500/80 bg-amber-50/40 flex flex-col items-center justify-center p-1 shadow-inner">
@@ -2660,13 +2584,9 @@ const isAttempted = !!attempt;
                           </div>
                           <div className="text-center space-y-1">
                             <div className="h-10 border-b border-slate-300 flex items-end justify-center pb-1">
-                              <span className="font-serif italic text-xs text-slate-600">
-                                Abebech Tadesse, M.Sc.
-                              </span>
+                              <span className="font-serif italic text-xs text-slate-600">Abebech Tadesse, M.Sc.</span>
                             </div>
-                            <p className="text-[10px] font-mono text-slate-500 uppercase">
-                              University Registrar Director
-                            </p>
+                            <p className="text-[10px] font-mono text-slate-500 uppercase">University Registrar Director</p>
                           </div>
                         </div>
 
@@ -2719,9 +2639,7 @@ const isAttempted = !!attempt;
                     {user.outstandingFees && user.outstandingFees > 0 ? (
                       <div className="bg-red-50 text-danger border border-red-100 p-3.5 rounded-lg text-xs flex items-start space-x-2">
                         <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                        <span>
-                          Outstanding tuition balance blocks course enrollment and transcript download.
-                        </span>
+                        <span>Outstanding tuition balance blocks course enrollment and transcript download.</span>
                       </div>
                     ) : (
                       <div className="bg-emerald-50 text-success border border-emerald-100 p-3.5 rounded-lg text-xs flex items-start space-x-2">
@@ -2743,9 +2661,7 @@ const isAttempted = !!attempt;
                   </div>
 
                   <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm space-y-3 md:col-span-2 text-xs">
-                    <h4 className="font-display font-bold text-slate-800 text-sm">
-                      Payment Methods & Instructions
-                    </h4>
+                    <h4 className="font-display font-bold text-slate-800 text-sm">Payment Methods & Instructions</h4>
                     <p className="text-slate-500 leading-relaxed">
                       You can pay your tuition online safely using credit card or Telebirr integrations. Verification of payments is completed instantly.
                     </p>
@@ -2778,9 +2694,7 @@ const isAttempted = !!attempt;
                       </h3>
                       <div className="space-y-3 text-xs">
                         <div className="space-y-1">
-                          <label className="block text-slate-600 font-medium">
-                            Payment Amount (ETB)
-                          </label>
+                          <label className="block text-slate-600 font-medium">Payment Amount (ETB)</label>
                           <input
                             type="number"
                             className="w-full border border-slate-200 rounded-lg p-2.5 font-mono"
@@ -2789,9 +2703,7 @@ const isAttempted = !!attempt;
                           />
                         </div>
                         <div className="space-y-1">
-                          <label className="block text-slate-600 font-medium">
-                            Credit Card Number
-                          </label>
+                          <label className="block text-slate-600 font-medium">Credit Card Number</label>
                           <input
                             type="text"
                             placeholder="4111 2222 3333 4444"
@@ -2842,6 +2754,83 @@ const isAttempted = !!attempt;
               </motion.div>
             )}
 
+            {/* DIGITAL CLEARANCE: the full Clearance System embedded edge-to-edge */}
+            {activeTab === "clearance" && (
+              <motion.div
+                key="student-clearance-tab"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col"
+              >
+                {!clearanceFullscreen && (
+                  <div className="flex items-center justify-between gap-3 px-3.5 sm:px-6 md:px-8 py-3 bg-slate-50">
+                    <div className="min-w-0">
+                      <h2 className="text-lg sm:text-2xl font-display font-bold text-slate-900 truncate">
+                        Digital Clearance
+                      </h2>
+                      <p className="text-slate-500 text-[11px] sm:text-sm hidden sm:block">
+                        The full University Clearance System, running inside Smart Campus.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setClearanceFullscreen(true)}
+                        className="inline-flex items-center space-x-1.5 bg-primary hover:bg-primary-600 text-white px-3 py-2 rounded-lg text-xs font-semibold transition"
+                      >
+                        <Maximize2 className="w-3.5 h-3.5" />
+                        <span>Full screen</span>
+                      </button>
+                      <button
+                        onClick={openClearancePortal}
+                        className="hidden sm:block bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold transition"
+                      >
+                        Open in new tab
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* One wrapper + one iframe: switching to full screen only changes classes, so the
+                    Clearance session is NOT reloaded. */}
+                <div
+                  ref={clearanceFrameRef}
+                  className={
+                    clearanceFullscreen
+                      ? "fixed inset-0 z-[70] bg-white flex flex-col"
+                      : "w-full bg-white border-t border-slate-200"
+                  }
+                >
+                  {clearanceFullscreen && (
+                    <div
+                      className="flex items-center justify-between gap-3 bg-[#071526] text-white px-3 pb-2 shrink-0"
+                      style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.5rem)" }}
+                    >
+                      <button
+                        onClick={() => setClearanceFullscreen(false)}
+                        className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Back to Smart Campus</span>
+                      </button>
+                      <span className="text-xs font-semibold truncate">Digital Clearance</span>
+                    </div>
+                  )}
+                  <iframe
+                    title="University Clearance System"
+                    src={clearancePortalSrc}
+                    className={clearanceFullscreen ? "w-full flex-1 border-0 block" : "w-full border-0 block"}
+                    style={
+                      clearanceFullscreen
+                        ? { minHeight: 0 }
+                        : { height: clearanceHeight ?? "calc(100dvh - 200px)" }
+                    }
+                    allow="clipboard-write; fullscreen"
+                  />
+                </div>
+              </motion.div>
+            )}
+
             {activeTab === "copilot" && (
               <motion.div
                 key="student-copilot-tab"
@@ -2878,7 +2867,7 @@ const isAttempted = !!attempt;
         </main>
       </div>
 
-      {/* ACTIVE EXAM OVERLAY — Styled to match reference image */}
+      {/* ACTIVE EXAM OVERLAY */}
       {currentExam && (() => {
         const total = currentExam.questions.length;
         const answered = Object.keys(examAnswers).length;
@@ -2896,14 +2885,11 @@ const isAttempted = !!attempt;
           <div className="fixed inset-0 z-50 bg-[#eef6f1] overflow-y-auto print:hidden">
             <div className="max-w-6xl mx-auto p-4 sm:p-6 md:p-8">
 
-              {/* ── TOP STATUS BAR ─────────────────────────── */}
               <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 px-4 sm:px-6 py-4 mb-5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-center">
 
                   <div className="border-l-0 sm:border-l-0 lg:border-r border-slate-200 lg:pr-6">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 mb-1">
-                      Exam Type
-                    </p>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 mb-1">Exam Type</p>
                     <div className="flex items-center space-x-2 text-slate-800">
                       <Clock className="w-4 h-4" />
                       <span className="text-sm font-semibold">
@@ -2917,14 +2903,10 @@ const isAttempted = !!attempt;
                   </div>
 
                   <div className="lg:border-r border-slate-200 lg:pr-6">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 mb-1">
-                      Subject
-                    </p>
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-slate-700 mb-1">Subject</p>
                     <div className="flex items-center space-x-2 text-slate-800">
                       <BookOpen className="w-4 h-4" />
-                      <span className="text-sm font-semibold truncate">
-                        {currentExam.courseTitle}
-                      </span>
+                      <span className="text-sm font-semibold truncate">{currentExam.courseTitle}</span>
                     </div>
                   </div>
 
@@ -2933,9 +2915,7 @@ const isAttempted = !!attempt;
                       <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700">
                         Completed ({answered}/{total})
                       </span>
-                      <span className="text-[11px] font-bold text-emerald-700">
-                        {completedPct}%
-                      </span>
+                      <span className="text-[11px] font-bold text-emerald-700">{completedPct}%</span>
                     </div>
                     <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
                       <div
@@ -2956,12 +2936,9 @@ const isAttempted = !!attempt;
                 </div>
               </div>
 
-              {/* ── MAIN GRID ─────────────────────────────── */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-                {/* LEFT — Question card */}
                 <div className="lg:col-span-2 space-y-5">
-                  {/* ✅ NEW: Warning banner when blurred */}
                   {isQuestionsBlurred && (
                     <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
                       <p className="text-sm font-bold text-red-800">⚠️ Your questions are temporarily hidden.</p>
@@ -2971,7 +2948,6 @@ const isAttempted = !!attempt;
                     </div>
                   )}
 
-                  {/* ✅ NEW: Blur wrapper */}
                   <div
                     className={`transition-all duration-500 ${
                       isQuestionsBlurred ? "blur-md pointer-events-none select-none" : ""
@@ -3023,9 +2999,7 @@ const isAttempted = !!attempt;
                                 >
                                   {letter}
                                 </span>
-                                <span className="px-4 py-3 text-sm font-medium flex-1">
-                                  {opt}
-                                </span>
+                                <span className="px-4 py-3 text-sm font-medium flex-1">{opt}</span>
                                 {selected && <Check className="w-4 h-4 mr-4 shrink-0" />}
                               </button>
                             );
@@ -3035,7 +3009,6 @@ const isAttempted = !!attempt;
                     </div>
                   </div>
 
-                  {/* Navigation bar (stays outside blur so student can still navigate) */}
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       onClick={() => goTo(0)}
@@ -3071,28 +3044,24 @@ const isAttempted = !!attempt;
                   </div>
                 </div>
 
-                {/* RIGHT — Sidebar */}
                 <div className="space-y-5">
-
-                  {/* ✅ NEW: Camera Monitoring Widget */}
-                  <WebcamMonitor 
+                  <WebcamMonitor
                     onEventDetected={async (type, details) => {
                       if (!currentAttemptId) return;
                       try {
                         await CampusDatabase.logMonitoringEvent({
-                          attempt: currentAttemptId, 
+                          attempt: currentAttemptId,
                           event_type: type,
                           details: details
                         });
                       } catch (err) {
                         console.error("Failed to log monitoring event", err);
                       }
-                    }} 
-                    onResolved={() => setIsQuestionsBlurred(false)}         // ✅ NEW
-                    onCriticalWarning={() => setIsQuestionsBlurred(true)}   // ✅ NEW
+                    }}
+                    onResolved={() => setIsQuestionsBlurred(false)}
+                    onCriticalWarning={() => setIsQuestionsBlurred(true)}
                   />
 
-                  {/* Timer card */}
                   <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-6 flex flex-col items-center">
                     <div className="relative w-32 h-32">
                       <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
@@ -3120,7 +3089,6 @@ const isAttempted = !!attempt;
                     <p className="text-xs text-slate-500 mt-3">Timer Remaining:</p>
                   </div>
 
-                  {/* Question map / quick nav */}
                   <div className="bg-white rounded-2xl shadow-sm border border-emerald-100 p-5">
                     <button
                       onClick={() => goTo(examCurrentIndex)}
@@ -3180,61 +3148,60 @@ const isAttempted = !!attempt;
         attempt={viewingAttempt}
         onClose={() => setViewingAttempt(null)}
       />
- {/* ✅ ADD THIS */}
-      {showFaceCapture && (
-  <FaceCaptureModal
-    isOpen={showFaceCapture}
-    onClose={() => {
-      setShowFaceCapture(false);
-    }}
-        onCapture={async (base64Image) => {
-      console.log("🔵 onCapture START. pendingExam =", pendingExam);
-      try {
-        await CampusDatabase.uploadAvatar(user.id, base64Image);
-        console.log("🟢 upload done. Setting local avatar.");
-        setLocalAvatarUrl(base64Image); // ✅ Update local state so the modal can render!
-        setShowFaceCapture(false);
-        if (pendingExam) {
-          console.log("✅ Opening verification modal");
-          setShowVerification(true);
-        }
-     } catch (err: any) {
-  console.error("🔴 AVATAR UPLOAD FAILED:");
-  console.error("  name:", err?.name);
-  console.error("  message:", err?.message);
-  console.error("  code:", err?.code);
-  console.error("  status:", err?.response?.status);
-  console.error("  data:", err?.response?.data);
-  alert("Failed to save photo: " + (err?.message || err?.response?.data?.detail || "Unknown"));
-}
-    }}
-  />
-)}
 
-{/* ✅ NEW: Face Verification Modal */}
-{showVerification && pendingExam && (localAvatarUrl || user.avatarUrl) && (  <FaceVerificationModal
-    isOpen={showVerification}
-savedPhotoUrl={localAvatarUrl || user.avatarUrl || ""}        onVerified={async () => {
-      const examToStart = pendingExam;
-      setShowVerification(false);
-      setPendingExam(null);
-      if (!examToStart) {
-        alert("No exam selected. Please click Start Examination again.");
-        return;
-      }
-      await startExam(examToStart);
-    }}
-    onFailed={(reason) => {
-      alert("Verification failed: " + reason + "\n\nYou cannot take this exam. Please contact your instructor.");
-      setShowVerification(false);
-      setPendingExam(null);
-    }}
-    onClose={() => {
-      setShowVerification(false);
-      setPendingExam(null);
-    }}
-  />
-)}
+      {showFaceCapture && (
+        <FaceCaptureModal
+          isOpen={showFaceCapture}
+          onClose={() => {
+            setShowFaceCapture(false);
+          }}
+          onCapture={async (base64Image) => {
+            try {
+              await CampusDatabase.uploadAvatar(user.id, base64Image);
+              setLocalAvatarUrl(base64Image);
+              setShowFaceCapture(false);
+              if (pendingExam) {
+                setShowVerification(true);
+              }
+            } catch (err: any) {
+              console.error("AVATAR UPLOAD FAILED:", {
+                name: err?.name,
+                message: err?.message,
+                code: err?.code,
+                status: err?.response?.status,
+                data: err?.response?.data,
+              });
+              alert("Failed to save photo: " + (err?.message || err?.response?.data?.detail || "Unknown"));
+            }
+          }}
+        />
+      )}
+
+      {showVerification && pendingExam && (localAvatarUrl || user.avatarUrl) && (
+        <FaceVerificationModal
+          isOpen={showVerification}
+          savedPhotoUrl={localAvatarUrl || user.avatarUrl || ""}
+          onVerified={async () => {
+            const examToStart = pendingExam;
+            setShowVerification(false);
+            setPendingExam(null);
+            if (!examToStart) {
+              alert("No exam selected. Please click Start Examination again.");
+              return;
+            }
+            await startExam(examToStart);
+          }}
+          onFailed={(reason) => {
+            alert("Verification failed: " + reason + "\n\nYou cannot take this exam. Please contact your instructor.");
+            setShowVerification(false);
+            setPendingExam(null);
+          }}
+          onClose={() => {
+            setShowVerification(false);
+            setPendingExam(null);
+          }}
+        />
+      )}
       <AcademicFooter />
     </div>
   );
