@@ -15,7 +15,13 @@ import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
 import { WebcamMonitor } from "./WebcamMonitor"; 
 import { FaceCaptureModal } from "./FaceCaptureModal"; 
 import { FaceVerificationModal } from "./FaceVerificationModal";
-
+import {
+  deriveNotifications,
+  getReadIds,
+  markRead,
+  markAllRead,
+  type DerivedNotification,
+} from "../utils/notifications";
 interface StudentDashboardProps {
   user: User;
   onLogout: () => void;
@@ -82,7 +88,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [catalogSearch, setCatalogSearch] = useState("");
   const [catalogSort, setCatalogSort] = useState<"code" | "title" | "credits" | "enrollment">("code");
   const [catalogDept, setCatalogDept] = useState("ALL");
-
+const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
   useEffect(() => {
     loadData();
   }, []);
@@ -857,20 +863,47 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, "")).length > 0
       ? courses.filter((c) => String(c.instructorId) === String(evaluatorInstructorId).replace(/\D/g, ""))
       : courses;
+// ✅ NEW: derive notifications from state
+const derivedNotifications = deriveNotifications({
+  user,
+  grades,
+  assignments,
+  exams,
+  materials,
+  announcements,
+  courses,
+});
 
+const notificationsWithReadState = derivedNotifications.map((n) => ({
+  ...n,
+  read: readIds.has(n.id),
+}));
+
+const handleNotificationClick = (targetTab: string, id: string) => {
+  const next = markRead(id);
+  setReadIds(new Set(next));
+  setActiveTab(targetTab as any);
+};
+
+const handleMarkAllRead = () => {
+  const next = markAllRead(derivedNotifications.map((n) => n.id));
+  setReadIds(new Set(next));
+};
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="student_dashboard_main">
-      <UniversityTopBar
-        user={user}
-        onLogout={onLogout}
-        portalTitle="Student Information System (SIS)"
-        portalSubtitle="College of Informatics & Technology • Software Engineering"
-        badgeText={user.studentId ? `STUDENT • ${user.studentId}` : "STUDENT"}
-        badgeType="student"
-        onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
-        isMobileNavOpen={isMobileNavOpen}
-      />
-
+<UniversityTopBar
+  user={user}
+  onLogout={onLogout}
+  portalTitle="Student Information System (SIS)"
+  portalSubtitle="College of Informatics & Technology • Software Engineering"
+  badgeText={user.studentId ? `STUDENT • ${user.studentId}` : "STUDENT"}
+  badgeType="student"
+  onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
+  isMobileNavOpen={isMobileNavOpen}
+  notifications={notificationsWithReadState}
+  onNotificationClick={handleNotificationClick}
+  onMarkAllRead={handleMarkAllRead}
+/>
       {/* MOBILE SLIDE-OUT DRAWER */}
       <AnimatePresence>
         {isMobileNavOpen && (

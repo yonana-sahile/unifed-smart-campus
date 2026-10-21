@@ -317,23 +317,37 @@ interface UniversityTopBarProps {
   badgeType?: "student" | "instructor" | "admin" | "federal" | "faculty";
   onToggleMobileNav?: () => void;
   isMobileNavOpen?: boolean;
+  notifications?: {
+    id: string;
+    type: "grade" | "assignment" | "exam" | "material" | "announcement" | "fee";
+    title: string;
+    message: string;
+    targetTab: string;
+    timestamp: string;
+    read: boolean;
+  }[];
+  onNotificationClick?: (targetTab: string, id: string) => void;
+  onMarkAllRead?: () => void;
 }
-
 export function UniversityTopBar({
   user: initialUser,
   onLogout,
   onUpdateUser,
   portalTitle,
-  portalSubtitle = "Mekdela Amba University • መቅደላ አምባ ዩኒቨርሲቲ",
+  portalSubtitle = "Mekdela Amba University • መቀደላ አምባ ዩኒቨርሲቲ",
   badgeText,
   badgeType = "student",
   onToggleMobileNav,
-  isMobileNavOpen = false
+  isMobileNavOpen = false,
+  notifications = [],
+  onNotificationClick,
+  onMarkAllRead
 }: UniversityTopBarProps) {
   const [currentUser, setCurrentUser] = useState<User>(initialUser);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+const notifRef = useRef<HTMLDivElement>(null);
   const { theme, toggleTheme } = useTheme();
 
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -350,7 +364,19 @@ export function UniversityTopBar({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isDropdownOpen]);
-
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+      setIsNotifOpen(false);
+    }
+  };
+  if (isNotifOpen) {
+    document.addEventListener("mousedown", handleClickOutside);
+  }
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+  };
+}, [isNotifOpen]);
   useEffect(() => {
     setCurrentUser(initialUser);
   }, [initialUser]);
@@ -369,7 +395,7 @@ export function UniversityTopBar({
     setCurrentUser(updatedUser);
     onUpdateUser?.(updatedUser);
   };
-
+const unreadCount = notifications.filter((n) => !n.read).length;
   const getBadgeStyle = () => {
     switch (badgeType) {
       case "federal":
@@ -434,7 +460,103 @@ export function UniversityTopBar({
               </div>
               <span className="text-[10px] text-slate-400 font-mono">የካቲት 2018 ዓ.ም. (EC)</span>
             </div>
+       {/* ✅ NEW: Notification bell */}
+<div className="relative flex items-center" ref={notifRef}>
+  <button
+    type="button"
+    onClick={() => setIsNotifOpen((v) => !v)}
+    title="Notifications • ማሳወቂያዎች"
+    className="relative p-1.5 sm:p-2 rounded-lg hover:bg-white/10 transition border border-transparent hover:border-amber-400/40 cursor-pointer"
+  >
+    <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-amber-300" />
+    {unreadCount > 0 && (
+      <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center shadow-sm border border-white/20">
+        {unreadCount > 99 ? "99+" : unreadCount}
+      </span>
+    )}
+  </button>
 
+  {isNotifOpen && (
+    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden z-50 top-full">
+      {/* Header */}
+      <div className="bg-gradient-to-r from-amber-50 to-amber-100/50 dark:from-slate-800 dark:to-slate-800/80 px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+            Notifications
+          </h3>
+          <p className="text-[10px] font-mono text-slate-500">
+            {unreadCount} unread • {notifications.length} total
+          </p>
+        </div>
+        {unreadCount > 0 && onMarkAllRead && (
+          <button
+            type="button"
+            onClick={onMarkAllRead}
+            className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 hover:underline"
+          >
+            Mark all read
+          </button>
+        )}
+      </div>
+
+      {/* List */}
+      <div className="max-h-96 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+        {notifications.length === 0 && (
+          <div className="p-8 text-center">
+            <Bell className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs text-slate-500">No notifications yet</p>
+          </div>
+        )}
+        {notifications.map((n) => {
+          const colorClass =
+            n.type === "grade"
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : n.type === "exam"
+              ? "bg-red-50 text-red-700 border-red-200"
+              : n.type === "assignment"
+              ? "bg-amber-50 text-amber-700 border-amber-200"
+              : n.type === "material"
+              ? "bg-blue-50 text-blue-700 border-blue-200"
+              : n.type === "fee"
+              ? "bg-red-50 text-red-700 border-red-200"
+              : "bg-slate-50 text-slate-700 border-slate-200";
+          return (
+            <button
+              key={n.id}
+              type="button"
+              onClick={() => {
+                setIsNotifOpen(false);
+                onNotificationClick?.(n.targetTab, n.id);
+              }}
+              className={`w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition flex items-start space-x-3 ${
+                !n.read ? "bg-amber-50/30 dark:bg-amber-900/10" : ""
+              }`}
+            >
+              <div
+                className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${colorClass}`}
+              >
+                <Bell className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center space-x-1.5">
+                  {!n.read && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                  )}
+                  <p className="text-xs font-semibold text-slate-900 dark:text-slate-100 truncate">
+                    {n.title}
+                  </p>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5 line-clamp-2">
+                  {n.message}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  )}
+</div>
             {/* ✅ Profile Dropdown — forced to the right edge */}
             <div className="relative flex items-center" ref={dropdownRef}>
               <button
