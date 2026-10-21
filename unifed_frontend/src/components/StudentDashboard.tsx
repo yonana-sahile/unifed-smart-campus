@@ -89,11 +89,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [catalogSort, setCatalogSort] = useState<"code" | "title" | "credits" | "enrollment">("code");
   const [catalogDept, setCatalogDept] = useState("ALL");
 const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
-  useEffect(() => {
+const [loading, setLoading] = useState(true);  useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = async () => {
+const loadData = async () => {
+    setLoading(true);
     try {
       const results = await Promise.allSettled([
         CampusDatabase.getCourses(),
@@ -138,6 +139,8 @@ const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
       );
     } catch (error) {
       console.error("Critical failure loading student data:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -780,7 +783,9 @@ const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
     .filter((g) => g.totalGrade >= 50)
     .reduce((sum, g) => sum + (g.creditHours || 0), 0);
   const degreeProgressPercent = Math.min(100, Math.round((creditsEarned / totalCreditsRequired) * 100));
-
+const SkeletonBox = ({ className = "" }: { className?: string }) => (
+  <div className={`bg-slate-200 rounded animate-pulse ${className}`} />
+);
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -1185,6 +1190,20 @@ const handleMarkAllRead = () => {
 </div>
 
 {/* ✅ NEW: Summary Stats Row */}
+{loading ? (
+  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+    {[0, 1, 2, 3].map((i) => (
+      <div key={i} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <SkeletonBox className="w-9 h-9 rounded-lg" />
+          <SkeletonBox className="w-12 h-3" />
+        </div>
+        <SkeletonBox className="w-16 h-7 mb-1" />
+        <SkeletonBox className="w-20 h-3" />
+      </div>
+    ))}
+  </div>
+) : (
 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
   {/* Registered Courses */}
   <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
@@ -1306,7 +1325,9 @@ const handleMarkAllRead = () => {
     </p>
   </div>
 </div>
+         )}
                 <div className="rounded-2xl p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+
                   <div className="flex items-center space-x-3">
                     <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">
                       <Video className="w-5 h-5 text-blue-400" />
@@ -1393,11 +1414,21 @@ const handleMarkAllRead = () => {
                             </div>
                           );
                         })}
-                        {filteredCourses.length === 0 && (
-                          <div className="col-span-full text-center py-8 text-slate-400 text-xs">
-                            No courses match "{courseSearch}"
-                          </div>
-                        )}
+{filteredCourses.length === 0 && (
+  <div className="col-span-full text-center py-10">
+    <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
+      <BookOpen className="w-7 h-7 text-slate-400" />
+    </div>
+    <h4 className="font-semibold text-slate-700 text-sm">
+      {courses.length === 0 ? "No courses enrolled yet" : "No matches"}
+    </h4>
+    <p className="text-xs text-slate-500 mt-1">
+      {courses.length === 0
+        ? "Browse the course catalog to register for your first course."
+        : "Try a different search term."}
+    </p>
+  </div>
+)}
                       </div>
                     </div>
 
@@ -1487,11 +1518,21 @@ const handleMarkAllRead = () => {
                             </div>
                           );
                         })}
-                        {filteredAssignments.length === 0 && (
-                          <div className="text-center py-8 text-slate-400 text-xs">
-                            No assignments match "{assignmentSearch}"
-                          </div>
-                        )}
+{filteredAssignments.length === 0 && (
+  <div className="text-center py-12">
+    <div className="w-14 h-14 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-3">
+      <FileText className="w-7 h-7 text-slate-400" />
+    </div>
+    <h4 className="font-semibold text-slate-700 text-sm">
+      {assignments.length === 0 ? "No assignments yet" : "No matches"}
+    </h4>
+    <p className="text-xs text-slate-500 mt-1">
+      {assignments.length === 0
+        ? "Your instructors haven't posted any assignments. Check back soon."
+        : `Try a different search term.`}
+    </p>
+  </div>
+)}
                       </div>
                     </div>
                   </div>
@@ -1712,11 +1753,28 @@ const handleMarkAllRead = () => {
                       </div>
                     );
                   })}
-                  {catalogCourses.length === 0 && (
-                    <div className="col-span-full text-center py-12 text-slate-400 text-xs bg-white border border-slate-200 rounded-xl">
-                      No courses match your filters.
-                    </div>
-                  )}
+{catalogCourses.length === 0 && (
+  <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
+    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+      <Search className="w-8 h-8 text-slate-400" />
+    </div>
+    <h4 className="font-display font-bold text-slate-800 text-sm">
+      No courses match your filters
+    </h4>
+    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+      Try adjusting the search or department filter, or clear all filters to see the full catalog.
+    </p>
+    <button
+      onClick={() => {
+        setCatalogSearch("");
+        setCatalogDept("ALL");
+      }}
+      className="mt-4 inline-flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-primary hover:bg-primary-600 text-white text-xs font-semibold transition"
+    >
+      Clear filters
+    </button>
+  </div>
+)}
                 </div>
               </motion.div>
             )}
@@ -1891,13 +1949,21 @@ const handleMarkAllRead = () => {
                 )}
 
                 {/* Empty State */}
-                {filteredMaterials.length === 0 && (
-                  <div className="text-center py-16 text-slate-400 text-xs bg-white border border-slate-200 rounded-xl shadow-sm">
-                    {materials.length === 0
-                      ? "No materials available yet."
-                      : `No materials match "${materialSearch}"`}
-                  </div>
-                )}
+{filteredMaterials.length === 0 && (
+  <div className="text-center py-16 bg-white border border-slate-200 rounded-xl shadow-sm">
+    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+      <FileText className="w-8 h-8 text-slate-400" />
+    </div>
+    <h4 className="font-display font-bold text-slate-800 text-sm">
+      {materials.length === 0 ? "No materials available yet" : "No materials match your search"}
+    </h4>
+    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+      {materials.length === 0
+        ? "Your instructors haven't uploaded any course materials. Check back soon."
+        : `Try a different keyword, or clear "${materialSearch}".`}
+    </p>
+  </div>
+)}
               </motion.div>
             )}
 
@@ -2010,13 +2076,21 @@ const handleMarkAllRead = () => {
                     </div>
                   ))}
 
-                  {visibleLibraryResources.length === 0 && (
-                    <div className="col-span-full text-center py-12 text-slate-400 text-xs bg-white border border-slate-200 rounded-xl">
-                      {libraryResources.length === 0
-                        ? "No library resources have been published yet. Check back soon."
-                        : `No resources match your filters.`}
-                    </div>
-                  )}
+{visibleLibraryResources.length === 0 && (
+  <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
+    <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+      <BookOpen className="w-8 h-8 text-slate-400" />
+    </div>
+    <h4 className="font-display font-bold text-slate-800 text-sm">
+      {libraryResources.length === 0 ? "Library is empty" : "No resources match your filters"}
+    </h4>
+    <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+      {libraryResources.length === 0
+        ? "The University Library Directorate hasn't published any resources yet. Check back soon."
+        : "Try a different media type or clear your search."}
+    </p>
+  </div>
+)}
                 </div>
               </motion.div>
             )}
@@ -2038,7 +2112,20 @@ const handleMarkAllRead = () => {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+<div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {exams.filter((e) => e.status !== "DRAFT" && (e.isPushed || e.status === "ACTIVE" || e.status === "SCHEDULED")).length === 0 && (
+                    <div className="col-span-full text-center py-16 bg-white border border-slate-200 rounded-xl">
+                      <div className="w-16 h-16 mx-auto rounded-full bg-slate-100 flex items-center justify-center mb-4">
+                        <Play className="w-8 h-8 text-slate-400" />
+                      </div>
+                      <h4 className="font-display font-bold text-slate-800 text-sm">
+                        No active exams
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+                        Your instructors haven't scheduled any online examinations yet. Exams appear here when pushed live.
+                      </p>
+                    </div>
+                  )}
                   {exams
                     .filter((e) => e.status !== "DRAFT" && (e.isPushed || e.status === "ACTIVE" || e.status === "SCHEDULED"))
                     .map((exam) => {
