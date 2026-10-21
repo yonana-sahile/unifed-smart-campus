@@ -930,6 +930,41 @@ const handleMarkAllRead = () => {
   const next = markAllRead(derivedNotifications.map((n) => n.id));
   setReadIds(new Set(next));
 };
+
+// ✅ NEW: Hero greeting helpers
+const pendingTasksCount = assignments.filter(
+  (a) => !submissions.some((s) => s.assignmentId === a.id && s.studentId === user.id)
+).length;
+
+const now = new Date();
+const hours = now.getHours();
+const greeting =
+  hours < 12 ? "Good morning" : hours < 17 ? "Good afternoon" : "Good evening";
+const firstName = (user.fullName || "").split(" ")[0] || "Student";
+const todayLabel = now.toLocaleDateString("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
+
+const nextExam = exams
+  .filter((e) => {
+    const d = new Date(e.examDate).getTime();
+    return d > now.getTime() && e.status !== "DRAFT";
+  })
+  .sort(
+    (a, b) => new Date(a.examDate).getTime() - new Date(b.examDate).getTime()
+  )[0];
+
+const daysToNextExam = nextExam
+  ? Math.max(
+      0,
+      Math.ceil(
+        (new Date(nextExam.examDate).getTime() - now.getTime()) /
+          (1000 * 60 * 60 * 24)
+      )
+    )
+  : null;
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="student_dashboard_main">
 <UniversityTopBar
@@ -1177,18 +1212,55 @@ const handleMarkAllRead = () => {
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
               >
-{/* ✅ Welcome header */}
-<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-  <div>
-    <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
-      Welcome Back, {user.fullName}!
-    </h2>
-    <p className="text-slate-500 text-xs sm:text-sm">
-      Here is a quick overview of your courses, announcements, and upcoming deadlines.
-    </p>
+{/* ✅ NEW: Hero Greeting Card */}
+<div className="relative rounded-2xl p-5 sm:p-7 bg-gradient-to-br from-blue-950 via-indigo-900 to-slate-900 text-white shadow-xl border border-blue-800/40 overflow-hidden">
+  {/* Decorative glows */}
+  <div className="absolute top-0 right-0 w-72 h-72 bg-amber-400/15 rounded-full blur-3xl pointer-events-none" />
+  <div className="absolute bottom-0 left-1/3 w-56 h-56 bg-blue-500/20 rounded-full blur-3xl pointer-events-none" />
+
+  <div className="relative z-10 flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+    <div className="min-w-0">
+      <p className="text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest text-amber-400">
+        {todayLabel}
+      </p>
+      <h1 className="mt-1.5 text-2xl sm:text-3xl font-display font-bold leading-tight">
+        {greeting}, {firstName} <span className="inline-block">👋</span>
+      </h1>
+      <p className="mt-1.5 text-xs sm:text-sm text-blue-200 max-w-xl">
+        {pendingTasksCount > 0
+          ? `You have ${pendingTasksCount} pending task${pendingTasksCount !== 1 ? "s" : ""}${
+              daysToNextExam !== null
+                ? ` and ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam`
+                : ""
+            }.`
+          : daysToNextExam !== null
+          ? `All caught up! ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam.`
+          : "You're all caught up. Keep up the good work."}
+      </p>
+    </div>
+
+    {/* CGPA badge */}
+    <div className="shrink-0 flex items-center gap-3 bg-white/10 backdrop-blur-md border border-white/15 rounded-xl px-4 py-3">
+      <div>
+        <p className="text-[9px] font-mono uppercase tracking-wider text-blue-200">
+          CGPA
+        </p>
+        <p className="text-xl font-display font-bold text-white leading-tight">
+          {user.cgpa?.toFixed(2) || "0.00"}
+        </p>
+      </div>
+      <div className="w-px h-9 bg-white/20" />
+      <div>
+        <p className="text-[9px] font-mono uppercase tracking-wider text-blue-200">
+          Credits
+        </p>
+        <p className="text-xl font-display font-bold text-amber-300 leading-tight">
+          {creditsEarned}
+        </p>
+      </div>
+    </div>
   </div>
 </div>
-
 {/* ✅ NEW: Summary Stats Row */}
 {loading ? (
   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
