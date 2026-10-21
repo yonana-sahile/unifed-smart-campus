@@ -394,8 +394,8 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
                   <table className="w-full text-left text-xs md:text-sm min-w-[820px]">
                     <thead>
                       <tr className="border-b border-slate-200 bg-slate-50/50 text-slate-400 font-mono text-xs">
-                        <th className="p-4">Student ID</th>
-                        <th className="p-4">Full Name</th>
+<th className="p-4">Photo</th>
+<th className="p-4">Student ID</th>                        <th className="p-4">Full Name</th>
                         <th className="p-4">Program</th>
                         <th className="p-4">Semester</th>
                         <th className="p-4">CGPA</th>
@@ -405,9 +405,21 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
                       {filteredStudents.map((st) => (
-                        <tr key={st.id}>
-                          <td className="p-4 font-mono font-bold">{st.studentId}</td>
-                          <td className="p-4 font-semibold">{st.fullName}</td>
+                       <tr key={st.id}>
+  <td className="p-4">
+    {st.avatarUrl ? (
+      <img
+        src={st.avatarUrl}
+        alt={st.fullName}
+        className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-sm"
+      />
+    ) : (
+      <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-xs font-bold">
+        {st.fullName?.charAt(0).toUpperCase() || "?"}
+      </div>
+    )}
+  </td>
+  <td className="p-4 font-mono font-bold">{st.studentId}</td>       <td className="p-4 font-semibold">{st.fullName}</td>
                           <td className="p-4">{st.program}</td>
                           <td className="p-4 font-mono">Yr {st.academicYear} Sem {st.semester}</td>
                           <td className="p-4 font-mono">{st.cgpa?.toFixed(2)}</td>
