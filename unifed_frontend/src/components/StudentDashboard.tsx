@@ -1136,25 +1136,140 @@ const handleMarkAllRead = () => {
                 exit={{ opacity: 0, y: -15 }}
                 className="space-y-6"
               >
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
-                      Welcome Back, {user.fullName}!
-                    </h2>
-                    <p className="text-slate-500 text-xs sm:text-sm">
-                      Here is a quick overview of your courses, announcements, and upcoming deadlines.
-                    </p>
-                  </div>
-                  <div className="bg-white border border-slate-200 px-4 py-2.5 sm:py-3 rounded-xl shadow-sm text-left sm:text-center w-fit">
-                    <span className="block text-[10px] sm:text-xs font-mono text-slate-500 uppercase tracking-widest">
-                      Cumulative GPA
-                    </span>
-                    <span className="text-xl sm:text-2xl font-display font-bold text-primary">
-                      {user.cgpa?.toFixed(2)}
-                    </span>
-                  </div>
-                </div>
+{/* ✅ Welcome header */}
+<div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+  <div>
+    <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
+      Welcome Back, {user.fullName}!
+    </h2>
+    <p className="text-slate-500 text-xs sm:text-sm">
+      Here is a quick overview of your courses, announcements, and upcoming deadlines.
+    </p>
+  </div>
+</div>
 
+{/* ✅ NEW: Summary Stats Row */}
+<div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+  {/* Registered Courses */}
+  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+    <div className="flex items-center justify-between mb-2">
+      <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
+        <BookOpen className="w-4 h-4 text-primary" />
+      </div>
+      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+        Courses
+      </span>
+    </div>
+    <p className="text-2xl font-display font-bold text-slate-900">
+      {grades.length}
+    </p>
+    <p className="text-[11px] text-slate-500 mt-0.5">
+      Active enrollments
+    </p>
+  </div>
+
+  {/* CGPA */}
+  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+    <div className="flex items-center justify-between mb-2">
+      <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
+        <Award className="w-4 h-4 text-amber-600" />
+      </div>
+      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+        CGPA
+      </span>
+    </div>
+    <p className="text-2xl font-display font-bold text-slate-900">
+      {user.cgpa?.toFixed(2) || "0.00"}
+    </p>
+    <p className="text-[11px] text-slate-500 mt-0.5">
+      Out of 4.00
+    </p>
+  </div>
+
+  {/* Pending Assignments */}
+  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+    <div className="flex items-center justify-between mb-2">
+      <div
+        className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
+          assignments.filter(
+            (a) =>
+              !submissions.some(
+                (s) => s.assignmentId === a.id && s.studentId === user.id
+              )
+          ).length > 0
+            ? "bg-amber-50 border-amber-200"
+            : "bg-emerald-50 border-emerald-200"
+        }`}
+      >
+        <FileText
+          className={`w-4 h-4 ${
+            assignments.filter(
+              (a) =>
+                !submissions.some(
+                  (s) => s.assignmentId === a.id && s.studentId === user.id
+                )
+            ).length > 0
+              ? "text-amber-600"
+              : "text-emerald-600"
+          }`}
+        />
+      </div>
+      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+        Tasks
+      </span>
+    </div>
+    <p className="text-2xl font-display font-bold text-slate-900">
+      {
+        assignments.filter(
+          (a) =>
+            !submissions.some(
+              (s) => s.assignmentId === a.id && s.studentId === user.id
+            )
+        ).length
+      }
+    </p>
+    <p className="text-[11px] text-slate-500 mt-0.5">
+      {assignments.filter(
+        (a) =>
+          !submissions.some(
+            (s) => s.assignmentId === a.id && s.studentId === user.id
+          )
+      ).length > 0
+        ? "Pending submissions"
+        : "All caught up ✓"}
+    </p>
+  </div>
+
+  {/* Outstanding Fees */}
+  <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
+    <div className="flex items-center justify-between mb-2">
+      <div
+        className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
+          (user.outstandingFees ?? 0) > 0
+            ? "bg-red-50 border-red-200"
+            : "bg-emerald-50 border-emerald-200"
+        }`}
+      >
+        <CreditCard
+          className={`w-4 h-4 ${
+            (user.outstandingFees ?? 0) > 0 ? "text-red-600" : "text-emerald-600"
+          }`}
+        />
+      </div>
+      <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+        Fees
+      </span>
+    </div>
+    <p className="text-2xl font-display font-bold text-slate-900">
+      {(user.outstandingFees ?? 0) > 0
+        ? `${(user.outstandingFees ?? 0).toLocaleString()}`
+        : "0"}
+    </p>
+    <p className="text-[11px] text-slate-500 mt-0.5">
+      {(user.outstandingFees ?? 0) > 0 ? "ETB due now" : "Cleared ✓"}
+    </p>
+  </div>
+</div>
                 <div className="rounded-2xl p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-center space-x-3">
                     <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">
