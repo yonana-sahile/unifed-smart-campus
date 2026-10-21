@@ -35,7 +35,7 @@ const DEMO_USERS: User[] = [
   },
   {
     id: "U_IN01",
-    username: "chalachew",
+username: "teach1",
     fullName: "Dr. Chalachew",
     email: "chalachew@mau.edu.et",
     role: "INSTRUCTOR",
@@ -47,7 +47,7 @@ const DEMO_USERS: User[] = [
   },
   {
     id: "U_REG01",
-    username: "almaz",
+    username: "melkamu",
     fullName: "Almaz Kebede",
     email: "registrar@mau.edu.et",
     role: "REGISTRAR",
@@ -57,7 +57,7 @@ const DEMO_USERS: User[] = [
   },
   {
     id: "U_DEPT01",
-    username: "befekadu",
+    username: "fekadu",
     fullName: "Dr. Befekadu",
     email: "dephead@mau.edu.et",
     role: "DEPARTMENT_HEAD",
