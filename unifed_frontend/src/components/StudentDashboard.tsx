@@ -786,7 +786,43 @@ const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
     const secs = seconds % 60;
     return `${mins}:${secs < 10 ? "0" : ""}${secs}`;
   };
+// ✅ NEW: compute countdown text + colour for assignment due dates
+const getDueStatus = (dueDate: string) => {
+  const now = new Date();
+  const due = new Date(dueDate);
+  const diffMs = due.getTime() - now.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
+  if (diffDays < 0) {
+    const overdue = Math.abs(diffDays);
+    return {
+      label: `Overdue by ${overdue} day${overdue !== 1 ? "s" : ""}`,
+      className: "bg-red-50 text-red-700 border-red-200",
+    };
+  }
+  if (diffDays === 0) {
+    return {
+      label: "Due today",
+      className: "bg-red-50 text-red-700 border-red-200",
+    };
+  }
+  if (diffDays === 1) {
+    return {
+      label: "Due tomorrow",
+      className: "bg-amber-50 text-amber-700 border-amber-200",
+    };
+  }
+  if (diffDays <= 7) {
+    return {
+      label: `Due in ${diffDays} days`,
+      className: "bg-amber-50 text-amber-700 border-amber-200",
+    };
+  }
+  return {
+    label: `Due in ${diffDays} days`,
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  };
+};
   const visibleLibraryResources = libraryResources
     .filter((r) => r.accessLevel !== "FACULTY_ONLY")
     .filter((r) => libraryType === "ALL" || r.resourceType === libraryType)
@@ -1407,9 +1443,16 @@ const handleMarkAllRead = () => {
                                     {as.title}
                                   </h4>
                                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{as.description}</p>
-                                  <span className="inline-block text-xs font-mono text-slate-400 mt-2 bg-slate-100 px-2 py-0.5 rounded">
-                                    Due: {new Date(as.dueDate).toLocaleDateString()}
-                                  </span>
+{(() => {
+  const status = getDueStatus(as.dueDate);
+  return (
+    <span
+      className={`inline-block text-xs font-mono mt-2 px-2 py-0.5 rounded border ${status.className}`}
+    >
+      {status.label}
+    </span>
+  );
+})()}
                                 </div>
                                 <div className="w-full md:w-auto text-right flex flex-col items-end gap-2 flex-shrink-0">
                                   {isSubmitted ? (
