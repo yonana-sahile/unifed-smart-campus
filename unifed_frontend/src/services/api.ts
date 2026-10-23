@@ -1093,3 +1093,65 @@ export const CampusDatabase = {
   updateZoomSession,
   deleteZoomSession,
 };
+const UCS_API_KEY = "ucs_18840f9b7c82.rtGk8SzsghvmSkZFCbHmi0P8l7HU5dXcCPmPse6Kmk8";
+const UCS_BASE_URL = "https://university-clearance-system-ikpx.onrender.com/api";
+
+// Create a dedicated Axios instance for the Clearance System
+export const ucsApi = axios.create({
+  baseURL: UCS_BASE_URL,
+  timeout: 60000,
+  headers: {
+    'Content-Type': 'application/json',
+    'X-API-Key': UCS_API_KEY // 👈 The key you generated
+  },
+});
+
+// Interceptor for UCS API
+ucsApi.interceptors.request.use((config) => {
+  console.log('[UCS API→]', config.method?.toUpperCase(), config.url);
+  return config;
+});
+
+ucsApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('[UCS API Error]', error?.response?.status, error?.response?.data);
+    return Promise.reject(error);
+  }
+);
+
+// --- UCS Specific API Calls ---
+
+export interface UCSForm {
+  id: number;
+  full_name: string;
+  id_number: string;
+  status: string; // e.g., 'pending_department', 'approved_department', 'Cleared by Registrar'
+  department_name: string;
+  created_at: string;
+  // ... add other fields as needed
+}
+
+// 1. Fetch student profile
+export const getUCSUserProfile = async (): Promise<any> => {
+  const { data } = await ucsApi.get('/me');
+  return data;
+};
+
+// 2. Fetch student's clearance forms
+export const getUCSStudentForms = async (): Promise<UCSForm[]> => {
+  const { data } = await ucsApi.get('/student/forms');
+  return data;
+};
+
+// 3. Submit a new clearance form
+export const submitUCSForm = async (formData: any): Promise<any> => {
+  const { data } = await ucsApi.post('/forms/submit', formData);
+  return data;
+};
+
+// 4. Fetch payment methods
+export const getUCSPaymentMethods = async (): Promise<any[]> => {
+  const { data } = await ucsApi.get('/payment/methods');
+  return data;
+};

@@ -1007,12 +1007,21 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const daysToNextExam = nextExam
     ? Math.max(
+<<<<<<< HEAD
       0,
       Math.ceil(
         (new Date(nextExam.examDate).getTime() - now.getTime()) /
         (1000 * 60 * 60 * 24)
       )
     )
+=======
+        0,
+        Math.ceil(
+          (new Date(nextExam.examDate).getTime() - now.getTime()) /
+            (1000 * 60 * 60 * 24)
+        )
+      )
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
     : null;
 
   return (
@@ -1094,7 +1103,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   <button
                     key={id}
                     onClick={() => goToTab(id)}
+<<<<<<< HEAD
                     className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${activeTab === id
+=======
+                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
+                      activeTab === id
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                         ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                         : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
                       }`}
@@ -1126,7 +1140,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           <button
             key={id}
             onClick={() => setActiveTab(id as any)}
+<<<<<<< HEAD
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${activeTab === id
+=======
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
+              activeTab === id
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                 ? "bg-primary text-white border border-amber-400/40 shadow-xs"
                 : "bg-slate-900/60 text-slate-300 hover:bg-slate-800 border border-slate-800"
               }`}
@@ -1176,7 +1195,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
+<<<<<<< HEAD
                 className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${activeTab === id
+=======
+                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
+                  activeTab === id
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                     ? isCopilot
                       ? "bg-gradient-to-r from-cyan-700 to-blue-700 text-white border border-cyan-400/30 shadow-xs"
                       : "bg-primary text-white border border-amber-400/20 shadow-xs"
@@ -1230,8 +1254,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         </aside>
 
         <main
+<<<<<<< HEAD
           className={`flex-1 min-w-0 ${activeTab === "clearance" ? "p-0 overflow-x-hidden" : "p-3.5 sm:p-6 md:p-8 overflow-y-auto"
             }`}
+=======
+          className={`flex-1 min-w-0 ${
+            activeTab === "clearance" ? "p-0 overflow-x-hidden" : "p-3.5 sm:p-6 md:p-8 overflow-y-auto"
+          }`}
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
         >
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
@@ -1257,6 +1287,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       </h1>
                       <p className="mt-1.5 text-xs sm:text-sm text-blue-200 max-w-xl">
                         {pendingTasksCount > 0
+<<<<<<< HEAD
                           ? `You have ${pendingTasksCount} pending task${pendingTasksCount !== 1 ? "s" : ""}${daysToNextExam !== null
                             ? ` and ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam`
                             : ""
@@ -1264,6 +1295,16 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           : daysToNextExam !== null
                             ? `All caught up! ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam.`
                             : "You're all caught up. Keep up the good work."}
+=======
+                          ? `You have ${pendingTasksCount} pending task${pendingTasksCount !== 1 ? "s" : ""}${
+                              daysToNextExam !== null
+                                ? ` and ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam`
+                                : ""
+                            }.`
+                          : daysToNextExam !== null
+                          ? `All caught up! ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam.`
+                          : "You're all caught up. Keep up the good work."}
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                       </p>
                     </div>
 
@@ -1328,8 +1369,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
                       <div className="flex items-center justify-between mb-2">
                         <div
+<<<<<<< HEAD
                           className={`w-9 h-9 rounded-lg border flex items-center justify-center ${pendingTasksCount > 0 ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"
                             }`}
+=======
+                          className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
+                            pendingTasksCount > 0 ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"
+                          }`}
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                         >
                           <FileText
                             className={`w-4 h-4 ${pendingTasksCount > 0 ? "text-amber-600" : "text-emerald-600"}`}
@@ -1346,6 +1393,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
                       <div className="flex items-center justify-between mb-2">
                         <div
+<<<<<<< HEAD
                           className={`w-9 h-9 rounded-lg border flex items-center justify-center ${(user.outstandingFees ?? 0) > 0
                               ? "bg-red-50 border-red-200"
                               : "bg-emerald-50 border-emerald-200"
@@ -1354,6 +1402,18 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           <CreditCard
                             className={`w-4 h-4 ${(user.outstandingFees ?? 0) > 0 ? "text-red-600" : "text-emerald-600"
                               }`}
+=======
+                          className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
+                            (user.outstandingFees ?? 0) > 0
+                              ? "bg-red-50 border-red-200"
+                              : "bg-emerald-50 border-emerald-200"
+                          }`}
+                        >
+                          <CreditCard
+                            className={`w-4 h-4 ${
+                              (user.outstandingFees ?? 0) > 0 ? "text-red-600" : "text-emerald-600"
+                            }`}
+>>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                           />
                         </div>
                         <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Fees</span>
