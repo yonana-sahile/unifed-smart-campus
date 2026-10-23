@@ -23,7 +23,10 @@ import {
 } from "../utils/notifications";
 import { useReadingList } from "../hooks/useReadingList";
 import { ReadingListButton } from "./ReadingListButton";
-import { MyReadingList } from "./MyReadingList";interface StudentDashboardProps {
+import { MyReadingList } from "./MyReadingList";
+import { ResourceReader } from "./ResourceReader";
+
+interface StudentDashboardProps {
   user: User;
   onLogout: () => void;
 }
@@ -99,6 +102,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [loading, setLoading] = useState(true);
   const readingList = useReadingList(user.id);
   const [libraryView, setLibraryView] = useState<"CATALOG" | "MY_LIST">("CATALOG");  // Clearance iframe layout
+    const [openReaderResource, setOpenReaderResource] = useState<LibraryResource | null>(null);
   const clearanceFrameRef = useRef<HTMLDivElement | null>(null);
   const [clearanceHeight, setClearanceHeight] = useState<number | null>(null);
   const [clearanceFullscreen, setClearanceFullscreen] = useState(false);
@@ -2170,24 +2174,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                     readingList={readingList}
                     resources={libraryResources}
                     onOpen={(res) => {
-                      const url =
-                        (res as any).fileUrl ??
-                        (res as any).file_url ??
-                        (res as any).url;
-                      const data = (res as any).fileData;
-                      const src = data || url;
-                      if (src) {
-                        if (typeof src === "string" && src.startsWith("data:")) {
-                          const a = document.createElement("a");
-                          a.href = src;
-                          a.download = res.title || "resource";
-                          a.click();
-                        } else {
-                          window.open(src, "_blank", "noopener,noreferrer");
-                        }
-                      } else {
-                        handleLibraryDownload(res);
-                      }
+                      setOpenReaderResource(res);
                     }}
                     onGoToCatalog={() => setLibraryView("CATALOG")}
                   />
@@ -3271,6 +3258,28 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
           onClose={() => {
             setShowVerification(false);
             setPendingExam(null);
+          }}
+        />
+      )}
+            {openReaderResource && (
+        <ResourceReader
+          resource={openReaderResource}
+          initialProgress={
+            readingList.findItem(openReaderResource.id)?.progressPercent ?? 0
+          }
+          initialLocation={
+            readingList.findItem(openReaderResource.id)?.lastLocation
+          }
+          onClose={() => setOpenReaderResource(null)}
+          onProgress={(percent, location) => {
+            readingList.updateProgress(
+              openReaderResource.id,
+              percent,
+              location
+            );
+          }}
+          onMarkFinished={() => {
+            readingList.markFinished(openReaderResource.id);
           }}
         />
       )}
