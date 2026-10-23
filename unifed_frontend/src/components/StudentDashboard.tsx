@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
+﻿import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
 import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, LibraryResource } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
@@ -422,7 +422,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       const token = localStorage.getItem("access_token");
 
       if (!token) {
-        throw new Error("No access_token in localStorage — please log out and log in again.");
+        throw new Error("No access_token in localStorage â€” please log out and log in again.");
       }
 
       // 1. Request verification token
@@ -609,7 +609,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Submit Evaluation", "InstructorEvaluation", evaluatorInstructorId,
-        `Submitted evaluation for ${instructor?.fullName || "instructor"} — ${evaluationRating}/5`
+        `Submitted evaluation for ${instructor?.fullName || "instructor"} â€” ${evaluationRating}/5`
       );
 
       alert(
@@ -1007,21 +1007,12 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const daysToNextExam = nextExam
     ? Math.max(
-<<<<<<< HEAD
-      0,
-      Math.ceil(
-        (new Date(nextExam.examDate).getTime() - now.getTime()) /
-        (1000 * 60 * 60 * 24)
-      )
-    )
-=======
         0,
         Math.ceil(
           (new Date(nextExam.examDate).getTime() - now.getTime()) /
             (1000 * 60 * 60 * 24)
         )
       )
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
     : null;
 
   return (
@@ -1030,8 +1021,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         user={user}
         onLogout={onLogout}
         portalTitle="Student Information System (SIS)"
-        portalSubtitle="College of Informatics & Technology • Software Engineering"
-        badgeText={user.studentId ? `STUDENT • ${user.studentId}` : "STUDENT"}
+        portalSubtitle="College of Informatics & Technology â€¢ Software Engineering"
+        badgeText={user.studentId ? `STUDENT â€¢ ${user.studentId}` : "STUDENT"}
         badgeType="student"
         onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
         isMobileNavOpen={isMobileNavOpen}
@@ -1103,12 +1094,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                   <button
                     key={id}
                     onClick={() => goToTab(id)}
-<<<<<<< HEAD
-                    className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${activeTab === id
-=======
                     className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition ${
                       activeTab === id
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                         ? "bg-primary text-white border border-amber-400/20 shadow-xs"
                         : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
                       }`}
@@ -1140,12 +1127,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           <button
             key={id}
             onClick={() => setActiveTab(id as any)}
-<<<<<<< HEAD
-            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${activeTab === id
-=======
             className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition shrink-0 active:scale-95 ${
               activeTab === id
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                 ? "bg-primary text-white border border-amber-400/40 shadow-xs"
                 : "bg-slate-900/60 text-slate-300 hover:bg-slate-800 border border-slate-800"
               }`}
@@ -1195,12 +1178,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-<<<<<<< HEAD
-                className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${activeTab === id
-=======
                 className={`w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition ${
                   activeTab === id
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                     ? isCopilot
                       ? "bg-gradient-to-r from-cyan-700 to-blue-700 text-white border border-cyan-400/30 shadow-xs"
                       : "bg-primary text-white border border-amber-400/20 shadow-xs"
@@ -1254,14 +1233,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         </aside>
 
         <main
-<<<<<<< HEAD
-          className={`flex-1 min-w-0 ${activeTab === "clearance" ? "p-0 overflow-x-hidden" : "p-3.5 sm:p-6 md:p-8 overflow-y-auto"
-            }`}
-=======
           className={`flex-1 min-w-0 ${
             activeTab === "clearance" ? "p-0 overflow-x-hidden" : "p-3.5 sm:p-6 md:p-8 overflow-y-auto"
           }`}
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
         >
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
@@ -1283,19 +1257,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         {todayLabel}
                       </p>
                       <h1 className="mt-1.5 text-2xl sm:text-3xl font-display font-bold leading-tight">
-                        {greeting}, {firstName} <span className="inline-block">👋</span>
+                        {greeting}, {firstName} <span className="inline-block">ðŸ‘‹</span>
                       </h1>
                       <p className="mt-1.5 text-xs sm:text-sm text-blue-200 max-w-xl">
                         {pendingTasksCount > 0
-<<<<<<< HEAD
-                          ? `You have ${pendingTasksCount} pending task${pendingTasksCount !== 1 ? "s" : ""}${daysToNextExam !== null
-                            ? ` and ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam`
-                            : ""
-                          }.`
-                          : daysToNextExam !== null
-                            ? `All caught up! ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam.`
-                            : "You're all caught up. Keep up the good work."}
-=======
                           ? `You have ${pendingTasksCount} pending task${pendingTasksCount !== 1 ? "s" : ""}${
                               daysToNextExam !== null
                                 ? ` and ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam`
@@ -1304,7 +1269,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                           : daysToNextExam !== null
                           ? `All caught up! ${daysToNextExam} day${daysToNextExam !== 1 ? "s" : ""} until your next exam.`
                           : "You're all caught up. Keep up the good work."}
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                       </p>
                     </div>
 
@@ -1369,14 +1333,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
                       <div className="flex items-center justify-between mb-2">
                         <div
-<<<<<<< HEAD
-                          className={`w-9 h-9 rounded-lg border flex items-center justify-center ${pendingTasksCount > 0 ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"
-                            }`}
-=======
                           className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
                             pendingTasksCount > 0 ? "bg-amber-50 border-amber-200" : "bg-emerald-50 border-emerald-200"
                           }`}
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                         >
                           <FileText
                             className={`w-4 h-4 ${pendingTasksCount > 0 ? "text-amber-600" : "text-emerald-600"}`}
@@ -1386,23 +1345,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       </div>
                       <p className="text-2xl font-display font-bold text-slate-900">{pendingTasksCount}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {pendingTasksCount > 0 ? "Pending submissions" : "All caught up ✓"}
+                        {pendingTasksCount > 0 ? "Pending submissions" : "All caught up âœ“"}
                       </p>
                     </div>
 
                     <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
                       <div className="flex items-center justify-between mb-2">
                         <div
-<<<<<<< HEAD
-                          className={`w-9 h-9 rounded-lg border flex items-center justify-center ${(user.outstandingFees ?? 0) > 0
-                              ? "bg-red-50 border-red-200"
-                              : "bg-emerald-50 border-emerald-200"
-                            }`}
-                        >
-                          <CreditCard
-                            className={`w-4 h-4 ${(user.outstandingFees ?? 0) > 0 ? "text-red-600" : "text-emerald-600"
-                              }`}
-=======
                           className={`w-9 h-9 rounded-lg border flex items-center justify-center ${
                             (user.outstandingFees ?? 0) > 0
                               ? "bg-red-50 border-red-200"
@@ -1413,7 +1362,6 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             className={`w-4 h-4 ${
                               (user.outstandingFees ?? 0) > 0 ? "text-red-600" : "text-emerald-600"
                             }`}
->>>>>>> 41e8eac30861b112b99981e1fa6294dfa6f4efff
                           />
                         </div>
                         <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Fees</span>
@@ -1422,7 +1370,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         {(user.outstandingFees ?? 0) > 0 ? `${(user.outstandingFees ?? 0).toLocaleString()}` : "0"}
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {(user.outstandingFees ?? 0) > 0 ? "ETB due now" : "Cleared ✓"}
+                        {(user.outstandingFees ?? 0) > 0 ? "ETB due now" : "Cleared âœ“"}
                       </p>
                     </div>
                   </div>
@@ -1488,7 +1436,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                 </span>
                                 <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${progress === 100 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
                                   }`}>
-                                  {progress === 100 ? "✓ Complete" : `${progress}%`}
+                                  {progress === 100 ? "âœ“ Complete" : `${progress}%`}
                                 </span>
                               </div>
                               <h4 className="font-semibold text-slate-800 mt-2 line-clamp-1">{c.courseTitle}</h4>
@@ -1639,7 +1587,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         {announcements.map((an) => (
                           <div key={an.id} className="border-l-4 border-primary pl-4 py-2 space-y-1">
                             <span className="text-[10px] font-mono text-slate-400">
-                              {new Date(an.postedAt).toLocaleDateString()} • {an.postedBy}
+                              {new Date(an.postedAt).toLocaleDateString()} â€¢ {an.postedBy}
                             </span>
                             <h4 className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-1">{an.title}</h4>
                             <p className="text-xs text-slate-500 line-clamp-2">{an.content}</p>
@@ -1942,7 +1890,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               className="flex-1 bg-primary hover:bg-primary-600 disabled:opacity-70 text-white py-2 rounded-lg flex items-center justify-center space-x-1.5 text-xs font-bold transition shadow-sm relative overflow-hidden"
                             >
                               {progress !== undefined ? (
-                                <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "✓"}</span>
+                                <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "âœ“"}</span>
                               ) : (
                                 <>
                                   <Download className="w-3.5 h-3.5 relative z-10" />
@@ -2007,7 +1955,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                 className="bg-primary hover:bg-primary-600 disabled:opacity-70 text-white px-3 py-2 rounded-lg flex items-center justify-center space-x-1.5 text-xs font-bold transition shadow-sm relative overflow-hidden min-w-[44px]"
                               >
                                 {progress !== undefined ? (
-                                  <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "✓"}</span>
+                                  <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "âœ“"}</span>
                                 ) : (
                                   <>
                                     <Download className="w-3.5 h-3.5 relative z-10" />
@@ -2102,7 +2050,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                   : "bg-emerald-50 text-emerald-700 border border-emerald-200"
                               }`}
                           >
-                            {res.resourceType} • {res.fileSize}
+                            {res.resourceType} â€¢ {res.fileSize}
                           </span>
                           <span className="text-[10px] font-mono text-slate-400 shrink-0 flex items-center space-x-1">
                             <Download className="w-3 h-3" />
@@ -2129,7 +2077,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
                       <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
                         <span className="text-[10px] font-mono text-slate-400">
-                          {res.accessLevel === "PUBLIC" ? "🌐 Public" : "🎓 Students Only"}
+                          {res.accessLevel === "PUBLIC" ? "ðŸŒ Public" : "ðŸŽ“ Students Only"}
                         </span>
                         <button
                           onClick={() => handleLibraryDownload(res)}
@@ -2214,7 +2162,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                 {exam.isPushed && (
                                   <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span>🔥 LIVE PUSHED</span>
+                                    <span>ðŸ”¥ LIVE PUSHED</span>
                                   </span>
                                 )}
                                 <div className="flex items-center space-x-1.5 text-xs text-slate-500 font-mono">
@@ -2313,7 +2261,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                 {g.courseTitle}
                               </h4>
                               <p className="text-xs text-slate-400">
-                                Credit Hours: {g.creditHours} • Status: {g.status}
+                                Credit Hours: {g.creditHours} â€¢ Status: {g.status}
                               </p>
                             </div>
                             <div className="flex items-center space-x-4 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 flex-shrink-0">
@@ -2381,9 +2329,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                 {inst.fullName}
                                 {inst.department ? ` (${inst.department})` : ""}
                                 {inst.role === "DEPARTMENT_HEAD"
-                                  ? " — Dept. Head"
+                                  ? " â€” Dept. Head"
                                   : inst.role === "DEAN"
-                                    ? " — Dean"
+                                    ? " â€” Dean"
                                     : ""}
                               </option>
                             ))
@@ -2406,7 +2354,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                               <option value="">-- Choose Course --</option>
                               {evaluationCoursesToShow.map((c) => (
                                 <option key={c.id} value={c.id}>
-                                  {c.courseCode} — {c.courseTitle}
+                                  {c.courseCode} â€” {c.courseTitle}
                                 </option>
                               ))}
                             </select>
@@ -2505,14 +2453,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                             Mekdela Amba University
                           </h3>
                           <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-600 font-mono font-bold">
-                            Office of the University Registrar • የሬጅስትራር ጽሕፈት ቤት
+                            Office of the University Registrar â€¢ á‹¨áˆ¬áŒ…áˆµá‰µáˆ«áˆ­ áŒ½áˆ•áˆá‰µ á‰¤á‰µ
                           </p>
                           <p className="text-[11px] text-slate-500 italic font-serif">
-                            "Veritas, Scientia et Virtus" • South Wollo, Amhara Region, Ethiopia
+                            "Veritas, Scientia et Virtus" â€¢ South Wollo, Amhara Region, Ethiopia
                           </p>
                           <div className="pt-1 flex items-center justify-center gap-2">
                             <span className="inline-block text-[10px] bg-emerald-50 text-emerald-800 px-3 py-0.5 rounded-full font-mono font-bold border border-emerald-200 shadow-2xs">
-                              OFFICIAL DIGITAL RECORD • CRYPTOGRAPHICALLY VERIFIED
+                              OFFICIAL DIGITAL RECORD â€¢ CRYPTOGRAPHICALLY VERIFIED
                             </span>
                           </div>
                         </div>
@@ -2633,8 +2581,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         </div>
 
                         <div className="border-t border-slate-100 mt-6 pt-4 flex flex-col sm:flex-row sm:justify-between items-center gap-2 text-[10px] font-mono text-slate-400">
-                          <p>© Mekdela Amba University Registrar's Directorate • All Rights Reserved</p>
-                          <p>Verification Code: VERIFY-MAU-771 • Tulu Awlia, Ethiopia</p>
+                          <p>Â© Mekdela Amba University Registrar's Directorate â€¢ All Rights Reserved</p>
+                          <p>Verification Code: VERIFY-MAU-771 â€¢ Tulu Awlia, Ethiopia</p>
                         </div>
                       </div>
                     </div>
@@ -2983,7 +2931,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 <div className="lg:col-span-2 space-y-5">
                   {isQuestionsBlurred && (
                     <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
-                      <p className="text-sm font-bold text-red-800">⚠️ Your questions are temporarily hidden.</p>
+                      <p className="text-sm font-bold text-red-800">âš ï¸ Your questions are temporarily hidden.</p>
                       <p className="text-xs text-red-700 mt-1">
                         Please return your face to the center of the camera to resume the exam.
                       </p>
