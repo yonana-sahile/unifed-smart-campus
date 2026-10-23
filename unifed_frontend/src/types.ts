@@ -462,3 +462,69 @@ export interface AIChatMessage {
   timestamp: string;
   suggestedActions?: string[];
 }
+
+// ============================================================
+// READING LIST (Feature 14)
+// ============================================================
+
+/** Lifecycle of a resource in a student's reading list. */
+export type ReadingStatus = "SAVED" | "READING" | "FINISHED";
+
+/**
+ * A single library resource saved by a student.
+ * One record per (student, resource) pair.
+ */
+export interface ReadingListItem {
+  /** Unique per user+resource, e.g. "RL_1730000000000" */
+  id: string;
+
+  /** The student who owns this item ("U_5" or "5") */
+  userId: string;
+
+  /** Points to LibraryResource.id */
+  resourceId: string;
+
+  /** SAVED → READING → FINISHED (auto-advances with progress) */
+  status: ReadingStatus;
+
+  /** Which shelf/folder this sits on. "Default" if none chosen. */
+  shelf: string;
+
+  /** 0–100. Updated as the student scrolls/watches. */
+  progressPercent: number;
+
+  /**
+   * Where they stopped, encoded as a string:
+   *   "scroll:0.62"   → 62% down the page
+   *   "page:42"       → PDF page 42
+   *   "time:183.5"    → video at 3:03
+   */
+  lastLocation?: string;
+
+  /** Optional private note */
+  note?: string;
+
+  /** 1–5, only set when FINISHED */
+  rating?: number;
+
+  /** ISO timestamp when saved */
+  savedAt: string;
+
+  /** ISO timestamp of last open */
+  lastOpenedAt?: string;
+
+  /** ISO timestamp when marked finished */
+  finishedAt?: string;
+}
+
+/** A user-created shelf/folder for organizing reading list items. */
+export interface ReadingShelf {
+  id: string;
+  userId: string;
+  name: string;
+  /** Lucide icon name or emoji, e.g. "📚", "🎯", "🔬" */
+  icon?: string;
+  /** Hex color for the shelf chip, e.g. "#6366f1" */
+  color?: string;
+  createdAt: string;
+}
