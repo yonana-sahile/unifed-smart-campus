@@ -21,7 +21,8 @@ import {
   markRead,
   markAllRead,
 } from "../utils/notifications";
-
+import { useReadingList } from "../hooks/useReadingList";
+import { ReadingListButton } from "./ReadingListButton";
 interface StudentDashboardProps {
   user: User;
   onLogout: () => void;
@@ -96,7 +97,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [catalogDept, setCatalogDept] = useState("ALL");
   const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
   const [loading, setLoading] = useState(true);
-
+  const readingList = useReadingList(user.id);
   // Clearance iframe layout
   const clearanceFrameRef = useRef<HTMLDivElement | null>(null);
   const [clearanceHeight, setClearanceHeight] = useState<number | null>(null);
@@ -911,8 +912,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         res.id,
         `Downloaded "${res.title}" by ${res.author}`
       );
-      alert(`Download started: "${res.title}" (${res.fileSize})`);
-    } catch (err: any) {
+alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : ""}`);    } catch (err: any) {
       const detail = err?.response?.data
         ? JSON.stringify(err.response.data)
         : err?.message || "Unknown error";
@@ -2041,23 +2041,34 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                       className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow-md hover:border-primary/40 transition flex flex-col justify-between"
                     >
                       <div className="space-y-3">
-                        <div className="flex justify-between items-start gap-2">
-                          <span
-                            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${res.resourceType === "BOOK"
-                                ? "bg-blue-50 text-blue-700 border border-blue-200"
-                                : res.resourceType === "VIDEO"
-                                  ? "bg-purple-50 text-purple-700 border border-purple-200"
-                                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                              }`}
-                          >
-                            {res.resourceType} â€¢ {res.fileSize}
-                          </span>
-                          <span className="text-[10px] font-mono text-slate-400 shrink-0 flex items-center space-x-1">
-                            <Download className="w-3 h-3" />
-                            <span>{res.downloadsCount}</span>
-                          </span>
-                        </div>
 
+        <div className="flex justify-between items-start gap-2">
+          <span
+            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md uppercase tracking-wider ${res.resourceType === "BOOK"
+                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                : res.resourceType === "VIDEO"
+                  ? "bg-purple-50 text-purple-700 border border-purple-200"
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+              }`}
+          >
+            {res.resourceType} â€¢ {res.fileSize}
+          </span>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-[10px] font-mono text-slate-400 flex items-center space-x-1">
+              <Download className="w-3 h-3" />
+              <span>{res.downloadsCount}</span>
+            </span>
+            <ReadingListButton
+              size="sm"
+              saved={readingList.isSaved(res.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                readingList.toggleSave(res.id);
+              }}
+            />
+          </div>
+        </div>
                         <div>
                           <h3 className="font-semibold text-slate-800 text-sm line-clamp-2">{res.title}</h3>
                           <p className="text-xs text-slate-500 mt-1">
@@ -2079,13 +2090,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                         <span className="text-[10px] font-mono text-slate-400">
                           {res.accessLevel === "PUBLIC" ? "ðŸŒ Public" : "ðŸŽ“ Students Only"}
                         </span>
-                        <button
-                          onClick={() => handleLibraryDownload(res)}
-                          className="bg-primary hover:bg-primary-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 transition"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                          <span>Download</span>
-                        </button>
+<button
+  onClick={() => handleLibraryDownload(res)}
+  className="bg-primary hover:bg-primary-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 transition"
+>
+  <Download className="w-3.5 h-3.5" />
+  <span>Download</span>
+</button>
                       </div>
                     </div>
                   ))}
