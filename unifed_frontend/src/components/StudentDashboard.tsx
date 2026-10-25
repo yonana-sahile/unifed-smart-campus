@@ -2901,11 +2901,13 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -15 }}
               >
-                <SmartAICopilot
+<SmartAICopilot
   user={user}
   courses={courses}
   grades={getMyGrades()}
   examAttempts={examAttempts}
+  assignments={assignments}   // 👈 Add
+  submissions={submissions}   // 👈 Add
 />
               </motion.div>
             )}
