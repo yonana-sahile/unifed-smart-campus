@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { Upload, FileText, Loader2, X, CheckCircle2 } from "lucide-react";
+import { Upload, FileText, Loader2, X, CheckCircle2, Paperclip } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
@@ -14,9 +14,16 @@ export interface ExtractedPDF {
 interface MaterialUploaderProps {
   onExtracted: (data: ExtractedPDF) => void;
   onClear: () => void;
+  compact?: boolean;
+  currentFileName?: string;
 }
 
-export function MaterialUploader({ onExtracted, onClear }: MaterialUploaderProps) {
+export function MaterialUploader({
+  onExtracted,
+  onClear,
+  compact = false,
+  currentFileName,
+}: MaterialUploaderProps) {
   const [extracting, setExtracting] = useState(false);
   const [extracted, setExtracted] = useState<ExtractedPDF | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +32,6 @@ export function MaterialUploader({ onExtracted, onClear }: MaterialUploaderProps
   const extractPDF = async (file: File) => {
     setExtracting(true);
     setError(null);
-
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -34,17 +40,11 @@ export function MaterialUploader({ onExtracted, onClear }: MaterialUploaderProps
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const text = content.items
-          .map((item: any) => item.str)
-          .join(" ")
-          .trim();
+        const text = content.items.map((item: any) => item.str).join(" ").trim();
         if (text) pages.push({ pageNumber: i, text });
       }
 
-      const fullText = pages
-        .map((p) => `[Page ${p.pageNumber}]\n${p.text}`)
-        .join("\n\n");
-
+      const fullText = pages.map((p) => `[Page ${p.pageNumber}]\n${p.text}`).join("\n\n");
       const result: ExtractedPDF = { fileName: file.name, pages, fullText };
       setExtracted(result);
       onExtracted(result);
@@ -75,6 +75,64 @@ export function MaterialUploader({ onExtracted, onClear }: MaterialUploaderProps
     onClear();
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // COMPACT MODE — DeepSeek-style paperclip + file chip
+  // ─────────────────────────────────────────────────────────────
+  if (compact) {
+    const showChip = !!(extracted?.fileName || currentFileName);
+
+    if (showChip) {
+      return (
+        <div className="flex items-center space-x-1.5 px-2 py-1 rounded-lg bg-cyan-50 border border-cyan-200 text-xs max-w-full">
+          <FileText className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+          <span className="font-semibold text-cyan-900 truncate max-w-[180px]">
+            {extracted?.fileName || currentFileName}
+          </span>
+          {extracting ? (
+            <Loader2 className="w-3 h-3 animate-spin text-cyan-600" />
+          ) : (
+            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+          )}
+          <button
+            onClick={handleClear}
+            className="text-cyan-700 hover:text-red-600 transition"
+            title="Remove PDF"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:text-cyan-600 hover:bg-cyan-50 border border-slate-200 transition"
+          title="Upload a PDF lecture note"
+        >
+          {extracting ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Paperclip className="w-4 h-4" />
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/pdf"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+        {error && <span className="text-[10px] text-red-600">{error}</span>}
+      </>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // FULL MODE — original big upload panel (unchanged behavior)
+  // ─────────────────────────────────────────────────────────────
   if (extracted) {
     return (
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
