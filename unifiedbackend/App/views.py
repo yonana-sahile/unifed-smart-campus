@@ -805,7 +805,16 @@ _SHORT_MESSAGES = {
     "what", "huh", "sorry", "?", "??", "???", "what?", "ok", "okay", "k",
     "yes", "no", "nah", "hmm", "umm", "er",
 }
+_GREETINGS = {
+    "hi", "hello", "hey", "selam", "salam", "good morning",
+    "good afternoon", "good evening", "thanks", "thank you", "bye",
+}
 
+_GREETING_REPLY = (
+    "Hello! 👋 I'm your MAU Academic Copilot. "
+    "Ask me about courses, grades, exams, fees, clearance — "
+    "or upload a PDF to study from."
+)
 _CLARIFICATION_REPLY = (
     "Could you clarify what you'd like help with? I can answer questions about:\n\n"
     "• Course registration\n"
@@ -859,6 +868,17 @@ CRITICAL RULES — FOLLOW THESE EXACTLY
    c) If the answer is NOT in [STUDENT CONTEXT], check the <context> block (MAU knowledge base).
    d) If neither has the answer, say: "I don't have that information. Please contact the registrar at +251 33 222 0120."
 
+2.5. If the message contains an [UPLOADED MATERIAL: ...] block, this is a PDF the
+   student uploaded. It is split into [Page N] sections, e.g.:
+       [UPLOADED MATERIAL: lecture.pdf]
+       [Page 1] ...text...
+       [Page 2] ...text...
+   When the user asks about the PDF ("summarize this", "extract key terms",
+   "what does page 3 say", "explain X"), you MUST answer FROM THIS BLOCK.
+   - Quote/cite page numbers: "On page 3, ..."
+   - If the answer is not in the uploaded pages, say:
+     "That isn't covered in the uploaded pages (I can see pages 1–N)."
+   - NEVER fall back to rule 2d for PDF questions — the PDF IS the source.
 3. NEVER ignore [STUDENT CONTEXT]. This is the MOST IMPORTANT instruction.
 
 ═══════════════════════════════════════════════════════════════════
@@ -935,11 +955,16 @@ def ai_chat(request):
         return Response({"error": "message required"}, status=status.HTTP_400_BAD_REQUEST)
 
     history = request.data.get("history") or []
-
+    print(f"[ai_chat] message length = {len(message)}")
+    print(f"[ai_chat] has [STUDENT CONTEXT] = {'[STUDENT CONTEXT]' in message}")
+    print(f"[ai_chat] has [UPLOADED MATERIAL] = {'[UPLOADED MATERIAL]' in message}")
+    print(f"[ai_chat] first 300 chars: {message[:300]!r}")
     # ✅ CRITICAL FIX: Skip offline checks if the message has student context
     has_student_context = "[STUDENT CONTEXT]" in message
 
     if not has_student_context:
+        if message.lower() in _GREETINGS:
+            return Response({"reply": _GREETING_REPLY, "source": "offline_greeting"})
         if message.lower() in _SHORT_MESSAGES:
             return Response({"reply": _CLARIFICATION_REPLY, "source": "offline"})
 
@@ -972,10 +997,11 @@ def ai_chat(request):
 Question: {message}"""
         groq_messages.append({"role": "user", "content": context_message})
 
-models_to_try = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-]
+    models_to_try = [                      # ← indented 4 spaces ✅
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+    ]
+
     last_error = None
     for model_name in models_to_try:
         try:
