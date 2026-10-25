@@ -19,6 +19,8 @@ interface SmartAICopilotProps {
   courses?: Course[];
   grades?: Grade[];
   examAttempts?: ExamAttempt[];
+  assignments?: Assignment[];
+  submissions?: Submission[];
 }
 
 interface Message {
@@ -46,6 +48,8 @@ export function SmartAICopilot({
   courses = [],
   grades = [],
   examAttempts = [],
+  assignments = [],
+  submissions = [],
 }: SmartAICopilotProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -108,22 +112,38 @@ export function SmartAICopilot({
 
     try {
       // Build real context from the student's data
-      const realGrades = grades
-        .map((g) => `${g.courseCode}: ${g.totalGrade}% (${g.letterGrade})`)
-        .join(", ");
-      const realCourses = courses
-        .map((c) => `${c.courseCode} - ${c.courseTitle}`)
-        .join(", ");
+const realGrades = grades
+  .map((g) => `${g.courseCode}: ${g.totalGrade}% (${g.letterGrade}), ${g.creditHours} credits`)
+  .join("\n");
 
-      const context = `
+const realCourses = courses
+  .map(
+    (c) =>
+      `${c.courseCode} - ${c.courseTitle} (${c.creditHours} credits, Instructor: ${c.instructorName || "TBA"}, Prerequisites: ${c.prerequisites?.join(", ") || "None"})`
+  )
+  .join("\n");
+
+const realAssignments = assignments
+  .filter((a) => !submissions.some((s) => String(s.assignmentId) === String(a.id)))
+  .map((a) => `${a.title} (due: ${new Date(a.dueDate).toLocaleDateString()})`)
+  .join("\n");
+
+const context = `
 Student: ${user.fullName}
 Department: ${user.department || "N/A"}
 Program: ${user.program || "N/A"}
 CGPA: ${user.cgpa?.toFixed(2) || "0.00"}
 Outstanding Fees: ${user.outstandingFees || 0} ETB
-Enrolled Courses: ${realCourses || "None"}
-Current Grades: ${realGrades || "No grades yet"}
-      `.trim();
+
+Enrolled Courses:
+${realCourses || "None"}
+
+Current Grades:
+${realGrades || "No grades yet"}
+
+Pending Assignments:
+${realAssignments || "None"}
+`.trim();
 
       const fullMessage = `[STUDENT CONTEXT]\n${context}\n\n[QUESTION]\n${query}`;
 
