@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { CampusDatabase } from "../services/api";
 import type { User, Grade, ExamAttempt, Course, Assignment, Submission } from "../types";
-import { Sparkles, Bot, Send, BookOpen, Target, Award, CheckCircle2, Loader2, User as UserIcon } from "lucide-react";
+import { Sparkles, Bot, Send, BookOpen, Target, Award, CheckCircle2, Loader2, User as UserIcon, FileText, X } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { MaterialUploader, ExtractedPDF } from "./MaterialUploader";
 
@@ -203,25 +203,48 @@ const truncatedPages = material.pages.slice(0, 5).map(
               <div ref={messagesEndRef} />
             </div>
 <div className="p-3 sm:p-4 border-t border-slate-200 bg-white">
-  {/* PDF chip / attach row */}
-  <div className="flex items-center space-x-2 mb-2 min-h-[36px]">
+  {/* PDF chip — plain HTML, driven by `material` state */}
+  {material && (
+    <div className="flex items-center space-x-2 mb-2">
+      <div className="flex items-center space-x-1.5 px-2 py-1 rounded-lg bg-cyan-50 border border-cyan-200 text-xs max-w-full">
+        <FileText className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
+        <span className="font-semibold text-cyan-900 truncate max-w-[180px]">
+          {material.fileName}
+        </span>
+        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+        <button
+          type="button"
+          onClick={() => setMaterial(null)}
+          className="text-cyan-700 hover:text-red-600 transition"
+          title="Remove PDF"
+        >
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <span className="text-[11px] text-slate-500">
+        {material.pages.length} pages · first 5 analyzed
+      </span>
+    </div>
+  )}
+
+  <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
+    <input
+      type="text"
+      value={inputQuery}
+      onChange={(e) => setInputQuery(e.target.value)}
+      placeholder={material ? `Ask about "${material.fileName}"...` : "Ask about your grades, courses, or attach a PDF..."}
+      className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+      disabled={isTyping}
+    />
+
+    {/* Paperclip button — ONE instance, left of Ask */}
     <MaterialUploader
       compact
       currentFileName={material?.fileName}
       onExtracted={setMaterial}
       onClear={() => setMaterial(null)}
     />
-    {material && (
-      <span className="text-[11px] text-slate-500">
-        {material.pages.length} pages · first 5 analyzed
-      </span>
-    )}
-  </div>
 
-  <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
-    <input type="text" value={inputQuery} onChange={(e) => setInputQuery(e.target.value)}
-      placeholder={material ? `Ask about "${material.fileName}"...` : "Ask about your grades, courses, or attach a PDF..."}
-      className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500" disabled={isTyping} />
     <button type="submit" disabled={!inputQuery.trim() || isTyping}
       className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold text-sm hover:from-cyan-700 hover:to-blue-700 transition disabled:opacity-50 flex items-center space-x-1.5">
       {isTyping ? <Loader2 className="w-4 h-4 animate-spin" /> : <><span>Ask</span><Send className="w-4 h-4" /></>}
