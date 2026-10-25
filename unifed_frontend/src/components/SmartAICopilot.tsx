@@ -228,28 +228,31 @@ const truncatedPages = material.pages.slice(0, 5).map(
   )}
 
   <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
+  {/* Search bar: input + paperclip inside one rounded container */}
+  <div className="flex-1 flex items-center space-x-2 pl-4 pr-1.5 py-1 rounded-xl bg-slate-50 border border-slate-200 focus-within:ring-2 focus-within:ring-cyan-500 transition">
     <input
       type="text"
       value={inputQuery}
       onChange={(e) => setInputQuery(e.target.value)}
       placeholder={material ? `Ask about "${material.fileName}"...` : "Ask about your grades, courses, or attach a PDF..."}
-      className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
+      className="flex-1 bg-transparent border-none py-1.5 text-sm focus:outline-none disabled:opacity-50"
       disabled={isTyping}
     />
 
-    {/* Paperclip button — ONE instance, left of Ask */}
+    {/* Paperclip — right edge, INSIDE the search bar */}
     <MaterialUploader
       compact
       currentFileName={material?.fileName}
       onExtracted={setMaterial}
       onClear={() => setMaterial(null)}
     />
+  </div>
 
-    <button type="submit" disabled={!inputQuery.trim() || isTyping}
-      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold text-sm hover:from-cyan-700 hover:to-blue-700 transition disabled:opacity-50 flex items-center space-x-1.5">
-      {isTyping ? <Loader2 className="w-4 h-4 animate-spin" /> : <><span>Ask</span><Send className="w-4 h-4" /></>}
-    </button>
-  </form>
+  <button type="submit" disabled={!inputQuery.trim() || isTyping}
+    className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold text-sm hover:from-cyan-700 hover:to-blue-700 transition disabled:opacity-50 flex items-center space-x-1.5">
+    {isTyping ? <Loader2 className="w-4 h-4 animate-spin" /> : <><span>Ask</span><Send className="w-4 h-4" /></>}
+  </button>
+</form>
 </div>
           </div>
         )}
