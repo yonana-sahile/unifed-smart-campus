@@ -206,6 +206,13 @@ class CourseViewSet(BaseViewSet):
             if not dept:
                 return Course.objects.none()
             return Course.objects.filter(instructor__department__iexact=dept)
+        
+        # ✅ NEW: Students only see courses in their department
+        if user.role == 'STUDENT':
+            dept = (getattr(user, 'department', None) or '').strip()
+            if dept:
+                return Course.objects.filter(department__iexact=dept)
+            return Course.objects.all() # Show all if no department set
 
         return Course.objects.all()
 
@@ -257,14 +264,34 @@ class CourseViewSet(BaseViewSet):
         if student.role != 'STUDENT':
             return Response({'error': 'Only students can enroll'}, status=status.HTTP_403_FORBIDDEN)
 
+        # ✅ CHECK: Already enrolled?
+        if Grade.objects.filter(student=student, course=course).exists():
+            return Response({'error': 'You are already enrolled in this course.'}, status=status.HTTP_400_BAD_REQUEST)
+
         if course.enrolled_students_count >= course.capacity:
             return Response({'error': 'Course is full'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ✅ 1. Increment counter
         course.enrolled_students_count += 1
         course.save()
 
-        return Response({'message': 'Enrolled successfully'})
+        # ✅ 2. Create the Grade record (the bridge)
+        Grade.objects.create(
+            student=student,
+            student_name=student.full_name,
+            course=course,
+            course_title=course.course_title,
+            course_code=course.course_code,
+            credit_hours=course.credit_hours,
+            semester=course.semester,
+            continuous_assessment_score=0,
+            mid_exam_score=0,
+            final_exam_score=0,
+            total_grade=0,
+            status='CALCULATED'
+        )
 
+        return Response({'message': 'Enrolled successfully'})
 
 # ---------- COURSE MATERIAL ----------
 class CourseMaterialViewSet(BaseViewSet):
@@ -467,6 +494,13 @@ class TranscriptViewSet(BaseViewSet):
     queryset = Transcript.objects.all()
     serializer_class = TranscriptSerializer
 
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Transcript.objects.none()
+        if user.role == 'STUDENT':
+            return Transcript.objects.filter(student=user)
+        return Transcript.objects.all()
 
 # ---------- ATTENDANCE RECORD ----------
 class AttendanceRecordViewSet(BaseViewSet):

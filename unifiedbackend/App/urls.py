@@ -15,7 +15,7 @@ router.register(r'submissions', views.SubmissionViewSet, basename='submission') 
 router.register(r'exams', views.ExamViewSet, basename='exam')                          # ← ADD basename
 router.register(r'exam-attempts', views.ExamAttemptViewSet, basename='examattempt')
 router.register(r'grades', views.GradeViewSet, basename='grade')                       # ← ADD basename
-router.register(r'transcripts', views.TranscriptViewSet)
+router.register(r'transcripts', views.TranscriptViewSet, basename='transcript')
 router.register(r'attendance', views.AttendanceRecordViewSet, basename='attendance')   # ← ADD basename
 router.register(r'library-resources', views.LibraryResourceViewSet)
 router.register(r'payments', views.PaymentTransactionViewSet)

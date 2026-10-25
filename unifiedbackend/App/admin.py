@@ -23,12 +23,12 @@ class CustomUserAdmin(BaseUserAdmin):
             'fields': ('role', 'student_id', 'instructor_id', 'staff_id', 'officer_id')
         }),
         ('Student Details', {
-            'fields': ('academic_year', 'semester', 'program', 'gpa', 'cgpa',
+            'fields': ('department', 'academic_year', 'semester', 'program', 'gpa', 'cgpa',
                        'outstanding_fees', 'cost_sharing_balance'),
             'classes': ('collapse',)
         }),
         ('Instructor Details', {
-            'fields': ('department', 'specialization', 'office_hours'),
+            'fields': ('specialization', 'office_hours'),
             'classes': ('collapse',)
         }),
         ('Permissions', {
