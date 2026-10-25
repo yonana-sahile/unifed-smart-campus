@@ -107,7 +107,7 @@ export function SmartAICopilot({
     setIsTyping(true);
 
     try {
-      // Build real context from the database
+      // Build real context from the student's data
       const realGrades = grades
         .map((g) => `${g.courseCode}: ${g.totalGrade}% (${g.letterGrade})`)
         .join(", ");
@@ -126,6 +126,11 @@ Current Grades: ${realGrades || "No grades yet"}
       `.trim();
 
       const fullMessage = `[STUDENT CONTEXT]\n${context}\n\n[QUESTION]\n${query}`;
+
+      // Debug: log what's being sent
+      console.log("=== SENDING TO AI ===");
+      console.log(fullMessage);
+      console.log("=== END ===");
 
       // Real API call to Django → Groq
       const response = await CampusDatabase.sendChatMessage({
@@ -174,7 +179,6 @@ Current Grades: ${realGrades || "No grades yet"}
     });
     const semGpa = totalCredits > 0 ? totalPoints / totalCredits : 0;
 
-    // Use real CGPA and real completed credits
     const currentCgpa = user.cgpa || 0;
     const completedCredits = grades
       .filter((g) => g.totalGrade >= 50)
@@ -196,7 +200,6 @@ Current Grades: ${realGrades || "No grades yet"}
   const simResult = calculateSimulatedGPA();
 
   // ---- REAL EXIT EXAM READINESS ----
-  // Compute readiness per domain from real exam attempts
   const exitExamDomains = [
     {
       key: "architecture",
@@ -228,28 +231,26 @@ Current Grades: ${realGrades || "No grades yet"}
     },
   ];
 
-const exitExamReadiness = exitExamDomains.map((domain) => {
-  const relatedAttempts = examAttempts.filter((a) =>
-    domain.keywords.some((kw) =>
-      a.examTitle?.toLowerCase().includes(kw)
-    )
-  );
+  const exitExamReadiness = exitExamDomains.map((domain) => {
+    const relatedAttempts = examAttempts.filter((a) =>
+      domain.keywords.some((kw) =>
+        a.examTitle?.toLowerCase().includes(kw)
+      )
+    );
 
-  if (relatedAttempts.length === 0) {
-    return { ...domain, score: 0, attempts: 0 };
-  }
+    if (relatedAttempts.length === 0) {
+      return { ...domain, score: 0, attempts: 0 };
+    }
 
-  // Average the percentage of each attempt
-  const totalPercent = relatedAttempts.reduce((sum, a) => {
-    const rawScore = a.score || 0;
-    // Most exams have 100 total marks, but cap at 100% just in case
-    const percent = Math.min(100, (rawScore / 100) * 100);
-    return sum + percent;
-  }, 0);
+    const totalPercent = relatedAttempts.reduce((sum, a) => {
+      const rawScore = a.score || 0;
+      const percent = Math.min(100, (rawScore / 100) * 100);
+      return sum + percent;
+    }, 0);
 
-  const score = Math.round(totalPercent / relatedAttempts.length);
-  return { ...domain, score, attempts: relatedAttempts.length };
-});
+    const score = Math.round(totalPercent / relatedAttempts.length);
+    return { ...domain, score, attempts: relatedAttempts.length };
+  });
 
   const quickPrompts = [
     "What is my CGPA?",
@@ -260,8 +261,8 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col h-[700px]">
-      {/* ---- Header ---- */}
-      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-850/50 flex flex-wrap items-center justify-between gap-3">
+      {/* Header */}
+      <div className="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center space-x-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
             <Sparkles className="w-5 h-5" />
@@ -315,9 +316,8 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
         </div>
       </div>
 
-      {/* ---- Main Content ---- */}
+      {/* Main Content */}
       <div className="flex-1 overflow-hidden flex flex-col">
-        {/* CHAT TAB */}
         {activeTab === "CHAT" && (
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="px-4 py-2.5 bg-slate-100/60 dark:bg-slate-800/40 border-b border-slate-200/80 dark:border-slate-800 flex items-center space-x-2 overflow-x-auto no-scrollbar">
@@ -434,37 +434,36 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
           </div>
         )}
 
-        {/* CGPA SIMULATOR TAB */}
         {activeTab === "CGPA_SIMULATOR" && (
           <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-200 dark:border-blue-800">
-                <span className="text-xs font-bold text-blue-700 dark:text-blue-300 block mb-1">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200">
+                <span className="text-xs font-bold text-blue-700 block mb-1">
                   Current CGPA
                 </span>
-                <div className="font-serif font-black text-3xl text-blue-950 dark:text-blue-100">
+                <div className="font-serif font-black text-3xl text-blue-950">
                   {user.cgpa?.toFixed(2) || "0.00"}
                 </div>
-                <span className="text-[11px] text-blue-600 dark:text-blue-400 mt-1 block">
+                <span className="text-[11px] text-blue-600 mt-1 block">
                   {grades.filter((g) => g.totalGrade >= 50).reduce((s, g) => s + g.creditHours, 0)} completed credit hours
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-50 to-teal-50 dark:from-cyan-950/40 dark:to-teal-950/40 border border-cyan-200 dark:border-cyan-800">
-                <span className="text-xs font-bold text-cyan-700 dark:text-cyan-300 block mb-1">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-cyan-50 to-teal-50 border border-cyan-200">
+                <span className="text-xs font-bold text-cyan-700 block mb-1">
                   Projected Semester GPA
                 </span>
-                <div className="font-serif font-black text-3xl text-cyan-950 dark:text-cyan-100">
+                <div className="font-serif font-black text-3xl text-cyan-950">
                   {simResult.semesterGpa}
                 </div>
-                <span className="text-[11px] text-cyan-600 dark:text-cyan-400 mt-1 block">
+                <span className="text-[11px] text-cyan-600 mt-1 block">
                   {simulatedCourses.reduce((s, c) => s + c.credits, 0)} credits this semester
                 </span>
               </div>
 
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-950/40 dark:to-green-950/40 border border-emerald-200 dark:border-emerald-800">
+              <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-50 to-green-50 border border-emerald-200">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                  <span className="text-xs font-bold text-emerald-700">
                     Projected Final CGPA
                   </span>
                   {simResult.meetsTarget && (
@@ -473,10 +472,10 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
                     </span>
                   )}
                 </div>
-                <div className="font-serif font-black text-3xl text-emerald-950 dark:text-emerald-100">
+                <div className="font-serif font-black text-3xl text-emerald-950">
                   {simResult.projectedCgpa}
                 </div>
-                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1 block font-semibold">
+                <span className="text-[11px] text-emerald-600 mt-1 block font-semibold">
                   {Number(simResult.projectedCgpa) >= 3.75
                     ? "★ Gold Medalist Distinction"
                     : Number(simResult.projectedCgpa) >= 3.5
@@ -488,9 +487,9 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200">
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center space-x-2">
+                <label className="text-xs font-bold text-slate-700 flex items-center space-x-2">
                   <Target className="w-4 h-4 text-primary" />
                   <span>Desired Graduation Target CGPA</span>
                 </label>
@@ -505,7 +504,7 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
                 step="0.05"
                 value={targetCgpa}
                 onChange={(e) => setTargetCgpa(parseFloat(e.target.value))}
-                className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary"
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-primary"
               />
             </div>
 
@@ -514,7 +513,7 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
                 Your Enrolled Courses (Adjust grades to see projection)
               </h4>
               {simulatedCourses.length === 0 ? (
-                <p className="text-xs text-slate-500 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
+                <p className="text-xs text-slate-500 p-4 bg-slate-50 rounded-xl">
                   You are not enrolled in any courses yet. Enroll in a course to use the CGPA simulator.
                 </p>
               ) : (
@@ -522,7 +521,7 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
                   {simulatedCourses.map((c, idx) => (
                     <div
                       key={c.code}
-                      className="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-4"
+                      className="p-3.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between gap-4"
                     >
                       <div>
                         <div className="flex items-center space-x-2">
@@ -533,7 +532,7 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
                             ({c.credits} Cr. Hr)
                           </span>
                         </div>
-                        <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 block truncate">
+                        <span className="text-sm font-semibold text-slate-800 block truncate">
                           {c.title}
                         </span>
                       </div>
@@ -547,7 +546,7 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
                             updated[idx].expectedGrade = e.target.value;
                             setSimulatedCourses(updated);
                           }}
-                          className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-xs font-bold text-slate-900 dark:text-white cursor-pointer focus:ring-2 focus:ring-primary"
+                          className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-300 text-xs font-bold text-slate-900 cursor-pointer focus:ring-2 focus:ring-primary"
                         >
                           {Object.keys(gradePoints).map((g) => (
                             <option key={g} value={g}>
@@ -564,7 +563,6 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
           </div>
         )}
 
-        {/* EXIT EXAM TAB */}
         {activeTab === "EXIT_EXAM" && (
           <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
             <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-700 text-white shadow-md">
@@ -584,22 +582,20 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
               {exitExamReadiness.map((pill) => (
                 <div
                   key={pill.key}
-                  className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 space-y-2"
+                  className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-900 dark:text-slate-100">
+                    <span className="font-bold text-xs text-slate-900">
                       {pill.label}
                     </span>
                     <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-primary/10 text-primary">
                       {pill.weight}
                     </span>
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {pill.topics}
-                  </p>
+                  <p className="text-xs text-slate-500">{pill.topics}</p>
                   <div>
                     <div className="flex justify-between text-[11px] font-bold mb-1">
-                      <span className="text-slate-600 dark:text-slate-400">
+                      <span className="text-slate-600">
                         Readiness ({pill.attempts} exam{pill.attempts !== 1 ? "s" : ""})
                       </span>
                       <span
@@ -614,7 +610,7 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
                         {pill.score}%
                       </span>
                     </div>
-                    <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <div className="w-full h-2 rounded-full bg-slate-200 overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
                           pill.score >= 70
@@ -632,7 +628,7 @@ const exitExamReadiness = exitExamDomains.map((domain) => {
             </div>
 
             {exitExamReadiness.every((d) => d.attempts === 0) && (
-              <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-xs text-amber-900 dark:text-amber-200 flex items-start space-x-3">
+              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-900 flex items-start space-x-3">
                 <CheckCircle2 className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
                 <div>
                   <span className="font-bold block mb-1">
