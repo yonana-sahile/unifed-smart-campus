@@ -853,3 +853,16 @@ class FaceVerificationToken(models.Model):
 
     def __str__(self):
         return f"Token for {self.student.username} - {self.exam.exam_title}"
+    # ---------- PASSWORD RESET OTP ----------
+class PasswordResetOTP(models.Model):
+    email = models.EmailField()
+    otp_code = models.CharField(max_length=6)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_expired(self):
+        # Code expires after 10 minutes
+        from datetime import timedelta
+        return timezone.now() > self.created_at + timedelta(minutes=10)
+
+    def __str__(self):
+        return f"{self.email} - {self.otp_code}"

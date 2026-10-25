@@ -170,3 +170,10 @@ SIMPLE_JWT = {
 }
 
 AUTH_USER_MODEL = 'App.User'
+# ==============================================================================
+# EMAIL CONFIGURATION (For Password Reset)
+# ==============================================================================
+# During development, this prints emails to your VS Code terminal instead of 
+# actually sending them. Once you are ready for production, replace this with 
+# the real Gmail SMTP settings.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'

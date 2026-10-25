@@ -5,6 +5,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Avg, Count
 from django.utils import timezone
+from django.core.mail import send_mail
 from .models import *
 from .serializers import *
 from .permissions import *
@@ -108,6 +109,74 @@ class UserViewSet(BaseViewSet):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+    # 👇 NEW: Password Reset Endpoints 👇
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def request_password_reset(self, request):
+        email = request.data.get('email', '').strip().lower()
+        
+        if not email:
+            return Response({"error": "Please provide an email address."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            user = User.objects.filter(student_id__iexact=email).first()
+
+        if not user:
+            return Response({"error": "User with this email or Student ID not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        PasswordResetOTP.objects.filter(email=user.email).delete()
+        otp = str(random.randint(100000, 999999))
+        PasswordResetOTP.objects.create(email=user.email, otp_code=otp)
+
+        try:
+            send_mail(
+                'Unified Smart Campus - Password Reset',
+                f'Hello {user.full_name or user.username},\n\nYour password reset code is: {otp}\n\nThis code expires in 10 minutes.',
+                'noreply@mau.edu.et',
+                [user.email],
+                fail_silently=False,
+            )
+        except Exception as e:
+            print(f"Email failed to send: {e}")
+            return Response({"error": "Failed to send email. Please contact ICT."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"message": "OTP sent successfully", "email": user.email})
+
+    @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
+    def confirm_password_reset(self, request):
+        email = request.data.get('email', '').strip().lower()
+        otp = request.data.get('otp', '').strip()
+        new_password = request.data.get('new_password')
+
+        if not email or not otp or not new_password:
+            return Response({"error": "Missing required fields."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user = User.objects.filter(email__iexact=email).first()
+        if not user:
+            user = User.objects.filter(student_id__iexact=email).first()
+
+        if not user:
+            return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        reset_record = PasswordResetOTP.objects.filter(email=user.email).last()
+        
+        if not reset_record:
+            return Response({"error": "No OTP requested for this account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if reset_record.is_expired():
+            reset_record.delete()
+            return Response({"error": "OTP has expired. Please request a new one."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if reset_record.otp_code != otp:
+            return Response({"error": "Invalid OTP code."}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save()
+        reset_record.delete()
+
+        return Response({"message": "Password reset successful."})
+
 
 # ---------- COURSE ----------
 class CourseViewSet(BaseViewSet):
@@ -120,8 +189,6 @@ class CourseViewSet(BaseViewSet):
         if user.role == 'INSTRUCTOR':
             return Course.objects.filter(instructor=user)
         if user.role in ('DEPARTMENT_HEAD', 'DEAN'):
-            # ✅ Option B: match on the INSTRUCTOR's department (stable) instead of
-            # the free-text Course.department field (typo-prone).
             dept = (getattr(user, 'department', None) or '').strip()
             if not dept:
                 return Course.objects.none()
@@ -129,8 +196,6 @@ class CourseViewSet(BaseViewSet):
 
         return Course.objects.all()
 
-    # ✅ NEW: only Dept Head / Dean / Registrar / Admin can reassign a course.
-    # ✅ Dept Heads may only assign instructors within their own department.
     def _guard_instructor_change(self, request):
         if 'instructor' not in request.data:
             return None
@@ -141,7 +206,6 @@ class CourseViewSet(BaseViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        # Dept Heads can only assign instructors in their own department
         if request.user.role == 'DEPARTMENT_HEAD':
             new_instructor_id = request.data['instructor']
             dept = (getattr(request.user, 'department', None) or '').strip()
@@ -312,7 +376,6 @@ class ExamViewSet(BaseViewSet):
 
 
 # ---------- EXAM ATTEMPT ----------
-# ---------- EXAM ATTEMPT ----------
 class ExamAttemptViewSet(BaseViewSet):
     serializer_class = ExamAttemptSerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -325,6 +388,7 @@ class ExamAttemptViewSet(BaseViewSet):
         if user.role == 'INSTRUCTOR':
             return qs.filter(exam__course__instructor=user)
         return qs
+
 # ---------- GRADE ----------
 class GradeViewSet(BaseViewSet):
     serializer_class = GradeSerializer
@@ -340,7 +404,6 @@ class GradeViewSet(BaseViewSet):
             return qs.filter(course__instructor=user)
         return qs
 
-    # ✅ NEW: APPROVED grades are immutable at the HTTP layer.
     def _lock_if_approved(self):
         grade = self.get_object()
         if grade.status == 'APPROVED':
@@ -367,7 +430,6 @@ class GradeViewSet(BaseViewSet):
         grade = self.get_object()
         user = request.user
 
-        # ✅ Workflow A: instructors may NOT self-approve.
         if user.role not in ('REGISTRAR', 'DEAN', 'DEPARTMENT_HEAD'):
             return Response(
                 {'error': 'Only a Registrar, Dean, or Department Head can approve grades.'},
