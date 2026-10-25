@@ -1,7 +1,7 @@
 import { useState, useRef } from "react";
 import { Upload, FileText, Loader2, X, CheckCircle2 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.js?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
