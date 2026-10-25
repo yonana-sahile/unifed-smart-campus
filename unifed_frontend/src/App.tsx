@@ -13,7 +13,7 @@ import CampusNewsTopBar from "./components/CampusNewsTopBar";
 import FloatingAIAssistant from "./components/FloatingAIAssistant";
 import StarryFlag from "./components/StarryFlag";
 import { ForgotPasswordModal } from "./components/ForgotPasswordModal";
-import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound } from "lucide-react";
+import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 // ✅ LOCAL DEMO USERS – used for 1‑Click Login fallback
@@ -124,6 +124,7 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [emailInput, setEmailInput] = useState("");
   const [passwordInput, setPasswordInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [showSecurityModal, setShowSecurityModal] = useState(false);
   const [showHelpModal, setShowHelpModal] = useState(false);
@@ -538,18 +539,25 @@ export default function App() {
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-                    <input
-                      type="password"
-                      required
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      autoComplete="current-password"
-                      spellCheck={false}
-                      placeholder="••••••••"
-                      className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
-                      value={passwordInput}
-                      onChange={(e) => setPasswordInput(e.target.value)}
-                    />
+<input
+  type={showPassword ? "text" : "password"}
+  required
+  autoCapitalize="none"
+  autoCorrect="off"
+  autoComplete="current-password"
+  spellCheck={false}
+  placeholder="••••••••"
+  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
+  value={passwordInput}
+  onChange={(e) => setPasswordInput(e.target.value)}
+/>
+<button
+  type="button"
+  onClick={() => setShowPassword(!showPassword)}
+  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+>
+  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+</button>
                   </div>
                   <div className="flex justify-end pt-0.5">
                     <button
