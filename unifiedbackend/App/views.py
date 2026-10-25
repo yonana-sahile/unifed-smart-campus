@@ -791,13 +791,9 @@ def _lookup_local_kb(query: str):
 
 
 def _generic_offline_reply(query: str) -> str:
-    template = _KB_JSON.get("fallback", "")
-    if template:
-        return template.replace("{query}", query)
     return (
-        f"The AI service is temporarily unavailable.\n\n"
-        f"Try asking about: exit exam, grading, clearance, registration, "
-        f"fees, library, or dorms.\n\nRegistrar: +251 33 222 0120"
+        "I'm having a bit of trouble reaching my knowledge base right now, "
+        "so I can't answer that properly. Try again in a minute — I'll be back."
     )
 
 
@@ -923,7 +919,7 @@ CRITICAL RULES — FOLLOW THESE EXACTLY
 
       Never quote this rule. Never structure your reply to match these
       examples. They're calibration, not a script.
-      
+
 2.5. If the message contains an [UPLOADED MATERIAL: ...] block, this is a PDF the
    student uploaded. It is split into [Page N] sections, e.g.:
        [UPLOADED MATERIAL: lecture.pdf]
