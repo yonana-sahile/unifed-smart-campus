@@ -972,13 +972,10 @@ def ai_chat(request):
 Question: {message}"""
         groq_messages.append({"role": "user", "content": context_message})
 
-    models_to_try = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "mixtral-8x7b-32768",
-        "gemma2-9b-it",
-        "llama-3.2-3b-preview",
-    ]
+models_to_try = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+]
     last_error = None
     for model_name in models_to_try:
         try:

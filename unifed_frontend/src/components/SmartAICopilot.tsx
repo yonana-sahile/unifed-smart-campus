@@ -89,9 +89,9 @@ ${realAssignments || "None"}
       `.trim();
 
 if (material) {
-  const truncatedPages = material.pages.slice(0, 10).map(
-    (p) => `[Page ${p.pageNumber}]\n${p.text}`
-  ).join("\n\n");
+const truncatedPages = material.pages.slice(0, 5).map(
+  (p) => `[Page ${p.pageNumber}]\n${p.text}`
+).join("\n\n");
   context += `\n\n[UPLOADED MATERIAL: ${material.fileName}]\n${truncatedPages}`;
 }
       const fullMessage = `[STUDENT CONTEXT]\n${context}\n\n[QUESTION]\n${query}`;
