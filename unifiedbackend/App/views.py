@@ -6,6 +6,7 @@ from django.contrib.auth import authenticate
 from django.db.models import Avg, Count
 from django.utils import timezone
 from django.core.mail import send_mail
+from django.conf import settings
 from .models import *
 from .serializers import *
 from .permissions import *
@@ -24,7 +25,20 @@ class AuthViewSet(viewsets.GenericViewSet):
         username = request.data.get('username')
         password = request.data.get('password')
 
-        user = authenticate(username=username, password=password)
+        # ✅ FIX: Find the user regardless of uppercase/lowercase, or by email
+        from django.db.models import Q
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+
+        user_obj = User.objects.filter(
+            Q(username__iexact=username) | Q(email__iexact=username)
+        ).first()
+
+        user = None
+        if user_obj:
+            # Authenticate using the EXACT username from the database
+            user = authenticate(username=user_obj.username, password=password)
+
         if user:
             refresh = RefreshToken.for_user(user)
             return Response({
@@ -33,7 +47,6 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'user': UserSerializer(user).data
             })
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
-
     @action(detail=False, methods=['post'])
     def register(self, request):
         serializer = UserCreateSerializer(data=request.data)
@@ -113,7 +126,7 @@ class UserViewSet(BaseViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def request_password_reset(self, request):
-        email = request.data.get('email', '').strip().lower()
+        email = request.data.get('email', '').strip()
         
         if not email:
             return Response({"error": "Please provide an email address."}, status=status.HTTP_400_BAD_REQUEST)
@@ -133,8 +146,8 @@ class UserViewSet(BaseViewSet):
             send_mail(
                 'Unified Smart Campus - Password Reset',
                 f'Hello {user.full_name or user.username},\n\nYour password reset code is: {otp}\n\nThis code expires in 10 minutes.',
-                'noreply@mau.edu.et',
-                [user.email],
+settings.EMAIL_HOST_USER,  # 👈 FROM address (Your Gmail)
+                [user.email],              # 👈 TO address (The student)
                 fail_silently=False,
             )
         except Exception as e:
@@ -145,7 +158,7 @@ class UserViewSet(BaseViewSet):
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def confirm_password_reset(self, request):
-        email = request.data.get('email', '').strip().lower()
+        email = request.data.get('email', '').strip()
         otp = request.data.get('otp', '').strip()
         new_password = request.data.get('new_password')
 

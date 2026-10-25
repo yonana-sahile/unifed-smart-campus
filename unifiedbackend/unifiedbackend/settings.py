@@ -171,9 +171,18 @@ SIMPLE_JWT = {
 
 AUTH_USER_MODEL = 'App.User'
 # ==============================================================================
-# EMAIL CONFIGURATION (For Password Reset)
+# EMAIL CONFIGURATION (Real Gmail SMTP)
 # ==============================================================================
-# During development, this prints emails to your VS Code terminal instead of 
-# actually sending them. Once you are ready for production, replace this with 
-# the real Gmail SMTP settings.
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 465               # 👈 Changed from 587 to 465
+EMAIL_USE_TLS = False          # 👈 Must be False
+EMAIL_USE_SSL = True           # 👈 Must be True for port 465
+
+# 👇 CHANGE THIS to your real Gmail address
+EMAIL_HOST_USER = 'tadessemersha2025@gmail.com' 
+
+# 👇 CHANGE THIS to the 16-letter App Password (remove spaces)
+EMAIL_HOST_PASSWORD = 'ndqwmouekpymgchv' 
+
+DEFAULT_FROM_EMAIL = f'Unified Smart Campus <{EMAIL_HOST_USER}>'

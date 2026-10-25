@@ -159,7 +159,7 @@ export default function App() {
     e.preventDefault();
     setErrorMessage("");
 
-    const usernameOrEmail = emailInput.trim().toLowerCase().replace(/\s+/g, "");
+    const usernameOrEmail = emailInput.trim().replace(/\s+/g, "");
     const cleanPassword = passwordInput.trim();
 
     if (!usernameOrEmail || !cleanPassword) {
@@ -175,8 +175,8 @@ export default function App() {
       const users = await CampusDatabase.getUsers();
       const me = users.find(
         (u) =>
-          u.username?.toLowerCase() === usernameOrEmail ||
-          u.email?.toLowerCase() === usernameOrEmail
+          u.username?.toLowerCase() === usernameOrEmail.toLowerCase() ||
+          u.email?.toLowerCase() === usernameOrEmail.toLowerCase()
       );
 
       if (!me) {

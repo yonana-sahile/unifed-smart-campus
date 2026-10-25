@@ -332,7 +332,7 @@ export const deleteUser = (id: string): Promise<void> =>
   api.delete(`/users/${numericId(id, 'U_')}/`).then(() => undefined);
 
 export const login = async (username: string, password: string) => {
-  const { data } = await api.post('/token/', { username, password });
+  const { data } = await api.post('/auth/login/', { username, password });
   const token = data.access ?? data.token;
   if (token) localStorage.setItem('access_token', token);
   if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
