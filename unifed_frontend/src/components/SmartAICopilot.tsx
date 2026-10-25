@@ -228,29 +228,28 @@ Current Grades: ${realGrades || "No grades yet"}
     },
   ];
 
-  const exitExamReadiness = exitExamDomains.map((domain) => {
-    const relatedAttempts = examAttempts.filter((a) =>
-      domain.keywords.some((kw) =>
-        a.examTitle?.toLowerCase().includes(kw)
-      )
-    );
+const exitExamReadiness = exitExamDomains.map((domain) => {
+  const relatedAttempts = examAttempts.filter((a) =>
+    domain.keywords.some((kw) =>
+      a.examTitle?.toLowerCase().includes(kw)
+    )
+  );
 
-    if (relatedAttempts.length === 0) {
-      return { ...domain, score: 0, attempts: 0 };
-    }
+  if (relatedAttempts.length === 0) {
+    return { ...domain, score: 0, attempts: 0 };
+  }
 
-    const totalScore = relatedAttempts.reduce(
-      (s, a) => s + (a.score || 0),
-      0
-    );
-    const totalPossible = relatedAttempts.length * 100;
-    const score =
-      totalPossible > 0
-        ? Math.round((totalScore / totalPossible) * 100)
-        : 0;
+  // Average the percentage of each attempt
+  const totalPercent = relatedAttempts.reduce((sum, a) => {
+    const rawScore = a.score || 0;
+    // Most exams have 100 total marks, but cap at 100% just in case
+    const percent = Math.min(100, (rawScore / 100) * 100);
+    return sum + percent;
+  }, 0);
 
-    return { ...domain, score, attempts: relatedAttempts.length };
-  });
+  const score = Math.round(totalPercent / relatedAttempts.length);
+  return { ...domain, score, attempts: relatedAttempts.length };
+});
 
   const quickPrompts = [
     "What is my CGPA?",
