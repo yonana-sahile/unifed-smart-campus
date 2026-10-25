@@ -342,6 +342,17 @@ export const login = async (username: string, password: string) => {
 export const logout = () => {
   clearTokens();
 };
+// 👇 PASTE THE NEW FUNCTIONS HERE 👇
+export const requestPasswordReset = (email: string): Promise<any> =>
+  api.post('/users/request_password_reset/', { email }).then(r => r.data);
+
+export const confirmPasswordReset = (email: string, otp: string, newPassword: string): Promise<any> =>
+  api.post('/users/confirm_password_reset/', { 
+    email, 
+    otp, 
+    new_password: newPassword 
+  }).then(r => r.data);
+// 👆 END OF NEW FUNCTIONS 👆
 
 // ---------- USER AVATAR UPLOAD ----------
 export const uploadAvatar = (userId: string, base64Image: string): Promise<any> =>
@@ -911,7 +922,8 @@ export const CampusDatabase = {
   login,
   logout,
   uploadAvatar,
-
+  requestPasswordReset, // 👈 Add this here
+  confirmPasswordReset, // 👈 Add this here
   // Courses
   getCourses,
   saveCourses,

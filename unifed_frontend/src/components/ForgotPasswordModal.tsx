@@ -15,7 +15,7 @@ import {
   Sparkles,
   PhoneCall
 } from "lucide-react";
-import { CampusDatabase } from "../services/api"; // ✅ FIXED import
+import { CampusDatabase } from "../services/api"; 
 import { UniversitySeal, EthiopianFlag } from "./UniversityHeader";
 
 interface ForgotPasswordModalProps {
@@ -32,8 +32,8 @@ export function ForgotPasswordModal({ isOpen, onClose, onAutoFillLogin }: Forgot
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [feedback, setFeedback] = useState<{ type: "error" | "success"; text: string } | null>(null);
-  const [simulatedCode, setSimulatedCode] = useState("782941");
   const [matchedUserEmail, setMatchedUserEmail] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const resetForm = () => {
     setIdentifier("");
@@ -49,66 +49,72 @@ export function ForgotPasswordModal({ isOpen, onClose, onAutoFillLogin }: Forgot
     onClose();
   };
 
-  const handleRequestReset = (e: FormEvent) => {
+  const handleRequestReset = async (e: FormEvent) => {
     e.preventDefault();
     setFeedback(null);
+    setIsLoading(true);
 
     const cleanInput = identifier.trim().toLowerCase();
     if (!cleanInput) {
       setFeedback({ type: "error", text: "እባክዎ የተጠቃሚ መለያ ቁጥር (Student ID) ወይም ይፋዊ የዩኒቨርሲቲ ኢሜይል ያስገቡ።" });
+      setIsLoading(false);
       return;
     }
 
-    const users = CampusDatabase.getUsers();
-    const matched = users.find(
-      (u) =>
-        u.email.toLowerCase() === cleanInput ||
-        u.username.toLowerCase() === cleanInput ||
-        (u.studentId && u.studentId.toLowerCase() === cleanInput)
-    );
-
-    if (matched) {
-      setMatchedUserEmail(matched.email);
-      // Generate a mock 6-digit OTP
-      const code = Math.floor(100000 + Math.random() * 900000).toString();
-      setSimulatedCode(code);
+    try {
+      // CALL THE REAL BACKEND API
+      await CampusDatabase.requestPasswordReset(cleanInput);
+      
+      setMatchedUserEmail(cleanInput);
       setStep("OTP");
       setFeedback({
         type: "success",
-        text: `የማረጋገጫ ኮድ ወደ ${matched.email} እና የተመዘገበው ስልክ ቁጥር ተልኳል። (ሙከራ ኮድ: ${code})`
+        text: `የማረጋገጫ ኮድ ወደ ${cleanInput} ተልኳል። እባክዎ ኢሜይልዎን ያስገቡ። (A verification code has been sent to your email.)`
       });
-    } else {
+    } catch (err: any) {
       setFeedback({
         type: "error",
-        text: "የተጠቀሰው ተጠቃሚ በሲስተሙ ውስጥ አልተገኘም። እባክዎ ትክክለኛውን የተማሪ መለያ ቁጥር ወይም ኢሜይል ያስገቡ (ምሳሌ: U_ST01 ወይም tadesse@mau.edu.et)"
+        text: err?.response?.data?.error || "የተጠቀሰው ተጠቃሚ በሲስተሙ ውስጥ አልተገኘም። (User not found)"
       });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleVerifyAndReset = (e: FormEvent) => {
+  const handleVerifyAndReset = async (e: FormEvent) => {
     e.preventDefault();
     setFeedback(null);
-
-    if (otpCode.trim() !== simulatedCode && otpCode.trim() !== "123456") {
-      setFeedback({ type: "error", text: "የተሳሳተ የማረጋገጫ ኮድ (Invalid OTP code)። እባክዎ ትክክለኛውን ኮድ ያስገቡ።" });
-      return;
-    }
+    setIsLoading(true);
 
     if (newPassword.length < 6) {
       setFeedback({ type: "error", text: "የይለፍ ቃል ቢያንስ 6 ፊደላት/ቁጥሮች መያዝ አለበት።" });
+      setIsLoading(false);
       return;
     }
 
     if (newPassword !== confirmPassword) {
       setFeedback({ type: "error", text: "የተፃፉት የይለፍ ቃሎች አይመሳሰሉም (Passwords do not match)።" });
+      setIsLoading(false);
       return;
     }
 
-    setStep("SUCCESS");
-    setFeedback({
-      type: "success",
-      text: "የይለፍ ቃልዎ በተሳካ ሁኔታ ተቀይሯል! አሁን አዲሱን የይለፍ ቃል ተጠቅመው መግባት ይችላሉ።"
-    });
+    try {
+      // CALL THE REAL BACKEND API TO SAVE THE NEW PASSWORD
+      await CampusDatabase.confirmPasswordReset(matchedUserEmail, otpCode, newPassword);
+      
+      setStep("SUCCESS");
+      setFeedback({
+        type: "success",
+        text: "የይለፍ ቃልዎ በተሳካ ሁኔታ ተቀይሯል! አሁን አዲሱን የይለፍ ቃል ተጠቅመው መግባት ይችላሉ።"
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: "error",
+        text: err?.response?.data?.error || "የተሳሳተ የማረጋገጫ ኮድ (Invalid OTP code)።"
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -234,10 +240,11 @@ export function ForgotPasswordModal({ isOpen, onClose, onAutoFillLogin }: Forgot
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                  disabled={isLoading}
+                  className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <KeyRound className="w-3.5 h-3.5 text-amber-300" />
-                  <span>የማረጋገጫ ኮድ ላክ (Send OTP)</span>
+                  <span>{isLoading ? "Sending..." : "የማረጋገጫ ኮድ ላክ (Send OTP)"}</span>
                 </button>
               </div>
             </form>
@@ -246,16 +253,6 @@ export function ForgotPasswordModal({ isOpen, onClose, onAutoFillLogin }: Forgot
           {/* Step 2: Enter OTP & New Password */}
           {step === "OTP" && (
             <form onSubmit={handleVerifyAndReset} className="p-6 space-y-4">
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
-                <p className="font-bold flex items-center space-x-1">
-                  <ShieldCheck className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                  <span>የማረጋገጫ ኮድ (Verification OTP)</span>
-                </p>
-                <p className="text-[11px]">
-                  ለሙከራ የተዘጋጀ የማረጋገጫ ኮድ፦ <span className="font-mono font-black text-amber-700 dark:text-amber-300 bg-amber-200/60 dark:bg-amber-900/60 px-1.5 py-0.5 rounded text-xs tracking-wider">{simulatedCode}</span>
-                </p>
-              </div>
-
               <div className="space-y-1.5 text-xs">
                 <label className="block text-slate-800 dark:text-slate-200 font-semibold">
                   Enter 6-Digit OTP Code
@@ -316,10 +313,11 @@ export function ForgotPasswordModal({ isOpen, onClose, onAutoFillLogin }: Forgot
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer"
+                  disabled={isLoading}
+                  className="flex-1 university-gradient hover:opacity-95 text-white py-2.5 rounded-xl font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <RotateCcw className="w-3.5 h-3.5 text-amber-300" />
-                  <span>ይለፍ ቃል ቀይር (Reset Password)</span>
+                  <span>{isLoading ? "Resetting..." : "ይለፍ ቃል ቀይር (Reset Password)"}</span>
                 </button>
               </div>
             </form>
