@@ -936,13 +936,16 @@ def ai_chat(request):
 
     history = request.data.get("history") or []
 
-    if message.lower() in _SHORT_MESSAGES:
-        return Response({"reply": _CLARIFICATION_REPLY, "source": "offline"})
+    # ✅ CRITICAL FIX: Skip offline checks if the message has student context
+    has_student_context = "[STUDENT CONTEXT]" in message
 
-    offline = _lookup_local_kb(message)
-    if offline:
-        return Response({"reply": offline, "source": "offline"})
+    if not has_student_context:
+        if message.lower() in _SHORT_MESSAGES:
+            return Response({"reply": _CLARIFICATION_REPLY, "source": "offline"})
 
+        offline = _lookup_local_kb(message)
+        if offline:
+            return Response({"reply": offline, "source": "offline"})
     try:
         client = _get_groq_client()
     except RuntimeError as e:
@@ -959,7 +962,7 @@ def ai_chat(request):
         if role in ("user", "assistant") and content:
             groq_messages.append({"role": role, "content": content})
 
-    if "[STUDENT CONTEXT]" in message:
+    if has_student_context:
         groq_messages.append({"role": "user", "content": message})
     else:
         context_message = f"""<context>
@@ -970,8 +973,6 @@ Question: {message}"""
         groq_messages.append({"role": "user", "content": context_message})
 
     models_to_try = [
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
         "qwen/qwen3.8-27b",
