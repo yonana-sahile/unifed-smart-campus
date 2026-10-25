@@ -2,10 +2,9 @@ import { useState, useRef } from "react";
 import { Upload, FileText, Loader2, X, CheckCircle2 } from "lucide-react";
 import * as pdfjsLib from "pdfjs-dist";
 
-// Set the PDF worker (required for pdfjs-dist)
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-interface ExtractedPDF {
+export interface ExtractedPDF {
   fileName: string;
   pages: { pageNumber: number; text: string }[];
   fullText: string;
@@ -38,19 +37,14 @@ export function MaterialUploader({ onExtracted, onClear }: MaterialUploaderProps
           .map((item: any) => item.str)
           .join(" ")
           .trim();
-        if (text) {
-          pages.push({ pageNumber: i, text });
-        }
+        if (text) pages.push({ pageNumber: i, text });
       }
 
-      const fullText = pages.map((p) => `[Page ${p.pageNumber}]\n${p.text}`).join("\n\n");
+      const fullText = pages
+        .map((p) => `[Page ${p.pageNumber}]\n${p.text}`)
+        .join("\n\n");
 
-      const result: ExtractedPDF = {
-        fileName: file.name,
-        pages,
-        fullText,
-      };
-
+      const result: ExtractedPDF = { fileName: file.name, pages, fullText };
       setExtracted(result);
       onExtracted(result);
     } catch (err: any) {
@@ -87,15 +81,10 @@ export function MaterialUploader({ onExtracted, onClear }: MaterialUploaderProps
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <div className="min-w-0">
             <p className="text-xs font-bold text-emerald-900 truncate">{extracted.fileName}</p>
-            <p className="text-[10px] text-emerald-700">
-              {extracted.pages.length} pages extracted
-            </p>
+            <p className="text-[10px] text-emerald-700">{extracted.pages.length} pages extracted</p>
           </div>
         </div>
-        <button
-          onClick={handleClear}
-          className="p-1.5 rounded-lg hover:bg-emerald-100 text-emerald-700 transition"
-        >
+        <button onClick={handleClear} className="p-1.5 rounded-lg hover:bg-emerald-100 text-emerald-700 transition">
           <X className="w-4 h-4" />
         </button>
       </div>
@@ -123,13 +112,7 @@ export function MaterialUploader({ onExtracted, onClear }: MaterialUploaderProps
           </div>
         )}
       </div>
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="application/pdf"
-        onChange={handleFileChange}
-        className="hidden"
-      />
+      <input ref={fileInputRef} type="file" accept="application/pdf" onChange={handleFileChange} className="hidden" />
       {error && <p className="text-[10px] text-red-600 mt-1">{error}</p>}
     </div>
   );
