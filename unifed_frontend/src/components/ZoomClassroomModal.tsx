@@ -32,6 +32,7 @@ export function ZoomClassroomModal({
   const [activeDrawer, setActiveDrawer] = useState<"chat" | "participants" | null>(null);
 
   const [chatInput, setChatInput] = useState("");
+    const [floatingEmojis, setFloatingEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const [copiedId, setCopiedId] = useState(false);
@@ -163,7 +164,36 @@ export function ZoomClassroomModal({
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [session.chatMessages?.length, activeDrawer]);
+  const handleEmojiReaction = async (emoji: string) => {
+    // 1. Trigger the floating animation
+    const id = Date.now();
+    const left = Math.random() * 80 + 10; // random horizontal position (10% - 90%)
+    setFloatingEmojis((prev) => [...prev, { id, emoji, left }]);
+    setTimeout(() => {
+      setFloatingEmojis((prev) => prev.filter((e) => e.id !== id));
+    }, 2500);
 
+    // 2. Save to chat as a system message so it persists
+    const newMsg: ZoomChatMessage = {
+      id: "emoji-" + id,
+      senderId: currentUser.id,
+      senderName: currentUser.fullName,
+      senderRole: isInstructor ? "INSTRUCTOR" : "STUDENT",
+      message: `Reacted with ${emoji}`,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+    };
+    
+    const updatedMessages = [...(session.chatMessages || []), newMsg];
+    const updated = { ...session, chatMessages: updatedMessages };
+    setSession(updated);
+
+    try {
+      const res = await CampusDatabase.updateZoomSession(String(session.id), { chatMessages: updatedMessages });
+      if (onSessionUpdated) onSessionUpdated(res);
+    } catch (err) {
+      console.error("Failed to save reaction:", err);
+    }
+  };
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
