@@ -4,7 +4,7 @@ import { CampusDatabase } from "../services/api";
 import {
   Mic, MicOff, Video, VideoOff, MonitorUp, Users, MessageSquare, Hand, X, Copy,
   Check, ExternalLink, ShieldCheck, CircleDot, Send, ChevronLeft, ChevronRight,
-  PhoneOff, BookOpen, LayoutGrid, Presentation, PenTool
+  PhoneOff, BookOpen, LayoutGrid, Presentation, PenTool, FileText
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
@@ -25,16 +25,24 @@ export function ZoomClassroomModal({
   const [isMuted, setIsMuted] = useState(isInstructor ? false : true);
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isScreenSharing, setIsScreenSharing] = useState(isInstructor);
-  const [isRecording, setIsRecording] = useState(session.status === "LIVE");
-  const [isHandRaised, setIsHandRaised] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<number | null>(null);
+    const [isHandRaised, setIsHandRaised] = useState(false);
 
   const [viewMode, setViewMode] = useState<"speaker" | "gallery" | "whiteboard">("speaker");
   const [activeDrawer, setActiveDrawer] = useState<"chat" | "participants" | null>(null);
 
   const [chatInput, setChatInput] = useState("");
     const [floatingEmojis, setFloatingEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
-
+      // 📄 PDF Presenter state
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [pdfName, setPdfName] = useState<string>("");
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+    const chatBottomRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState(false);
   // ✅ Real webcam stream
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -164,6 +172,94 @@ export function ZoomClassroomModal({
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [session.chatMessages?.length, activeDrawer]);
+      const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "application/pdf") {
+      alert("Please select a PDF file.");
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPdfUrl(url);
+    setPdfName(file.name);
+    setCurrentSlideIndex(0);
+  };
+
+  const handleClearPdf = () => {
+    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    setPdfUrl(null);
+    setPdfName("");
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+  };
+
+  const handleToggleRecording = () => {
+    if (!isInstructor) {
+      console.warn("[SECURITY] Non-instructor attempted to record. Blocked.");
+      return;
+    }
+
+    if (isRecording) {
+      // STOP RECORDING
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      setIsRecording(false);
+      return;
+    }
+
+    // START RECORDING
+    if (!streamRef.current) {
+      alert("Please turn on your camera before recording.");
+      return;
+    }
+
+    try {
+      recordedChunksRef.current = [];
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+        ? "video/webm;codecs=vp9"
+        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+        ? "video/webm;codecs=vp8"
+        : "video/webm";
+
+      const recorder = new MediaRecorder(streamRef.current, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        setRecordingUrl(url);
+        setIsRecording(false);
+      };
+
+      recorder.start(1000);
+      setIsRecording(true);
+      setRecordingDuration(0);
+      setRecordingUrl(null);
+
+      recordingTimerRef.current = window.setInterval(() => {
+        setRecordingDuration((prev) => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error("[recording] Failed to start:", err);
+      alert("Could not start recording. Your browser may not support MediaRecorder.");
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    };
+  }, [recordingUrl]);
   const handleEmojiReaction = async (emoji: string) => {
     // 1. Trigger the floating animation
     const id = Date.now();
@@ -382,6 +478,38 @@ export function ZoomClassroomModal({
           </div>
 
           {/* Main Content */}
+                    {/* Recording banner + download prompt */}
+          {isRecording && (
+            <div className="bg-red-950/80 border-b border-red-600/50 px-4 py-1.5 flex items-center justify-center space-x-2 text-xs shrink-0 z-40">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-red-200 font-semibold">
+                Recording in progress — {formatTimer(recordingDuration)}
+              </span>
+              <span className="text-red-400 text-[10px]">
+                (Your camera/mic is being recorded)
+              </span>
+            </div>
+          )}
+          {recordingUrl && !isRecording && (
+            <div className="bg-emerald-950/80 border-b border-emerald-600/50 px-4 py-1.5 flex items-center justify-center space-x-3 text-xs shrink-0 z-40">
+              <span className="text-emerald-200 font-semibold">
+                ✅ Recording ready · {formatTimer(recordingDuration)}
+              </span>
+              <a
+                href={recordingUrl}
+                download={`MAU-Lecture-${session.courseCode}-${new Date().toISOString().slice(0, 10)}.webm`}
+                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-md font-semibold text-[11px]"
+              >
+                ⬇ Download
+              </a>
+              <button
+                onClick={() => setRecordingUrl(null)}
+                className="text-emerald-400 hover:text-emerald-200 text-[11px] underline"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           <div className="flex-1 flex overflow-hidden relative">
                         {/* Floating Emoji Animation Layer */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
@@ -430,32 +558,46 @@ export function ZoomClassroomModal({
                         </button>
                       </div>
                     </div>
-                    <div className="flex-1 p-6 flex flex-col justify-center items-center bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-                      <div className="max-w-2xl w-full bg-slate-900/90 border border-slate-800/80 rounded-xl p-6 shadow-2xl">
-                        <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-3">
-                          <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
-                            MAU Computer Science & Engineering
-                          </span>
-                          <span className="text-xs text-slate-400">Week 7 • Lecture 14</span>
+                                       <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
+                      {pdfUrl ? (
+                        <div className="w-full h-full flex flex-col">
+                          <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-xs shrink-0">
+                            <span className="text-slate-300 font-medium truncate">📄 {pdfName}</span>
+                            <button onClick={handleClearPdf} className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10">Close PDF</button>
+                          </div>
+                          <iframe
+                            src={`${pdfUrl}#toolbar=0&navpanes=0`}
+                            className="w-full flex-1 border-none bg-white"
+                            title="PDF Presentation"
+                          />
                         </div>
-                        <h2 className="text-xl font-bold text-white mb-1">
-                          {sampleSlides[currentSlideIndex].title}
-                        </h2>
-                        <p className="text-xs text-slate-300 mb-4">
-                          {sampleSlides[currentSlideIndex].subtitle}
-                        </p>
-                        <div className="p-3.5 rounded-lg bg-slate-950/80 border border-blue-500/30 text-blue-300 font-mono text-xs my-3 text-center">
-                          {sampleSlides[currentSlideIndex].diagram}
+                      ) : (
+                        <div className="max-w-2xl w-full bg-slate-900/90 border border-slate-800/80 rounded-xl p-6 shadow-2xl">
+                          <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-3">
+                            <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
+                              MAU Computer Science & Engineering
+                            </span>
+                            <span className="text-xs text-slate-400">Week 7 • Lecture 14</span>
+                          </div>
+                          <h2 className="text-xl font-bold text-white mb-1">
+                            {sampleSlides[currentSlideIndex].title}
+                          </h2>
+                          <p className="text-xs text-slate-300 mb-4">
+                            {sampleSlides[currentSlideIndex].subtitle}
+                          </p>
+                          <div className="p-3.5 rounded-lg bg-slate-950/80 border border-blue-500/30 text-blue-300 font-mono text-xs my-3 text-center">
+                            {sampleSlides[currentSlideIndex].diagram}
+                          </div>
+                          <div className="space-y-2 mt-4">
+                            {sampleSlides[currentSlideIndex].points.map((pt, idx) => (
+                              <div key={idx} className="flex items-start space-x-2 text-xs text-slate-300">
+                                <span className="text-blue-400 mt-0.5">•</span>
+                                <span>{pt}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <div className="space-y-2 mt-4">
-                          {sampleSlides[currentSlideIndex].points.map((pt, idx) => (
-                            <div key={idx} className="flex items-start space-x-2 text-xs text-slate-300">
-                              <span className="text-blue-400 mt-0.5">•</span>
-                              <span>{pt}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
+                      )}
                     </div>
                     {/* Instructor PIP — real webcam when video on */}
                     <div className="absolute top-12 right-4 w-44 sm:w-56 h-32 sm:h-40 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500/80 bg-slate-900">
@@ -826,6 +968,25 @@ className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink
                   <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">{isScreenSharing ? "Sharing" : "Share"}</span>
                 </button>
               )}
+                            {isInstructor && (
+                <>
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    ref={pdfInputRef}
+                    onChange={handlePdfUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => pdfInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white"
+                    title="Present a PDF"
+                  >
+                    <FileText className="w-5 h-5" />
+                    <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">PDF</span>
+                  </button>
+                </>
+              )}
               {!isInstructor && (
                 <button
                   onClick={handleToggleHandRaise}
@@ -878,12 +1039,18 @@ className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink
 {isInstructor && (
   <button
     type="button"
-    disabled
-    title="Recording feature coming soon — not yet available in this demo"
-    className="flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-600 cursor-not-allowed opacity-60"
+    onClick={handleToggleRecording}
+    title={isRecording ? "Stop recording" : "Start recording your camera"}
+    className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
+      isRecording
+        ? "bg-red-600/30 border-red-500/60 text-red-300 animate-pulse"
+        : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+    }`}
   >
-    <CircleDot className="w-5 h-5" />
-    <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">REC · Soon</span>
+    <CircleDot className={`w-5 h-5 ${isRecording ? "animate-pulse" : ""}`} />
+    <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">
+      {isRecording ? `Stop · ${formatTimer(recordingDuration)}` : "REC"}
+    </span>
   </button>
 )}
             </div>
