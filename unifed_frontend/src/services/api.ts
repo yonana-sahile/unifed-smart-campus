@@ -51,10 +51,15 @@ export const clearTokens = () => {
 };
 
 const forceLogout = () => {
+  // Don't fire if we're already on the login page (no user)
+  const hasUser = !!localStorage.getItem('uscms_current_user');
+  if (!hasUser) {
+    console.warn('[auth] forceLogout skipped — no user session');
+    return;
+  }
   clearTokens();
   window.dispatchEvent(new CustomEvent('uscms:auth-expired'));
 };
-
 // ---------- REQUEST INTERCEPTOR ----------
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
@@ -105,11 +110,16 @@ api.interceptors.response.use(
 
       const refresh = getRefreshToken();
       if (!refresh) {
-        console.warn('[auth] No refresh token — forcing logout');
-        forceLogout();
+        // Don't force logout if there's no user session at all — we're on login page
+        const hasUser = !!localStorage.getItem('uscms_current_user');
+        if (hasUser) {
+          console.warn('[auth] No refresh token but user was logged in — forcing logout');
+          forceLogout();
+        } else {
+          console.warn('[auth] No refresh token and no user — ignoring (probably login page)');
+        }
         return Promise.reject(error);
       }
-
       try {
         const { data } = await axios.post(`${API_BASE}/token/refresh/`, { refresh });
         setTokens(data.access, data.refresh);
@@ -121,7 +131,13 @@ api.interceptors.response.use(
           refreshErr?.response?.status,
           refreshErr?.response?.data || refreshErr?.message
         );
-        forceLogout();
+        // Only force logout if there's a user session — otherwise silently ignore
+        const hasUser = !!localStorage.getItem('uscms_current_user');
+        if (hasUser) {
+          forceLogout();
+        } else {
+          console.warn('[auth] Ignoring refresh failure — no user session');
+        }
         return Promise.reject(refreshErr);
       }
     }
@@ -332,7 +348,7 @@ export const deleteUser = (id: string): Promise<void> =>
   api.delete(`/users/${numericId(id, 'U_')}/`).then(() => undefined);
 
 export const login = async (username: string, password: string) => {
-  const { data } = await api.post('/auth/login/', { username, password });
+  const { data } = await api.post('/token/', { username, password });
   const token = data.access ?? data.token;
   if (token) localStorage.setItem('access_token', token);
   if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
@@ -753,20 +769,32 @@ export const addAuditLog = async (
 ): Promise<AuditLog | null> => {
   const token = getAccessToken();
   if (!token) {
+    // No token yet — skip silently, don't force logout
     return null;
   }
 
   try {
-    const res = await api.post('/audit-logs/', {
-      user: numericId(userId, 'U_'),
-      user_id: numericId(userId, 'U_'),
-      user_name: userName,
-      user_role: userRole,
-      action,
-      entity_type: entityType,
-      entity_id: entityId,
-      description,
-    });
+    // Use a bare axios instance (not `api`) so the interceptor
+    // doesn't fire `uscms:auth-expired` on a 401 here
+    const res = await axios.post(
+      `${API_BASE}/audit-logs/`,
+      {
+        user: numericId(userId, 'U_'),
+        user_id: numericId(userId, 'U_'),
+        user_name: userName,
+        user_role: userRole,
+        action,
+        entity_type: entityType,
+        entity_id: entityId,
+        description,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
     return res.data;
   } catch (err: any) {
     console.warn(

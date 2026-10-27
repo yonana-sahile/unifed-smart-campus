@@ -192,8 +192,11 @@ export default function App() {
         return;
       }
 
+      // Save user + ensure tokens are settled before render
       localStorage.setItem("uscms_current_user", JSON.stringify(me));
-      setCurrentUser(me);
+      
+      // Small delay so token is fully in localStorage before dashboard fires background calls
+      setTimeout(() => setCurrentUser(me), 100);
       return;
     } catch (err: any) {
       console.warn("[App] Real login failed:", err?.response?.status, err?.response?.data || err?.message);
@@ -211,7 +214,7 @@ export default function App() {
     if (demo) {
       // ⚠️ Demo mode: no tokens. Backend writes will 401. Read-only UI still works.
       localStorage.setItem("uscms_current_user", JSON.stringify(demo));
-      setCurrentUser(demo);
+      setTimeout(() => setCurrentUser(demo), 100);
       return;
     }
 
@@ -264,7 +267,7 @@ if (!localUser) {
         localUser; // fall back to local shape if server lookup is odd
 
       localStorage.setItem("uscms_current_user", JSON.stringify(me));
-      setCurrentUser(me);
+      setTimeout(() => setCurrentUser(me), 100);
 
       void CampusDatabase.addAuditLog(
         me.id,
@@ -286,7 +289,7 @@ if (!localUser) {
 
     // ── 2️⃣ Demo fallback: no tokens, no backend writes ──
     localStorage.setItem("uscms_current_user", JSON.stringify(localUser));
-    setCurrentUser(localUser);
+    setTimeout(() => setCurrentUser(localUser), 100);
 
     try {
       void CampusDatabase.addAuditLog(
