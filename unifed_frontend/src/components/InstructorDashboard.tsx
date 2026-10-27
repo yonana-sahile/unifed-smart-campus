@@ -10,6 +10,7 @@ import { downloadCourseMaterial } from "../utils/fileDownloader";
 import { notify } from "../utils/notify";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { DashboardTab } from "./DashboardTab";
+import { useInstructorNotifications } from "../hooks/useInstructorNotifications";
 import {
   BookOpen, FileText, PlusCircle, Award, AlertTriangle, Users, Volume2, Calendar, CheckCircle2,
   ChevronRight, Activity, BrainCircuit, Sparkles, Send, Trash, Layout, Check, Shield, Cpu,
@@ -153,6 +154,15 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
 
+  // ✅ Phase 1C: real notifications from real data
+  const { notifications, markAsRead, markAllAsRead } = useInstructorNotifications({
+    userId: user.id,
+    submissions,
+    grades,
+    exams,
+    examAttempts,
+    attendanceRecords,
+  });
   useEffect(() => {
     loadData();
 
@@ -1084,6 +1094,12 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         badgeType="faculty"
         onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
         isMobileNavOpen={isMobileNavOpen}
+        notifications={notifications}
+        onNotificationClick={(targetTab, id) => {
+          setActiveTab(targetTab as any);
+          markAsRead(id);
+        }}
+        onMarkAllRead={() => markAllAsRead(notifications.map((n) => n.id))}
       />
 
       <AnimatePresence>
