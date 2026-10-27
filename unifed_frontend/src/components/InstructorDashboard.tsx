@@ -9,6 +9,7 @@ import { ExamSubmissionsModal } from "./ExamSubmissionsModal";
 import { downloadCourseMaterial } from "../utils/fileDownloader";
 import { notify } from "../utils/notify";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { DashboardTab } from "./DashboardTab";
 import {
   BookOpen, FileText, PlusCircle, Award, AlertTriangle, Users, Volume2, Calendar, CheckCircle2,
   ChevronRight, Activity, BrainCircuit, Sparkles, Send, Trash, Layout, Check, Shield, Cpu,
@@ -1295,45 +1296,19 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         <main className="flex-1 p-3.5 sm:p-6 md:p-8 overflow-y-auto min-w-0">
           <AnimatePresence mode="wait">
             {activeTab === "dashboard" && (
-              <motion.div
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -15 }}
-                className="space-y-6"
-                key="instructor-dashboard-tab"
-              >
-                <div>
-                  <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
-                    Syllabus Outline & Bulletin Control
-                  </h2>
-                  <p className="text-slate-500 text-xs sm:text-sm">Post announcements and configure syllabi details for {getActiveCourse()?.courseTitle || "your course"}.</p>
-                </div>
+              <>
+                <DashboardTab
+                  user={user}
+                  courses={courses}
+                  grades={grades}
+                  exams={exams}
+                  submissions={submissions}
+                  attendanceRecords={attendanceRecords}
+                  liveExamCount={liveExamCount}
+                  onGoToTab={(tab) => setActiveTab(tab)}
+                />
 
-                <div className="rounded-2xl p-4 bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900 text-white shadow-md border border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="p-2.5 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/30">
-                      <Video className="w-5 h-5 text-blue-400" />
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-bold font-mono text-emerald-400">MAU VIRTUAL CLASSROOM</span>
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                      </div>
-                      <h3 className="text-sm font-bold text-white">Online Zoom Teaching & Virtual Lectures</h3>
-                      <p className="text-xs text-blue-200">Start instant live classes, share slides, manage student chat & take attendance.</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("zoom")}
-                    className="flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0"
-                  >
-                    <Video className="w-3.5 h-3.5" />
-                    <span>Open Zoom Teaching Hub</span>
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                   <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-6 shadow-sm space-y-4">
                     <h3 className="font-display font-bold text-slate-800 text-base flex items-center space-x-2">
                       <Volume2 className="w-5 h-5 text-primary" />
@@ -1381,8 +1356,9 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </>
             )}
+                  
 
             {activeTab === "materials" && (
               <motion.div
