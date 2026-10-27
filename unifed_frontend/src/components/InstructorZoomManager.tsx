@@ -35,6 +35,14 @@ export function InstructorZoomManager({
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // ✅ Convert frontend user IDs to backend numeric PKs
+  // Handles: "U_IN01" → null (demo, can't fix), "5" → 5, 5 → 5
+  const toNumericId = (id: any): number | null => {
+    if (typeof id === "number" && Number.isFinite(id)) return id;
+    const stripped = String(id ?? "").replace(/^U_/, "").replace(/\D/g, "");
+    const num = parseInt(stripped, 10);
+    return Number.isFinite(num) && num > 0 ? num : null;
+  };
   const [formCourseId, setFormCourseId] = useState(selectedCourseId || courses[0]?.id || "");
   const [formTitle, setFormTitle] = useState("");
   const [formTopic, setFormTopic] = useState("");
@@ -75,13 +83,21 @@ export function InstructorZoomManager({
     const formattedId = `${meetingNum.slice(0, 3)} ${meetingNum.slice(3, 7)} ${meetingNum.slice(7)}`;
 
     try {
+          const numericInstructorId = toNumericId(instructor.id);
+    if (!numericInstructorId) {
+      alert(
+        "You're logged in with a demo account. Real Zoom sessions require a real backend login."
+      );
+      return;
+    }
+
       const created = await CampusDatabase.addZoomSession({
         courseId: activeCourse.id,
         courseCode: activeCourse.courseCode,
         courseTitle: activeCourse.courseTitle,
         title: `Instant Live Teaching: ${activeCourse.courseCode} Session`,
         topic: "Live interactive lecture, question & answer, and code walkthrough.",
-        instructorId: instructor.id,
+                instructorId: numericInstructorId,
         instructorName: instructor.fullName,
         startTime: new Date().toISOString(),
         durationMinutes: 90,
@@ -152,13 +168,21 @@ export function InstructorZoomManager({
       : new Date(Date.now() + 2 * 3600 * 1000).toISOString();
 
     try {
+            const numericInstructorId = toNumericId(instructor.id);
+      if (!numericInstructorId) {
+        alert(
+          "You're logged in with a demo account. Real Zoom sessions require a real backend login."
+        );
+        return;
+      }
+
       await CampusDatabase.addZoomSession({
         courseId: activeCourse.id,
         courseCode: activeCourse.courseCode,
         courseTitle: activeCourse.courseTitle,
         title: formTitle.trim(),
         topic: formTopic.trim() || "Virtual lecture and interactive discussion.",
-        instructorId: instructor.id,
+                instructorId: numericInstructorId,
         instructorName: instructor.fullName,
         startTime: dateStr,
         durationMinutes: formDuration,

@@ -35,7 +35,56 @@ export function ZoomClassroomModal({
   const chatBottomRef = useRef<HTMLDivElement>(null);
 
   const [copiedId, setCopiedId] = useState(false);
+  // ✅ Real webcam stream
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!isVideoOn) {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 1280, height: 720, facingMode: "user" },
+          audio: false,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+        setCameraError(null);
+      } catch (err: any) {
+        const msg =
+          err?.name === "NotAllowedError"
+            ? "Camera permission denied. Allow it in your browser settings."
+            : err?.name === "NotFoundError"
+            ? "No webcam found. Connect a camera and refresh."
+            : err?.name === "NotReadableError"
+            ? "Camera is in use by another app (Zoom, Teams, etc)."
+            : "Could not start camera.";
+        setCameraError(msg);
+        console.error("[webcam]", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, [isVideoOn]);
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const sampleSlides = [
     {
@@ -350,33 +399,64 @@ export function ZoomClassroomModal({
                         </div>
                       </div>
                     </div>
-                    {/* Instructor PIP */}
+                    {/* Instructor PIP — real webcam when video on */}
                     <div className="absolute top-12 right-4 w-44 sm:w-56 h-32 sm:h-40 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500/80 bg-slate-900">
                       <div className="flex-1 h-full relative flex items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950">
-                        <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xl">
-                          {session.instructorName.charAt(0)}
-                        </div>
+                        {isVideoOn && !cameraError ? (
+                          <video
+                            ref={videoRef}
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="text-center px-2">
+                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xl mx-auto">
+                              {currentUser.fullName.charAt(0)}
+                            </div>
+                            {cameraError && (
+                              <p className="text-[9px] text-amber-300 mt-1 leading-tight">
+                                {cameraError}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                       <div className="px-2 py-1 bg-slate-950/90 flex items-center justify-between text-[11px]">
-                        <span className="truncate text-slate-200 font-medium">{session.instructorName}</span>
-                        <Mic className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span className="truncate text-slate-200 font-medium">
+                          {currentUser.fullName} (You)
+                        </span>
+                        {isMuted ? <MicOff className="w-3 h-3 text-red-400 shrink-0" /> : <Mic className="w-3 h-3 text-emerald-400 shrink-0" />}
                       </div>
                     </div>
                   </div>
 
                   {/* Horizontal attendees */}
                   <div className="h-28 flex items-center space-x-2.5 overflow-x-auto pb-1 shrink-0">
-                    <div className="w-36 h-24 rounded-xl bg-slate-950 border border-slate-700/80 p-1 flex flex-col justify-between shrink-0">
-                      <div className="flex-1 flex items-center justify-center">
-                        {isVideoOn ? (
+                    <div className="w-36 h-24 rounded-xl bg-slate-950 border border-slate-700/80 p-1 flex flex-col justify-between shrink-0 overflow-hidden">
+                      <div className="flex-1 flex items-center justify-center relative overflow-hidden rounded">
+                        {isVideoOn && !cameraError ? (
+                          <video
+                            autoPlay
+                            playsInline
+                            muted
+                            className="w-full h-full object-cover rounded"
+                            ref={(el) => {
+                              // Reuse the same stream in multiple <video> tags
+                              if (el && streamRef.current && el.srcObject !== streamRef.current) {
+                                el.srcObject = streamRef.current;
+                                el.play().catch(() => {});
+                              }
+                            }}
+                          />
+                        ) : (
                           <div className="relative">
                             <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center font-bold text-xs text-white">
                               {currentUser.fullName.charAt(0)}
                             </div>
                             {isHandRaised && <span className="absolute -top-1 -right-2 text-sm">✋</span>}
                           </div>
-                        ) : (
-                          <VideoOff className="w-5 h-5 text-slate-500" />
                         )}
                       </div>
                       <div className="flex items-center justify-between px-1.5 py-0.5 bg-slate-900/90 rounded text-[10px]">
