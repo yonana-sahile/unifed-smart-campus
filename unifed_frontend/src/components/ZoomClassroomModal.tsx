@@ -565,7 +565,7 @@ export function ZoomClassroomModal({
                         {showJitsi ? (
                           <div className="w-full h-full bg-black">
                             <JitsiMeeting
-                              domain="meet.jit.si"
+                              domain="meet.mayfirst.org"
                               roomName={`MAU-Classroom-${session.id}`}
                               configOverwrite={{
                                 startWithAudioMuted: true,
