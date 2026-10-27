@@ -707,6 +707,48 @@ className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink
           {/* Bottom Toolbar */}
 <div className="h-18 px-4 zoom-glass-deep border-t border-slate-800 flex items-center justify-between shrink-0">
               <div className="flex items-center space-x-2 sm:space-x-3">
+              {/* View switcher */}
+              <div className="flex items-center bg-slate-800/80 border border-slate-700 rounded-xl p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setViewMode("speaker")}
+                  title="Speaker view"
+                  className={`flex items-center justify-center px-2.5 py-1.5 rounded-lg transition ${
+                    viewMode === "speaker"
+                      ? "bg-red-600/30 text-red-300 border border-red-500/40"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Presentation className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("gallery")}
+                  title="Gallery view"
+                  className={`flex items-center justify-center px-2.5 py-1.5 rounded-lg transition ${
+                    viewMode === "gallery"
+                      ? "bg-red-600/30 text-red-300 border border-red-500/40"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode("whiteboard")}
+                  title="Whiteboard"
+                  className={`flex items-center justify-center px-2.5 py-1.5 rounded-lg transition ${
+                    viewMode === "whiteboard"
+                      ? "bg-red-600/30 text-red-300 border border-red-500/40"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <PenTool className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="w-px h-8 bg-slate-700 hidden sm:block" />
+
               <button
                 onClick={() => setIsMuted(!isMuted)}
                 className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl border transition ${
