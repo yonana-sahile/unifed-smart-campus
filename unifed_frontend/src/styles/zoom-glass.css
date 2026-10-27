@@ -1,0 +1,79 @@
+/* src/styles/zoom-glass.css */
+
+/* ============================================
+   Zoom Classroom — Crimson Glassmorphism
+   Matches MAU's Ethiopian crimson identity
+   ============================================ */
+
+/* Glass panel — used for video tiles, chat drawer, modals */
+.zoom-glass {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Deeper glass — used for header, toolbar, sidebars */
+.zoom-glass-deep {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Crimson gradient — used for header badges, primary buttons */
+.zoom-crimson-gradient {
+  background: linear-gradient(135deg, #7f1d1d 0%, #b91c1c 50%, #991b1b 100%);
+}
+
+/* Crimson accent border — used for active tiles, focused inputs */
+.zoom-crimson-accent {
+  border-color: rgba(185, 28, 28, 0.5);
+  box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.2), 0 4px 12px rgba(185, 28, 28, 0.15);
+}
+
+/* Smooth scrollbar matching the theme */
+.zoom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.zoom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 3px;
+}
+
+.zoom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(185, 28, 28, 0.4);
+  border-radius: 3px;
+}
+
+.zoom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(185, 28, 28, 0.7);
+}
+
+/* Pulsing crimson dot — for "LIVE" indicators */
+@keyframes zoom-pulse-crimson {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.15);
+  }
+}
+
+.zoom-live-dot {
+  animation: zoom-pulse-crimson 1.8s ease-in-out infinite;
+}
+
+/* Video tile hover — subtle lift + shadow */
+.zoom-video-tile {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.zoom-video-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
