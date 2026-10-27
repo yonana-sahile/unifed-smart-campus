@@ -368,7 +368,6 @@ if (!localUser) {
           toastOptions={{ className: "font-sans text-sm" }}
         />
         <CampusNewsTopBar />
-        <button onClick={() => notify.success("Test toast works!", { description: "Sonner is live." })} style={{ position: "fixed", bottom: 16, left: 16, zIndex: 99999, padding: "10px 16px", background: "#2563eb", color: "white", borderRadius: 8, fontSize: 12, fontWeight: "bold" }}>🧪 Test Toast</button>
         {renderRoleDashboard()}
         <FloatingAIAssistant currentUser={currentUser} />
       </>
