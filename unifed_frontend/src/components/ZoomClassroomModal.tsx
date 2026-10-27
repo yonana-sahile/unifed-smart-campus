@@ -504,12 +504,29 @@ export function ZoomClassroomModal({
                       <Mic className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
                   </div>
-                  <div className="aspect-video rounded-xl bg-slate-950 border border-slate-800 p-2 flex flex-col justify-between">
-                    <div className="flex-1 flex flex-col items-center justify-center">
-                      <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
-                        {currentUser.fullName.charAt(0)}
-                      </div>
-                      {isHandRaised && <span className="text-base">✋</span>}
+                  <div className="aspect-video rounded-xl bg-slate-950 border border-slate-800 p-2 flex flex-col justify-between overflow-hidden">
+                    <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden rounded">
+                      {isVideoOn && !cameraError ? (
+                        <video
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover rounded"
+                          ref={(el) => {
+                            if (el && streamRef.current && el.srcObject !== streamRef.current) {
+                              el.srcObject = streamRef.current;
+                              el.play().catch(() => {});
+                            }
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
+                            {currentUser.fullName.charAt(0)}
+                          </div>
+                          {isHandRaised && <span className="text-base">✋</span>}
+                        </>
+                      )}
                     </div>
                     <div className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded text-xs">
                       <span className="text-slate-200 font-semibold truncate">You</span>
