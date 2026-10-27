@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
+import { JitsiMeeting } from "@jitsi/react-sdk";
 interface ZoomClassroomModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -42,7 +43,9 @@ export function ZoomClassroomModal({
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfName, setPdfName] = useState<string>("");
   const pdfInputRef = useRef<HTMLInputElement>(null);
-    const chatBottomRef = useRef<HTMLDivElement>(null);
+      // 🎥 Jitsi live video state
+  const [showJitsi, setShowJitsi] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
   const [copiedId, setCopiedId] = useState(false);
   // ✅ Real webcam stream
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -558,47 +561,73 @@ export function ZoomClassroomModal({
                         </button>
                       </div>
                     </div>
-                                       <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
-                      {pdfUrl ? (
-                        <div className="w-full h-full flex flex-col">
-                          <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-xs shrink-0">
-                            <span className="text-slate-300 font-medium truncate">📄 {pdfName}</span>
-                            <button onClick={handleClearPdf} className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10">Close PDF</button>
+                      <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
+                        {showJitsi ? (
+                          <div className="w-full h-full bg-black">
+                            <JitsiMeeting
+                              domain="meet.jit.si"
+                              roomName={`MAU-Classroom-${session.id}`}
+                              configOverwrite={{
+                                startWithAudioMuted: true,
+                                disableModeratorIndicator: true,
+                                startScreenSharing: true,
+                                prejoinPageEnabled: false,
+                              }}
+                              interfaceConfigOverwrite={{
+                                DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
+                                SHOW_JITSI_WATERMARK: false,
+                              }}
+                              userInfo={{
+                                displayName: currentUser.fullName,
+                                email: currentUser.email,
+                              }}
+                              getIFrameRef={(iframeRef) => {
+                                iframeRef.style.height = "100%";
+                                iframeRef.style.width = "100%";
+                                iframeRef.style.border = "none";
+                              }}
+                            />
                           </div>
-                          <iframe
-                            src={`${pdfUrl}#toolbar=0&navpanes=0`}
-                            className="w-full flex-1 border-none bg-white"
-                            title="PDF Presentation"
-                          />
-                        </div>
-                      ) : (
-                        <div className="max-w-2xl w-full bg-slate-900/90 border border-slate-800/80 rounded-xl p-6 shadow-2xl">
-                          <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-3">
-                            <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
-                              MAU Computer Science & Engineering
-                            </span>
-                            <span className="text-xs text-slate-400">Week 7 • Lecture 14</span>
+                        ) : pdfUrl ? (
+                          <div className="w-full h-full flex flex-col">
+                            <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-xs shrink-0">
+                              <span className="text-slate-300 font-medium truncate">📄 {pdfName}</span>
+                              <button onClick={handleClearPdf} className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10">Close PDF</button>
+                            </div>
+                            <iframe
+                              src={`${pdfUrl}#toolbar=0&navpanes=0`}
+                              className="w-full flex-1 border-none bg-white"
+                              title="PDF Presentation"
+                            />
                           </div>
-                          <h2 className="text-xl font-bold text-white mb-1">
-                            {sampleSlides[currentSlideIndex].title}
-                          </h2>
-                          <p className="text-xs text-slate-300 mb-4">
-                            {sampleSlides[currentSlideIndex].subtitle}
-                          </p>
-                          <div className="p-3.5 rounded-lg bg-slate-950/80 border border-blue-500/30 text-blue-300 font-mono text-xs my-3 text-center">
-                            {sampleSlides[currentSlideIndex].diagram}
+                        ) : (
+                          <div className="max-w-2xl w-full bg-slate-900/90 border border-slate-800/80 rounded-xl p-6 shadow-2xl">
+                            <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-3">
+                              <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
+                                MAU Computer Science & Engineering
+                              </span>
+                              <span className="text-xs text-slate-400">Week 7 • Lecture 14</span>
+                            </div>
+                            <h2 className="text-xl font-bold text-white mb-1">
+                              {sampleSlides[currentSlideIndex].title}
+                            </h2>
+                            <p className="text-xs text-slate-300 mb-4">
+                              {sampleSlides[currentSlideIndex].subtitle}
+                            </p>
+                            <div className="p-3.5 rounded-lg bg-slate-950/80 border border-blue-500/30 text-blue-300 font-mono text-xs my-3 text-center">
+                              {sampleSlides[currentSlideIndex].diagram}
+                            </div>
+                            <div className="space-y-2 mt-4">
+                              {sampleSlides[currentSlideIndex].points.map((pt, idx) => (
+                                <div key={idx} className="flex items-start space-x-2 text-xs text-slate-300">
+                                  <span className="text-blue-400 mt-0.5">•</span>
+                                  <span>{pt}</span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <div className="space-y-2 mt-4">
-                            {sampleSlides[currentSlideIndex].points.map((pt, idx) => (
-                              <div key={idx} className="flex items-start space-x-2 text-xs text-slate-300">
-                                <span className="text-blue-400 mt-0.5">•</span>
-                                <span>{pt}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        )}
+                      </div>
                     {/* Instructor PIP — real webcam when video on */}
                     <div className="absolute top-12 right-4 w-44 sm:w-56 h-32 sm:h-40 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500/80 bg-slate-900">
                       <div className="flex-1 h-full relative flex items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950">
@@ -986,6 +1015,22 @@ className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink
                     <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">PDF</span>
                   </button>
                 </>
+              )}
+                            {isInstructor && (
+                <button
+                  onClick={() => setShowJitsi(!showJitsi)}
+                  className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
+                    showJitsi
+                      ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 animate-pulse"
+                      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
+                  }`}
+                  title={showJitsi ? "Stop live video" : "Start live video (Jitsi)"}
+                >
+                  <Video className="w-5 h-5" />
+                  <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">
+                    {showJitsi ? "Live" : "Video"}
+                  </span>
+                </button>
               )}
               {!isInstructor && (
                 <button
