@@ -383,6 +383,21 @@ export function ZoomClassroomModal({
 
           {/* Main Content */}
           <div className="flex-1 flex overflow-hidden relative">
+                        {/* Floating Emoji Animation Layer */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
+              {floatingEmojis.map((e) => (
+                <motion.div
+                  key={e.id}
+                  initial={{ opacity: 0, y: 50, scale: 0.5 }}
+                  animate={{ opacity: [0, 1, 1, 0], y: -400, scale: [0.5, 1.2, 1.2, 1] }}
+                  transition={{ duration: 2.5, ease: "easeOut" }}
+                  className="absolute bottom-20 text-5xl drop-shadow-lg"
+                  style={{ left: `${e.left}%` }}
+                >
+                  {e.emoji}
+                </motion.div>
+              ))}
+            </div>
             <div className="flex-1 flex flex-col bg-slate-900/50 p-2 sm:p-4 overflow-y-auto">
               {/* Speaker View */}
               {viewMode === "speaker" && (
@@ -822,6 +837,20 @@ className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink
                   <span className="text-[10px] font-medium mt-0.5">{isHandRaised ? "Lower" : "Raise"}</span>
                 </button>
               )}
+                            {/* Emoji Reactions */}
+              <div className="hidden sm:flex items-center bg-slate-800/60 border border-slate-700 rounded-xl p-0.5 space-x-0.5">
+                {["👍", "❤️", "😂", "🎉", "🙋"].map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleEmojiReaction(emoji)}
+                    className="px-2 py-1.5 hover:bg-slate-700/80 rounded-lg text-sm transition hover:scale-110 active:scale-95"
+                    title={`React with ${emoji}`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
               <button
                 onClick={() => setActiveDrawer(activeDrawer === "participants" ? null : "participants")}
                 className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition relative ${
