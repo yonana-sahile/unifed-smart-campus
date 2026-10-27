@@ -218,6 +218,10 @@ export function ZoomClassroomModal({
   };
 
   const handleLowerAllHands = async () => {
+        if (!isInstructor) {
+      console.warn("[SECURITY] Non-instructor attempted to lower hands. Blocked.");
+      return;
+    }
     const updatedAttendees = (session.activeAttendees || []).map((a) => ({ ...a, isHandRaised: false }));
     const updated = { ...session, activeAttendees: updatedAttendees };
     setSession(updated);
@@ -230,6 +234,10 @@ export function ZoomClassroomModal({
   };
 
   const handleMuteAll = async () => {
+        if (!isInstructor) {
+      console.warn("[SECURITY] Non-instructor attempted to mute all. Blocked.");
+      return;
+    }
     const updatedAttendees = (session.activeAttendees || []).map((a) =>
       a.role === "STUDENT" ? { ...a, isMuted: true } : a
     );
@@ -244,6 +252,10 @@ export function ZoomClassroomModal({
   };
 
   const handleEndSessionForEveryone = async () => {
+        if (!isInstructor) {
+      console.warn("[SECURITY] Non-instructor attempted to end session. Blocked.");
+      return;
+    }
     if (!confirm("End this Zoom lecture for all students and save attendance & recording?")) return;
     const updated = {
       ...session,
@@ -309,10 +321,11 @@ export function ZoomClassroomModal({
               </div>
             </div>
             <div className="flex items-center space-x-2">
-              <div className="flex items-center space-x-1.5 px-3 py-1 bg-slate-800/80 border border-slate-700/60 rounded-lg text-xs font-mono text-slate-300">
-                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                <span className="font-bold">{formatTimer(elapsedSeconds)}</span>
-              </div>
+<div className="flex items-center space-x-1.5 px-3 py-1 bg-slate-800/80 border border-slate-700/60 rounded-lg text-xs font-mono text-slate-300" title="Session timer · not recording">
+  <span className="w-2 h-2 rounded-full bg-amber-400" />
+  <span className="font-bold">{formatTimer(elapsedSeconds)}</span>
+  <span className="text-[9px] text-amber-300 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded ml-1">DEMO</span>
+</div>
               <button
                 type="button"
                 onClick={handleCopyMeetingDetails}
@@ -778,17 +791,17 @@ export function ZoomClassroomModal({
                   {(session.chatMessages || []).length}
                 </span>
               </button>
-              {isInstructor && (
-                <button
-                  onClick={() => setIsRecording(!isRecording)}
-                  className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
-                    isRecording ? "bg-red-500/20 border-red-500/40 text-red-400" : "bg-slate-800 border-slate-700 text-slate-400"
-                  }`}
-                >
-                  <CircleDot className={`w-5 h-5 ${isRecording ? "animate-pulse" : ""}`} />
-                  <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">{isRecording ? "REC" : "Record"}</span>
-                </button>
-              )}
+{isInstructor && (
+  <button
+    type="button"
+    disabled
+    title="Recording feature coming soon — not yet available in this demo"
+    className="flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border border-slate-800 bg-slate-900 text-slate-600 cursor-not-allowed opacity-60"
+  >
+    <CircleDot className="w-5 h-5" />
+    <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">REC · Soon</span>
+  </button>
+)}
             </div>
 
             <div className="flex items-center space-x-2">
