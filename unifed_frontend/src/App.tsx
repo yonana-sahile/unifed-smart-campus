@@ -16,6 +16,7 @@ import { ForgotPasswordModal } from "./components/ForgotPasswordModal";
 import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Toaster } from "sonner";
+import { notify } from "./utils/notify";
 // ✅ LOCAL DEMO USERS – used for 1‑Click Login fallback
 const DEMO_USERS: User[] = [
   {
@@ -245,12 +246,11 @@ export default function App() {
     setErrorMessage("");
 
     const localUser = DEMO_USERS.find((u) => u.email === email);
-    if (!localUser) {
-      // Should never happen — but keep a safety net
-      alert("Unknown demo profile.");
-      return;
-    }
-
+if (!localUser) {
+  // Should never happen — but keep a safety net
+  notify.error("Unknown demo profile", "Contact IT if this persists.");
+  return;
+}
     // ── 1️⃣ Try REAL backend auth using the demo user's username + "password" ──
     try {
       await CampusDatabase.login(localUser.username, "password");
