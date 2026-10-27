@@ -298,10 +298,10 @@ export function ZoomClassroomModal({
           className="w-full max-w-7xl h-[92vh] max-h-[900px] flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100"
         >
           {/* Top Bar */}
-          <div className="flex items-center justify-between px-4 py-3 bg-slate-900/90 border-b border-slate-800 shrink-0">
-            <div className="flex items-center space-x-3">
-              <div className="flex items-center space-x-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 px-2.5 py-1 rounded-lg text-xs font-mono font-bold tracking-wider">
-                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+<div className="flex items-center justify-between px-4 py-3 zoom-glass-deep border-b border-slate-800 shrink-0">
+              <div className="flex items-center space-x-3">
+<div className="flex items-center space-x-2 zoom-crimson-gradient text-red-100 border border-red-500/40 px-2.5 py-1 rounded-lg text-xs font-mono font-bold tracking-wider shadow-sm shadow-red-900/30">
+                <span className="w-2 h-2 rounded-full bg-red-100 zoom-live-dot" />
                 <span>ZOOM CLASSROOM</span>
               </div>
               <div>
@@ -447,7 +447,7 @@ export function ZoomClassroomModal({
 
                   {/* Horizontal attendees */}
                   <div className="h-28 flex items-center space-x-2.5 overflow-x-auto pb-1 shrink-0">
-                    <div className="w-36 h-24 rounded-xl bg-slate-950 border border-slate-700/80 p-1 flex flex-col justify-between shrink-0 overflow-hidden">
+<div className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-1 flex flex-col justify-between shrink-0 overflow-hidden">
                       <div className="flex-1 flex items-center justify-center relative overflow-hidden rounded">
                         {isVideoOn && !cameraError ? (
                           <video
@@ -482,8 +482,7 @@ export function ZoomClassroomModal({
                       .map((att) => (
                         <div
                           key={att.id}
-                          className="w-36 h-24 rounded-xl bg-slate-950 border border-slate-800 p-1 flex flex-col justify-between shrink-0"
-                        >
+className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-1 flex flex-col justify-between shrink-0 overflow-hidden"                        >
                           <div className="flex-1 flex items-center justify-center">
                             <div className="relative">
                               <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-200">
@@ -505,7 +504,7 @@ export function ZoomClassroomModal({
               {/* Gallery View */}
               {viewMode === "gallery" && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 h-full overflow-y-auto">
-                  <div className="aspect-video rounded-xl bg-slate-950 border-2 border-blue-500/60 p-2 flex flex-col justify-between">
+                  <div className="aspect-video rounded-xl zoom-glass zoom-video-tile border-2 border-red-500/50 p-2 flex flex-col justify-between">
                     <div className="flex-1 flex flex-col items-center justify-center">
                       <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-lg">
                         {session.instructorName.charAt(0)}
@@ -517,7 +516,8 @@ export function ZoomClassroomModal({
                       <Mic className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
                   </div>
-                  <div className="aspect-video rounded-xl bg-slate-950 border border-slate-800 p-2 flex flex-col justify-between overflow-hidden">
+                  <div 
+                  className="aspect-video rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-2 flex flex-col justify-between overflow-hidden">
                     <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden rounded">
                       {isVideoOn && !cameraError ? (
                         <video
@@ -549,7 +549,7 @@ export function ZoomClassroomModal({
                   {(session.activeAttendees || [])
                     .filter((a) => String(a.id) !== String(currentUser.id) && a.role === "STUDENT")
                     .map((att) => (
-                      <div key={att.id} className="aspect-video rounded-xl bg-slate-950 border border-slate-800 p-2 flex flex-col justify-between">
+                      <div key={att.id} className="aspect-video rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-2 flex flex-col justify-between">
                         <div className="flex-1 flex flex-col items-center justify-center">
                           <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200 font-bold text-lg">
                             {att.name.charAt(0)}
@@ -608,8 +608,7 @@ export function ZoomClassroomModal({
                   initial={{ width: 0, opacity: 0 }}
                   animate={{ width: 340, opacity: 1 }}
                   exit={{ width: 0, opacity: 0 }}
-                  className="h-full bg-slate-900 border-l border-slate-800 flex flex-col shrink-0 overflow-hidden shadow-2xl"
-                >
+className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink-0 overflow-hidden shadow-2xl"                >
                   <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/90">
                     <div className="flex items-center space-x-2">
                       {activeDrawer === "chat" && <MessageSquare className="w-4 h-4 text-blue-400" />}
@@ -722,8 +721,8 @@ export function ZoomClassroomModal({
           </div>
 
           {/* Bottom Toolbar */}
-          <div className="h-18 px-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between shrink-0">
-            <div className="flex items-center space-x-2 sm:space-x-3">
+<div className="h-18 px-4 zoom-glass-deep border-t border-slate-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center space-x-2 sm:space-x-3">
               <button
                 onClick={() => setIsMuted(!isMuted)}
                 className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl border transition ${

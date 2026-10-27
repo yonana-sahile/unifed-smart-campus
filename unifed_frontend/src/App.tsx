@@ -17,6 +17,7 @@ import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAle
 import { motion, AnimatePresence } from "motion/react";
 import { Toaster } from "sonner";
 import { notify } from "./utils/notify";
+import "./styles/zoom-glass.css";
 // ✅ LOCAL DEMO USERS – used for 1‑Click Login fallback
 const DEMO_USERS: User[] = [
   {
