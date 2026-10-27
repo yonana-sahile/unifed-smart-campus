@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
-import { JitsiMeeting } from "@jitsi/react-sdk";
+import { JaaSMeeting } from "@jitsi/react-sdk";
 interface ZoomClassroomModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -564,18 +564,16 @@ export function ZoomClassroomModal({
                       <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
                         {showJitsi ? (
                           <div className="w-full h-full bg-black">
-                            <JitsiMeeting
-                              domain="meet.mayfirst.org"
+                            <JaaSMeeting
+                              appId="vpaas-magic-cookie-ef8460b035634e9eb0faebf872b10662"
                               roomName={`MAU-Classroom-${session.id}`}
                               configOverwrite={{
                                 startWithAudioMuted: true,
                                 disableModeratorIndicator: true,
-                                startScreenSharing: true,
                                 prejoinPageEnabled: false,
                               }}
                               interfaceConfigOverwrite={{
                                 DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
-                                SHOW_JITSI_WATERMARK: false,
                               }}
                               userInfo={{
                                 displayName: currentUser.fullName,
