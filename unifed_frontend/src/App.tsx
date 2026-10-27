@@ -15,7 +15,7 @@ import StarryFlag from "./components/StarryFlag";
 import { ForgotPasswordModal } from "./components/ForgotPasswordModal";
 import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-
+import { Toaster } from "sonner";
 // ✅ LOCAL DEMO USERS – used for 1‑Click Login fallback
 const DEMO_USERS: User[] = [
   {
@@ -360,6 +360,13 @@ export default function App() {
 
     return (
       <>
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          duration={4000}
+          toastOptions={{ className: "font-sans text-sm" }}
+        />
         <CampusNewsTopBar />
         {renderRoleDashboard()}
         <FloatingAIAssistant currentUser={currentUser} />
@@ -370,6 +377,13 @@ export default function App() {
   // --- LOGIN PAGE (unchanged) ---
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-slate-100 to-slate-200/80 dark:from-[#06111f] dark:via-[#071526] dark:to-[#0a1d35] flex flex-col font-sans relative selection:bg-amber-400 selection:text-slate-900 transition-colors duration-300">
+      <Toaster
+        position="top-right"
+        richColors
+        closeButton
+        duration={4000}
+        toastOptions={{ className: "font-sans text-sm" }}
+      />
       <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-400/10 dark:bg-blue-900/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-0 right-1/4 w-[600px] h-[600px] bg-amber-400/10 dark:bg-amber-600/10 rounded-full blur-3xl pointer-events-none" />
 
