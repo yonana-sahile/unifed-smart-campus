@@ -4,10 +4,10 @@ import { CampusDatabase } from "../services/api";
 import {
   Mic, MicOff, Video, VideoOff, MonitorUp, Users, MessageSquare, Hand, X, Copy,
   Check, ExternalLink, ShieldCheck, CircleDot, Send, ChevronLeft, ChevronRight,
-  PhoneOff, BookOpen
+  PhoneOff, BookOpen, LayoutGrid, Presentation, PenTool
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-
+import { WhiteboardCanvas } from "./WhiteboardCanvas";
 interface ZoomClassroomModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -566,37 +566,21 @@ className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-7
               )}
 
               {/* Whiteboard View */}
+              {/* Whiteboard View */}
               {viewMode === "whiteboard" && (
-                <div className="flex-1 flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-4 overflow-y-auto">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div className="flex-1 flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-3 overflow-hidden min-h-0">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
                     <div>
-                      <h3 className="text-base font-bold text-white flex items-center space-x-2">
-                        <BookOpen className="w-4 h-4 text-blue-400" />
-                        <span>Interactive Lecture Notes</span>
+                      <h3 className="text-sm font-bold text-white flex items-center space-x-2">
+                        <BookOpen className="w-4 h-4 text-red-400" />
+                        <span>Live Whiteboard</span>
                       </h3>
-                      <p className="text-xs text-slate-400">Course: {session.courseCode}</p>
-                    </div>
-                  </div>
-                  <div className="flex-1 mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 bg-slate-900 rounded-xl border border-slate-800">
-                      <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Topic</h4>
-                      <p className="text-xs text-slate-300 leading-relaxed mb-4">{session.topic}</p>
-                      <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Instructor Notes</h4>
-                      <p className="text-xs text-slate-300 leading-relaxed bg-slate-950 p-3 rounded-lg border border-slate-800 font-mono">
-                        {session.lectureNotes || "No supplementary notes uploaded yet."}
+                      <p className="text-[11px] text-slate-400">
+                        {session.courseCode} · {isInstructor ? "You are presenting" : `${session.instructorName} is presenting`}
                       </p>
                     </div>
-                    <div className="p-4 bg-slate-900 rounded-xl border border-slate-800 flex flex-col">
-                      <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider mb-2">Live Code Demo</h4>
-                      <div className="flex-1 bg-slate-950 p-3 rounded-lg border border-slate-800 text-xs font-mono text-emerald-300 overflow-x-auto">
-                        <p className="text-slate-500"># Docker Compose</p>
-                        <p className="text-blue-400">version: <span className="text-yellow-300">'3.8'</span></p>
-                        <p className="text-blue-400">services:</p>
-                        <p className="pl-4 text-purple-400">api-gateway:</p>
-                        <p className="pl-8 text-slate-300">image: <span className="text-yellow-300">mau-cloud/gateway:v1.2</span></p>
-                      </div>
-                    </div>
                   </div>
+                  <WhiteboardCanvas isInstructor={isInstructor} />
                 </div>
               )}
             </div>
