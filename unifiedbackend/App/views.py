@@ -1024,7 +1024,7 @@ If no, revise.
 Be the academic advisor every student wishes they had."""
 
 @api_view(["POST"])
-@_perm_classes([permissions.IsAuthenticated])
+@_perm_classes([permissions.AllowAny])  # <--- CHANGE TO THIS
 def ai_chat(request):
     message = (request.data.get("message") or "").strip()
     if not message:
@@ -1207,7 +1207,7 @@ from django.http import HttpResponse
 
 
 @api_view(["POST"])
-@_perm_classes([permissions.IsAuthenticated])
+@_perm_classes([permissions.AllowAny])  # <--- CHANGE TO THIS
 def ai_transcribe(request):
     """
     Receives multipart audio from the browser.
@@ -1269,7 +1269,7 @@ def ai_transcribe(request):
 
 
 @api_view(["POST"])
-@_perm_classes([permissions.IsAuthenticated])
+@_perm_classes([permissions.AllowAny])  # <--- CHANGE TO THIS
 def ai_speak(request):
     """
     Receives {"text": "...", "voice": "troy"} and returns audio/wav bytes.
