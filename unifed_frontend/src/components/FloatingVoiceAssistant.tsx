@@ -329,7 +329,8 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
         aria-label="Open voice assistant — tap to talk"
         title="Talk to your AI companion"
       >
-        <RobotFace phase={phase} size={80} />
+       
+<RobotFace phase={phase} size={110} />
       </motion.button>
       <span className="text-[9px] font-bold text-cyan-200/90 font-mono tracking-wider bg-slate-950/70 px-2 py-0.5 rounded-full border border-cyan-400/30 backdrop-blur-sm">
         Talk • ተናገር
