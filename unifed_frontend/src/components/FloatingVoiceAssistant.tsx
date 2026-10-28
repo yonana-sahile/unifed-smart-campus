@@ -30,7 +30,7 @@ interface VoiceMessage {
   timestamp: string;
 }
 
-const GROQ_TTS_VOICE = "troy";
+const GROQ_TTS_VOICE = "hannah";
 const TTS_CHAR_LIMIT = 200;
 
 // ---------------------------------------------------------------------------
