@@ -42,5 +42,7 @@ router.register(r'face-verification', views.FaceVerificationViewSet, basename='f
 
 urlpatterns = [
     path('ai/chat/', views.ai_chat, name='ai-chat'),
+    path('ai/transcribe/', views.ai_transcribe, name='ai-transcribe'),
+    path('ai/speak/', views.ai_speak, name='ai-speak'),
     path('', include(router.urls)),
 ]

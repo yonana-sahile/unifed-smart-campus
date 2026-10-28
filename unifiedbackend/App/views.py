@@ -1200,3 +1200,126 @@ class FaceVerificationViewSet(viewsets.GenericViewSet):
             'expires_at': expires_at,
             'message': 'Verification token issued. You may now start the exam.'
         })
+    # ============================================================================
+# VOICE AI — Speech-to-Text + Text-to-Speech (server-side Groq key)
+# ============================================================================
+from django.http import HttpResponse
+
+
+@api_view(["POST"])
+@_perm_classes([permissions.IsAuthenticated])
+def ai_transcribe(request):
+    """
+    Receives multipart audio from the browser.
+    Forwards to Groq Whisper and returns {"text": "..."}.
+    The GROQ_API_KEY never leaves the server.
+    """
+    audio_file = request.FILES.get("file")
+    if not audio_file:
+        return Response(
+            {"error": "No audio file uploaded."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if audio_file.size > 25 * 1024 * 1024:
+        return Response(
+            {"error": "Audio file too large (max 25 MB)."},
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+        )
+
+    language = (request.data.get("language") or "en").strip()
+    model = (request.data.get("model") or "whisper-large-v3-turbo").strip()
+
+    api_key = _os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return Response(
+            {"error": "Server is missing GROQ_API_KEY."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    try:
+        files = {
+            "file": (
+                audio_file.name or "audio.webm",
+                audio_file.read(),
+                audio_file.content_type or "audio/webm",
+            )
+        }
+        data = {"model": model, "language": language, "response_format": "json"}
+        with httpx.Client(timeout=60.0) as client:
+            r = client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={"Authorization": f"Bearer {api_key}"},
+                files=files,
+                data=data,
+            )
+        if r.status_code != 200:
+            print(f"[ai_transcribe] Groq {r.status_code}: {r.text[:200]}")
+            return Response(
+                {"error": f"Groq STT failed ({r.status_code})."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response({"text": (r.json().get("text") or "").strip()})
+    except Exception as e:
+        print(f"[ai_transcribe] Exception: {type(e).__name__}: {e}")
+        return Response(
+            {"error": "Speech-to-text service unavailable."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+
+
+@api_view(["POST"])
+@_perm_classes([permissions.IsAuthenticated])
+def ai_speak(request):
+    """
+    Receives {"text": "...", "voice": "troy"} and returns audio/wav bytes.
+    Groq Orpheus is English-only. Amharic TTS falls back to the browser.
+    """
+    text = (request.data.get("text") or "").strip()
+    if not text:
+        return Response(
+            {"error": "text required."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if len(text) > 200:
+        text = text[:200]
+
+    voice = (request.data.get("voice") or "troy").strip()
+    model = (request.data.get("model") or "canopylabs/orpheus-v1-english").strip()
+
+    api_key = _os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return Response(
+            {"error": "Server is missing GROQ_API_KEY."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    try:
+        with httpx.Client(timeout=60.0) as client:
+            r = client.post(
+                "https://api.groq.com/openai/v1/audio/speech",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "input": text,
+                    "voice": voice,
+                    "response_format": "wav",
+                },
+            )
+        if r.status_code != 200:
+            print(f"[ai_speak] Groq {r.status_code}: {r.text[:200]}")
+            return Response(
+                {"error": f"Groq TTS failed ({r.status_code})."},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return HttpResponse(r.content, content_type="audio/wav")
+    except Exception as e:
+        print(f"[ai_speak] Exception: {type(e).__name__}: {e}")
+        return Response(
+            {"error": "Text-to-speech service unavailable."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
