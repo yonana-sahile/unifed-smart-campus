@@ -316,7 +316,7 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.8, y: 12 }}
       transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="fixed bottom-5 left-5 z-50 flex flex-col items-center gap-1"
+      className="fixed bottom-5 left-5 z-[9999] flex flex-col items-center gap-1"
     >
       <motion.button
         onClick={() => {

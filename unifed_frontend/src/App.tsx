@@ -775,7 +775,7 @@ if (!localUser) {
           setPasswordInput("password");
         }}
       />
-
+<FloatingVoiceAssistant currentUser={currentUser} /> 
       <FloatingAIAssistant currentUser={currentUser} />
     </div>
   );
