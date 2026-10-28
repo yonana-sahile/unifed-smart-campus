@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { User } from "../types";
 import { sendChatMessage, api } from "../services/api";
-
+import { RobotFace } from "./RobotFace";   
 interface FloatingVoiceAssistantProps {
   currentUser?: User | null;
 }
