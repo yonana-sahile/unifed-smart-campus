@@ -308,44 +308,35 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
 
   return (
     <>
-      {/* FLOATING TRIGGER — bottom LEFT */}
-      <AnimatePresence>
-        {!isOpen && (
-          <div className="fixed bottom-6 left-6 z-50">
-            <motion.button
-              initial={{ opacity: 0, scale: 0.85, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.85, y: 10 }}
-              whileHover={{ scale: 1.04 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={() => {
-                setIsOpen(true);
-                if (isMinimized) setIsMinimized(false);
-              }}
-              className="relative flex items-center space-x-2.5 px-4 py-2.5 rounded-full shadow-2xl border border-cyan-400/40 backdrop-blur-md bg-gradient-to-r from-cyan-500 via-blue-500 to-indigo-600 text-white hover:shadow-cyan-500/40 group cursor-pointer"
-              title="Talk to your AI companion"
-              aria-label="Open voice assistant"
-            >
-              <div className="absolute inset-0 rounded-full bg-cyan-400/30 animate-pulse blur-md -z-10" />
-              <div className="relative w-8 h-8 rounded-full bg-white/15 flex items-center justify-center shrink-0">
-                <Bot className="w-5 h-5" />
-                <Mic className="w-3 h-3 absolute -top-0.5 -right-0.5" />
-              </div>
-              <div className="flex flex-col items-start text-left leading-tight pr-1">
-                <div className="flex items-center space-x-1.5">
-                  <span className="font-display font-extrabold text-xs sm:text-sm tracking-tight">
-                    Voice Assistant
-                  </span>
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                </div>
-                <span className="text-[10px] font-semibold text-white/80 font-mono">
-                  የድምፅ ረዳት • Tap to talk
-                </span>
-              </div>
-            </motion.button>
-          </div>
-        )}
-      </AnimatePresence>
+     {/* FLOATING TRIGGER — bottom LEFT (robot) */}
+<AnimatePresence>
+  {!isOpen && (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8, y: 12 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.8, y: 12 }}
+      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+      className="fixed bottom-5 left-5 z-50 flex flex-col items-center gap-1"
+    >
+      <motion.button
+        onClick={() => {
+          setIsOpen(true);
+          if (isMinimized) setIsMinimized(false);
+        }}
+        whileHover={{ scale: 1.06 }}
+        whileTap={{ scale: 0.94 }}
+        className="relative rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2"
+        aria-label="Open voice assistant — tap to talk"
+        title="Talk to your AI companion"
+      >
+        <RobotFace phase={phase} size={80} />
+      </motion.button>
+      <span className="text-[9px] font-bold text-cyan-200/90 font-mono tracking-wider bg-slate-950/70 px-2 py-0.5 rounded-full border border-cyan-400/30 backdrop-blur-sm">
+        Talk • ተናገር
+      </span>
+    </motion.div>
+  )}
+</AnimatePresence>
 
       {/* PANEL — bottom LEFT */}
       <AnimatePresence>
