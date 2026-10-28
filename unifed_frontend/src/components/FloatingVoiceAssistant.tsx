@@ -353,9 +353,9 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
             {/* Header */}
             <div className="p-4 bg-gradient-to-r from-cyan-700 via-blue-700 to-indigo-800 text-white flex items-center justify-between border-b border-cyan-400/30 shrink-0">
               <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 rounded-2xl bg-cyan-400/20 border border-cyan-300/40 flex items-center justify-center text-cyan-100">
-                  <Bot className="w-5 h-5" />
-                </div>
+<div className="w-9 h-9 rounded-2xl bg-cyan-400/20 border border-cyan-300/40 flex items-center justify-center text-cyan-100 overflow-hidden">
+  <RobotFace phase={phase} size={28} />
+</div>
                 <div>
                   <div className="flex items-center space-x-1.5">
                     <h3 className="font-bold text-sm">
