@@ -15,7 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import type { User } from "../types";
-import { sendChatMessage } from "../services/api";
+import { sendChatMessage, api } from "../services/api";
 
 interface FloatingVoiceAssistantProps {
   currentUser?: User | null;
@@ -30,16 +30,7 @@ interface VoiceMessage {
   timestamp: string;
 }
 
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY as string;
-if (!GROQ_API_KEY || !GROQ_API_KEY.startsWith("gsk_")) {
-  console.error("❌ VITE_GROQ_API_KEY is missing or wrong:", 
-    GROQ_API_KEY === undefined ? "undefined" : `"${GROQ_API_KEY.slice(0, 6)}..." (${GROQ_API_KEY.length} chars)`);
-}
-const GROQ_STT_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
-const GROQ_TTS_URL = "https://api.groq.com/openai/v1/audio/speech";
-const GROQ_STT_MODEL = "whisper-large-v3-turbo";
-const GROQ_TTS_MODEL = "canopylabs/orpheus-v1-english";
-const GROQ_TTS_VOICE = "troy"; // male; change to "autumn" / "hannah" for female
+const GROQ_TTS_VOICE = "troy";
 const TTS_CHAR_LIMIT = 200;
 
 // ---------------------------------------------------------------------------
@@ -107,55 +98,36 @@ function useMediaRecorder() {
 }
 
 // ---------------------------------------------------------------------------
-// Groq STT
+// Groq STT — via Django backend (key stays server-side)
 // ---------------------------------------------------------------------------
-async function transcribeWithGroq(blob: Blob): Promise<string> {
+async function transcribeAudio(
+  blob: Blob,
+  language: "en" | "am" = "en"
+): Promise<string> {
   const form = new FormData();
   form.append("file", blob, "audio.webm");
-  form.append("model", GROQ_STT_MODEL);
-  form.append("language", "en");
-  form.append("response_format", "json");
+  form.append("language", language);
 
-  const res = await fetch(GROQ_STT_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${GROQ_API_KEY}` },
-    body: form,
+  const res = await api.post("/ai/transcribe/", form, {
+    headers: { "Content-Type": "multipart/form-data" },
   });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Groq STT ${res.status}: ${err.slice(0, 120)}`);
-  }
-  const data = await res.json();
-  return (data.text || "").trim();
+  return (res.data.text || "").trim();
 }
 
 // ---------------------------------------------------------------------------
-// Groq TTS
+// Groq TTS — via Django backend (key stays server-side)
 // ---------------------------------------------------------------------------
-async function speakWithGroq(text: string): Promise<HTMLAudioElement | null> {
-  // Truncate to avoid the 200-char limit
+async function speakText(text: string): Promise<HTMLAudioElement | null> {
   const trimmed = text.slice(0, TTS_CHAR_LIMIT);
-  const res = await fetch(GROQ_TTS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${GROQ_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: GROQ_TTS_MODEL,
-      input: trimmed,
-      voice: GROQ_TTS_VOICE,
-      response_format: "wav",
-    }),
-  });
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Groq TTS ${res.status}: ${err.slice(0, 120)}`);
-  }
-  const audioBlob = await res.blob();
-  const url = URL.createObjectURL(audioBlob);
-  const audio = new Audio(url);
-  return audio;
+
+  const res = await api.post(
+    "/ai/speak/",
+    { text: trimmed, voice: GROQ_TTS_VOICE },
+    { responseType: "blob" }
+  );
+
+  const url = URL.createObjectURL(res.data);
+  return new Audio(url);
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +205,7 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
 
       // Speak
       try {
-        const audio = await speakWithGroq(reply);
+        const audio = await speakText(reply);
         if (audio) {
           audioRef.current = audio;
           setPhase("speaking");
@@ -292,7 +264,7 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
 
     setPhase("thinking");
     try {
-      const transcript = await transcribeWithGroq(blob);
+      const transcript = await transcribeAudio(blob, "en");
       if (!transcript) {
         setPhase("error");
         setErrorMsg("No speech detected. Try again.");
