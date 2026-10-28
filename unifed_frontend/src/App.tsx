@@ -11,6 +11,7 @@ import { UniversityLandingFooter } from "./components/UniversityLandingFooter";
 import CampusMediaBroadcast from "./components/CampusMediaBroadcast";
 import CampusNewsTopBar from "./components/CampusNewsTopBar";
 import FloatingAIAssistant from "./components/FloatingAIAssistant";
+import FloatingVoiceAssistant from "./components/FloatingVoiceAssistant"; // 👈 ADD
 import StarryFlag from "./components/StarryFlag";
 import { ForgotPasswordModal } from "./components/ForgotPasswordModal";
 import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound, Eye, EyeOff } from "lucide-react";
@@ -373,6 +374,7 @@ if (!localUser) {
         />
         <CampusNewsTopBar />
         {renderRoleDashboard()}
+        <FloatingVoiceAssistant currentUser={currentUser} />
         <FloatingAIAssistant currentUser={currentUser} />
       </>
     );
