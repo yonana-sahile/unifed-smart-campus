@@ -3,7 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from django.db.models import Avg, Count
+from django.db.models import Avg, Count, Q
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
@@ -98,26 +98,26 @@ class UserViewSet(BaseViewSet):
     # ✅ NEW: Endpoint for uploading the student's verification photo
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def upload_avatar(self, request, pk=None):
-        user = self.get_object()
-        
-        # Security: Users can only update their own avatar
-        if str(request.user.id) != str(user.id) and request.user.role not in ['ADMIN', 'REGISTRAR']:
-            return Response({'error': 'You can only update your own profile photo.'}, status=status.HTTP_403_FORBIDDEN)
+        # A STUDENT can only update their own avatar — override the URL id
+        # to the JWT's subject instead of rejecting with 403.
+        # ADMIN / REGISTRAR can update anyone's.
+        if request.user.role in ('ADMIN', 'REGISTRAR'):
+            user = self.get_object()
+        else:
+            user = request.user
 
-        # The frontend sends a base64 string (data:image/jpeg;base64,...)
         image_data = request.data.get('image')
-        
         if not image_data:
             return Response({'error': 'No image provided.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user.avatar_url = image_data 
+            user.avatar_url = image_data
             user.avatar_updated_at = timezone.now()
             user.save()
             return Response({
                 'message': 'Profile photo updated successfully',
                 'avatar_url': user.avatar_url,
-                'avatar_updated_at': user.avatar_updated_at
+                'avatar_updated_at': user.avatar_updated_at,
             })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -368,10 +368,27 @@ class ExamViewSet(BaseViewSet):
         qs = Exam.objects.all().order_by('-created_at')
         if not user.is_authenticated:
             return qs.none()
+
         if user.role == 'INSTRUCTOR':
             return qs.filter(course__instructor=user)
+
         if user.role == 'STUDENT':
-            return qs.filter(course_id__in=_student_course_ids(user))
+            dept = (getattr(user, 'department', None) or '').strip()
+            enrolled = _student_course_ids(user)
+
+            # Student sees an exam if EITHER:
+            #   1. They have an explicit enrollment (Grade/Submission/Attempt), OR
+            #   2. The exam's course belongs to their department
+            if dept:
+                return qs.filter(
+                    Q(course_id__in=enrolled) |
+                    Q(course__department__iexact=dept),
+                    is_pushed=True,
+                ).distinct()
+
+            # No dept set — fall back to enrollment-only (current behaviour)
+            return qs.filter(course_id__in=enrolled, is_pushed=True)
+
         return qs
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
