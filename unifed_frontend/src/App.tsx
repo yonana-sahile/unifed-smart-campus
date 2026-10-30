@@ -200,8 +200,25 @@ export default function App() {
       setTimeout(() => setCurrentUser(me), 100);
       return;
     } catch (err: any) {
-      console.warn("[App] Real login failed:", err?.response?.status, err?.response?.data || err?.message);
-      // Fall through to demo users
+      const status = err?.response?.status;
+      const detail =
+        err?.response?.data?.detail ||
+        err?.response?.data?.error ||
+        err?.response?.data?.non_field_errors?.[0] ||
+        err?.message ||
+        "";
+
+      console.error("[login] backend rejected:", { status, detail, sent: usernameOrEmail });
+
+      if (err?.response) {
+        setErrorMessage(
+          status === 401
+            ? "Invalid username/email or password."
+            : `Login failed (${status}): ${detail || "Unknown error"}`
+        );
+        return;
+      }
+      console.warn("[login] network error — trying demo fallback");
     }
 
     // ── 2️⃣ Fallback to DEMO_USERS (offline / demo mode) ──

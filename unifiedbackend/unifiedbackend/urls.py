@@ -42,7 +42,7 @@ urlpatterns = [
     path('api/', include('App.urls')), 
 
     # ✅ /api/token/ and /api/token/refresh/ for real JWT login
-    path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+   path('api/token/', AuthViewSet.as_view({'post': 'login'}), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
