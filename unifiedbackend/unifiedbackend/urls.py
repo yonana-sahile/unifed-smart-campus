@@ -8,10 +8,10 @@ from drf_yasg.views import get_schema_view
 from drf_yasg import openapi
 
 # ✅ JWT token endpoints
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.views import TokenRefreshView
 
 # ✅ AI viewset for the explicit predict-risk route
-from App.views import AIViewSet
+from App.views import AIViewSet, AuthViewSet
 
 schema_view = get_schema_view(
     openapi.Info(
