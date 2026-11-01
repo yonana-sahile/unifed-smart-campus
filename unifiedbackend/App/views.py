@@ -1,6 +1,7 @@
 from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db.models import Avg, Count, Q
@@ -329,10 +330,10 @@ class AssignmentViewSet(BaseViewSet):
             return qs.filter(course_id__in=_student_course_ids(user))
         return qs
 
-
 # ---------- SUBMISSION ----------
 class SubmissionViewSet(BaseViewSet):
     serializer_class = SubmissionSerializer
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def get_queryset(self):
         user = self.request.user
@@ -345,6 +346,11 @@ class SubmissionViewSet(BaseViewSet):
             return qs.filter(course__instructor=user)
         return qs
 
+    def perform_create(self, serializer):
+        file = self.request.FILES.get('file')
+        if file and not serializer.validated_data.get('file_name'):
+            serializer.validated_data['file_name'] = file.name
+        serializer.save()
 
 # ---------- QUESTION ----------
 class QuestionViewSet(BaseViewSet):

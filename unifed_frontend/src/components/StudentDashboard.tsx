@@ -94,6 +94,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const [draggingAssignmentId, setDraggingAssignmentId] = useState<string | null>(null);
   const [uploadedFiles, setUploadedFiles] = useState<{ [assignmentId: string]: string }>({});
+  const [uploadProgress, setUploadProgress] = useState<{ [assignmentId: string]: number }>({});
+  const uploadAbortRefs = useRef<{ [assignmentId: string]: AbortController }>({});
 
   const [courseSearch, setCourseSearch] = useState("");
   const [materialSearch, setMaterialSearch] = useState("");
@@ -456,72 +458,134 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       setUploadedFiles((prev) => ({ ...prev, [assignmentId]: files[0].name }));
-      triggerAssignmentSubmit(assignmentId, files[0].name);
+      triggerAssignmentSubmit(assignmentId, files[0]);
     }
   };
-
   const handleFileSelect = (e: ChangeEvent<HTMLInputElement>, assignmentId: string) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       setUploadedFiles((prev) => ({ ...prev, [assignmentId]: files[0].name }));
-      triggerAssignmentSubmit(assignmentId, files[0].name);
+            triggerAssignmentSubmit(assignmentId, files[0]);
     }
   };
 
-  const triggerAssignmentSubmit = async (assignmentId: string, fileName: string) => {
-    const newSubmission: Submission = {
-      id: "SUB_" + Date.now(),
-      assignmentId,
-      assignmentTitle: assignments.find((a) => a.id === assignmentId)?.title || "Assignment",
-      courseId: assignments.find((a) => a.id === assignmentId)?.courseId || "",
-      studentId: user.id,
-      studentName: user.fullName,
-      submittedAt: new Date().toISOString(),
-      fileName,
-      status: "PENDING"
-    };
+  const validateAssignmentFile = (file: File): string | null => {
+    const MAX_SIZE = 25 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+      return `File too large (${(file.size / (1024 * 1024)).toFixed(1)} MB). Max is 25 MB.`;
+    }
+    const allowed = [
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/zip",
+      "application/x-zip-compressed",
+      "image/png",
+      "image/jpeg",
+      "text/plain",
+    ];
+    const okByName = /\.(pdf|doc|docx|zip|png|jpe?g|txt)$/i.test(file.name);
+    if (!allowed.includes(file.type) && !okByName) {
+      return `Unsupported file type: ${file.type || "unknown"}. Allowed: PDF, DOC, DOCX, ZIP, PNG, JPG, TXT.`;
+    }
+    return null;
+  };
+
+  const triggerAssignmentSubmit = async (assignmentId: string, file: File) => {
+    const validationError = validateAssignmentFile(file);
+    if (validationError) {
+      toast.error("Cannot upload file", { description: validationError });
+      return;
+    }
+    if (uploadAbortRefs.current[assignmentId]) {
+      uploadAbortRefs.current[assignmentId].abort();
+    }
+    const controller = new AbortController();
+    uploadAbortRefs.current[assignmentId] = controller;
+    setUploadProgress((prev) => ({ ...prev, [assignmentId]: 0 }));
 
     try {
       const matchedAssignment = assignments.find(
         (a) => String(a.id) === String(assignmentId)
       );
 
-      const created: any = await CampusDatabase.addSubmission({
-        assignment:
-          parseInt(String(assignmentId).replace(/\D/g, "")) || assignmentId,
-        assignment_title:
-          matchedAssignment?.title || newSubmission.assignmentTitle || "Assignment",
-        course:
-          matchedAssignment?.courseId || newSubmission.courseId || 1,
-        student:
-          parseInt(String(user.id).replace(/\D/g, "")) || user.id,
-        student_name: user.fullName,
-        file_name: fileName,
-        status: "PENDING",
+      const formData = new FormData();
+      formData.append("assignment", String(parseInt(String(assignmentId).replace(/\D/g, "")) || assignmentId));
+      formData.append("assignment_title", matchedAssignment?.title || "Assignment");
+      formData.append("course", String(matchedAssignment?.courseId || 1));
+      formData.append("student", String(parseInt(String(user.id).replace(/\D/g, "")) || user.id));
+      formData.append("student_name", user.fullName);
+      formData.append("status", "PENDING");
+      formData.append("file", file);
+
+      const API = import.meta.env.VITE_API_URL || "https://unifed-smart-campus.onrender.com/api";
+      const token = localStorage.getItem("access_token");
+
+      const created: any = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", `${API}/submissions/`);
+        if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const pct = Math.round((e.loaded / e.total) * 100);
+            setUploadProgress((prev) => ({ ...prev, [assignmentId]: pct }));
+          }
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); } catch { resolve({}); }
+          } else {
+            reject(new Error(`Upload failed (${xhr.status}): ${xhr.responseText || "Unknown"}`));
+          }
+        };
+        xhr.onerror = () => reject(new Error("Network error during upload."));
+        xhr.onabort = () => reject(new Error("Upload cancelled."));
+        controller.signal.addEventListener("abort", () => xhr.abort());
+        xhr.send(formData);
       });
+
       const normalized: Submission = {
-        ...newSubmission,
-        id: String(created?.id ?? newSubmission.id),
+        id: String(created?.id ?? "SUB_" + Date.now()),
+        assignmentId,
+        assignmentTitle: matchedAssignment?.title || "Assignment",
+        courseId: matchedAssignment?.courseId || "",
+        studentId: user.id,
+        studentName: user.fullName,
+        submittedAt: new Date().toISOString(),
+        fileName: file.name,
+        status: "PENDING",
       };
       setSubmissions((prev) => [normalized, ...prev]);
-
+      setUploadProgress((prev) => ({ ...prev, [assignmentId]: 100 }));
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Submit Assignment", "Submission", normalized.id,
-        `Submitted assignment file: ${fileName}`
+        `Submitted assignment file: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`
       );
-
       toast.success("Assignment submitted", {
-        description: `${fileName} was uploaded successfully.`,
+        description: `${file.name} (${(file.size / 1024).toFixed(1)} KB) uploaded successfully.`,
       });
+      setTimeout(() => {
+        setUploadProgress((prev) => {
+          const copy = { ...prev };
+          delete copy[assignmentId];
+          return copy;
+        });
+        delete uploadAbortRefs.current[assignmentId];
+      }, 1500);
     } catch (err: any) {
-      console.error(err);
+      console.error("[upload] failed:", err);
       const detail = err?.response?.data
         ? JSON.stringify(err.response.data)
         : err?.message || "Unknown error";
-      toast.error("Submission failed", { description: detail });
+      toast.error("Upload failed", { description: detail });
+      setUploadProgress((prev) => {
+        const copy = { ...prev };
+        delete copy[assignmentId];
+        return copy;
+      });
+      delete uploadAbortRefs.current[assignmentId];
     }
   };
-
   const startExam = async (exam: Exam) => {
     if (!exam) {
       toast.error("No exam selected", {
@@ -1722,12 +1786,38 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                     <div className="flex items-center space-x-1.5 text-success">
                                       <CheckCircle2 className="w-4 h-4" />
                                       <span className="text-xs font-bold font-mono">Submitted</span>
-                                    </div>
-                                  ) : (
-                                    <div className="w-full">
+                                    </div> 
+                                                                ) : (
+                                  <div className="w-full">
+                                    {uploadProgress[as.id] !== undefined ? (
+                                      <div className="border-2 border-solid border-primary bg-blue-50/50 rounded-lg p-3 text-center">
+                                        <div className="flex items-center justify-center space-x-2 mb-2">
+                                          <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                                          <span className="text-xs font-mono font-bold text-primary">
+                                            Uploading… {uploadProgress[as.id]}%
+                                          </span>
+                                        </div>
+                                        <div className="w-full h-1.5 bg-white rounded-full overflow-hidden border border-primary/20">
+                                          <div
+                                            className="h-full bg-primary transition-all duration-300"
+                                            style={{ width: `${uploadProgress[as.id]}%` }}
+                                          />
+                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            const ctrl = uploadAbortRefs.current[as.id];
+                                            if (ctrl) ctrl.abort();
+                                          }}
+                                          className="mt-2 text-[10px] font-semibold text-red-600 hover:underline"
+                                        >
+                                          Cancel upload
+                                        </button>
+                                      </div>
+                                    ) : (
                                       <div className="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center cursor-pointer hover:border-primary transition">
                                         <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
                                         <p className="text-[10px] text-slate-500">Drag file here or click to upload</p>
+                                        <p className="text-[9px] text-slate-400 mt-0.5">PDF, DOCX, ZIP, PNG, JPG · max 25 MB</p>
                                         <input
                                           type="file"
                                           className="hidden"
@@ -1741,7 +1831,8 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                           Select File
                                         </button>
                                       </div>
-                                    </div>
+                                    )}
+                                  </div>
                                   )}
                                 </div>
                               </div>
