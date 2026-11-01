@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
+import { useState, useEffect, useRef, DragEvent, ChangeEvent } from "react";
 import type { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, LibraryResource } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
@@ -8,7 +8,8 @@ import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { ExamResultsModal } from "./ExamResultsModal";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
-  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock, LayoutGrid, List, ArrowLeft, Maximize2
+  Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock, LayoutGrid, List, ArrowLeft, Maximize2,
+  Hand,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
@@ -427,7 +428,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       const token = localStorage.getItem("access_token");
 
       if (!token) {
-        throw new Error("No access_token in localStorage â€” please log out and log in again.");
+       throw new Error("No access_token in localStorage — please log out and log in again.");
       }
 
       // 1. Request verification token
@@ -614,7 +615,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Submit Evaluation", "InstructorEvaluation", evaluatorInstructorId,
-        `Submitted evaluation for ${instructor?.fullName || "instructor"} â€” ${evaluationRating}/5`
+       `Submitted evaluation for ${instructor?.fullName || "instructor"} — ${evaluationRating}/5`
       );
 
       alert(
@@ -1025,8 +1026,8 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
         user={user}
         onLogout={onLogout}
         portalTitle="Student Information System (SIS)"
-        portalSubtitle="College of Informatics & Technology â€¢ Software Engineering"
-        badgeText={user.studentId ? `STUDENT â€¢ ${user.studentId}` : "STUDENT"}
+       portalSubtitle="College of Informatics & Technology · Software Engineering"
+        badgeText={user.studentId ? `STUDENT · ${user.studentId}` : "STUDENT"}
         badgeType="student"
         onToggleMobileNav={() => setIsMobileNavOpen((prev) => !prev)}
         isMobileNavOpen={isMobileNavOpen}
@@ -1261,7 +1262,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                         {todayLabel}
                       </p>
                       <h1 className="mt-1.5 text-2xl sm:text-3xl font-display font-bold leading-tight">
-                        {greeting}, {firstName} <span className="inline-block">ðŸ‘‹</span>
+                       {greeting}, {firstName} <Hand className="inline-block w-6 h-6 ml-1 text-amber-400" />
                       </h1>
                       <p className="mt-1.5 text-xs sm:text-sm text-blue-200 max-w-xl">
                         {pendingTasksCount > 0
@@ -1349,7 +1350,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                       </div>
                       <p className="text-2xl font-display font-bold text-slate-900">{pendingTasksCount}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {pendingTasksCount > 0 ? "Pending submissions" : "All caught up âœ“"}
+                       {pendingTasksCount > 0 ? "Pending submissions" : "All caught up ✓"}
                       </p>
                     </div>
 
@@ -1374,7 +1375,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                         {(user.outstandingFees ?? 0) > 0 ? `${(user.outstandingFees ?? 0).toLocaleString()}` : "0"}
                       </p>
                       <p className="text-[11px] text-slate-500 mt-0.5">
-                        {(user.outstandingFees ?? 0) > 0 ? "ETB due now" : "Cleared âœ“"}
+                       {(user.outstandingFees ?? 0) > 0 ? "ETB due now" : "Cleared ✓"}
                       </p>
                     </div>
                   </div>
@@ -1440,7 +1441,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                                 </span>
                                 <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${progress === 100 ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
                                   }`}>
-                                  {progress === 100 ? "âœ“ Complete" : `${progress}%`}
+                                 {progress === 100 ? "✓ Complete" : `${progress}%`}
                                 </span>
                               </div>
                               <h4 className="font-semibold text-slate-800 mt-2 line-clamp-1">{c.courseTitle}</h4>
@@ -1591,7 +1592,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                         {announcements.map((an) => (
                           <div key={an.id} className="border-l-4 border-primary pl-4 py-2 space-y-1">
                             <span className="text-[10px] font-mono text-slate-400">
-                              {new Date(an.postedAt).toLocaleDateString()} â€¢ {an.postedBy}
+                            {new Date(an.postedAt).toLocaleDateString()} · {an.postedBy}
                             </span>
                             <h4 className="font-semibold text-slate-800 text-xs md:text-sm line-clamp-1">{an.title}</h4>
                             <p className="text-xs text-slate-500 line-clamp-2">{an.content}</p>
@@ -1894,7 +1895,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                               className="flex-1 bg-primary hover:bg-primary-600 disabled:opacity-70 text-white py-2 rounded-lg flex items-center justify-center space-x-1.5 text-xs font-bold transition shadow-sm relative overflow-hidden"
                             >
                               {progress !== undefined ? (
-                                <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "âœ“"}</span>
+                              <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "✓"}</span>
                               ) : (
                                 <>
                                   <Download className="w-3.5 h-3.5 relative z-10" />
@@ -1959,7 +1960,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                                 className="bg-primary hover:bg-primary-600 disabled:opacity-70 text-white px-3 py-2 rounded-lg flex items-center justify-center space-x-1.5 text-xs font-bold transition shadow-sm relative overflow-hidden min-w-[44px]"
                               >
                                 {progress !== undefined ? (
-                                  <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "âœ“"}</span>
+                                 <span className="text-[10px] font-mono font-bold relative z-10">{progress < 100 ? `${progress}%` : "✓"}</span>
                                 ) : (
                                   <>
                                     <Download className="w-3.5 h-3.5 relative z-10" />
@@ -2235,7 +2236,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                                 {exam.isPushed && (
                                   <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                    <span>ðŸ”¥ LIVE PUSHED</span>
+                                   <span>🔥 LIVE PUSHED</span>
                                   </span>
                                 )}
                                 <div className="flex items-center space-x-1.5 text-xs text-slate-500 font-mono">
@@ -2334,7 +2335,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                                 {g.courseTitle}
                               </h4>
                               <p className="text-xs text-slate-400">
-                                Credit Hours: {g.creditHours} â€¢ Status: {g.status}
+                              Credit Hours: {g.creditHours} · Status: {g.status}
                               </p>
                             </div>
                             <div className="flex items-center space-x-4 bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100 flex-shrink-0">
@@ -2401,11 +2402,11 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                               <option key={inst.id} value={inst.id}>
                                 {inst.fullName}
                                 {inst.department ? ` (${inst.department})` : ""}
-                                {inst.role === "DEPARTMENT_HEAD"
-                                  ? " â€” Dept. Head"
-                                  : inst.role === "DEAN"
-                                    ? " â€” Dean"
-                                    : ""}
+{inst.role === "DEPARTMENT_HEAD"
+  ? " — Dept. Head"
+  : inst.role === "DEAN"
+    ? " — Dean"
+    : ""}
                               </option>
                             ))
                           )}
@@ -2427,7 +2428,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                               <option value="">-- Choose Course --</option>
                               {evaluationCoursesToShow.map((c) => (
                                 <option key={c.id} value={c.id}>
-                                  {c.courseCode} â€” {c.courseTitle}
+                                {c.courseCode} — {c.courseTitle}
                                 </option>
                               ))}
                             </select>
@@ -2526,14 +2527,14 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                             Mekdela Amba University
                           </h3>
                           <p className="text-[10px] sm:text-xs uppercase tracking-widest text-slate-600 font-mono font-bold">
-                            Office of the University Registrar â€¢ á‹¨áˆ¬áŒ…áˆµá‰µáˆ«áˆ­ áŒ½áˆ•áˆá‰µ á‰¤á‰µ
+                          Office of the University Registrar · የሪጅስትራር ጽሕፈት ቤት
                           </p>
                           <p className="text-[11px] text-slate-500 italic font-serif">
-                            "Veritas, Scientia et Virtus" â€¢ South Wollo, Amhara Region, Ethiopia
+                           "Veritas, Scientia et Virtus" · South Wollo, Amhara Region, Ethiopia
                           </p>
                           <div className="pt-1 flex items-center justify-center gap-2">
                             <span className="inline-block text-[10px] bg-emerald-50 text-emerald-800 px-3 py-0.5 rounded-full font-mono font-bold border border-emerald-200 shadow-2xs">
-                              OFFICIAL DIGITAL RECORD â€¢ CRYPTOGRAPHICALLY VERIFIED
+                             OFFICIAL DIGITAL RECORD · CRYPTOGRAPHICALLY VERIFIED
                             </span>
                           </div>
                         </div>
@@ -2654,8 +2655,8 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                         </div>
 
                         <div className="border-t border-slate-100 mt-6 pt-4 flex flex-col sm:flex-row sm:justify-between items-center gap-2 text-[10px] font-mono text-slate-400">
-                          <p>Â© Mekdela Amba University Registrar's Directorate â€¢ All Rights Reserved</p>
-                          <p>Verification Code: VERIFY-MAU-771 â€¢ Tulu Awlia, Ethiopia</p>
+                         <p>© Mekdela Amba University Registrar's Directorate · All Rights Reserved</p>
+<p>Verification Code: VERIFY-MAU-771 · Tulu Awlia, Ethiopia</p>
                         </div>
                       </div>
                     </div>
@@ -3011,7 +3012,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                 <div className="lg:col-span-2 space-y-5">
                   {isQuestionsBlurred && (
                     <div className="bg-red-50 border border-red-200 p-4 rounded-xl">
-                      <p className="text-sm font-bold text-red-800">âš ï¸ Your questions are temporarily hidden.</p>
+                   <p className="text-sm font-bold text-red-800">⚠️ Your questions are temporarily hidden.</p>
                       <p className="text-xs text-red-700 mt-1">
                         Please return your face to the center of the camera to resume the exam.
                       </p>

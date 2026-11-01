@@ -39,3 +39,10 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+# Additional sensitive files
+*.pem
+*.key
+credentials.json
+service-account.json
+secrets.json
+.env.*
