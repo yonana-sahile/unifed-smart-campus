@@ -26,7 +26,8 @@ import { useReadingList } from "../hooks/useReadingList";
 import { ReadingListButton } from "./ReadingListButton";
 import { MyReadingList } from "./MyReadingList";
 import { ResourceReader } from "./ResourceReader";
-
+import { toast } from "sonner";
+import { ConfirmDialog } from "./ConfirmDialog";
 interface StudentDashboardProps {
   user: User;
   onLogout: () => void;
@@ -76,6 +77,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const examTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isExamSubmittingRef = useRef(false);
+  const examEndAtRef = useRef<number | null>(null);
+  const localSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const serverSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedAnswersRef = useRef<string>("");
 
   const [viewingAttempt, setViewingAttempt] = useState<ExamAttempt | null>(null);
 
@@ -107,7 +112,30 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const clearanceFrameRef = useRef<HTMLDivElement | null>(null);
   const [clearanceHeight, setClearanceHeight] = useState<number | null>(null);
   const [clearanceFullscreen, setClearanceFullscreen] = useState(false);
+  // ── Confirm dialog state ─────────────────────────────
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    description?: string;
+    confirmLabel?: string;
+    variant?: "default" | "danger" | "warning" | "primary";
+    onConfirm: () => void;
+  }>({ open: false, title: "", onConfirm: () => {} });
 
+  const showConfirm = (opts: {
+    title: string;
+    description?: string;
+    confirmLabel?: string;
+    variant?: "default" | "danger" | "warning" | "primary";
+    onConfirm: () => void;
+  }) => {
+    setConfirmState({ ...opts, open: true });
+  };
+
+  const closeConfirm = () => {
+    setConfirmState((prev) => ({ ...prev, open: false }));
+  };
+  // ────────────────────────────────────────────────────
   // True when an id from the API ("5") refers to the logged-in user ("U_5")
   const isMe = (id: unknown) => digits(id) !== "" && digits(id) === digits(user.id);
 
@@ -215,29 +243,90 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   };
 
   useEffect(() => {
-    if (!currentExam) return;
-
-    if (examTimeRemaining > 0 && !isExamSubmittingRef.current) {
-      examTimerRef.current = setInterval(() => {
-        setExamTimeRemaining((prev) => {
-          if (prev <= 1) {
-            clearInterval(examTimerRef.current!);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    } else if (examTimeRemaining === 0 && !isExamSubmittingRef.current) {
-      isExamSubmittingRef.current = true;
-      alert("Exam time limit reached! Your answers will be submitted automatically.");
-      completeExamSubmission();
+    if (!currentExam) {
+      examEndAtRef.current = null;
+      return;
     }
 
-    return () => {
-      if (examTimerRef.current) clearInterval(examTimerRef.current);
-    };
-  }, [currentExam, examTimeRemaining]);
+    if (examEndAtRef.current === null) {
+      examEndAtRef.current = Date.now() + currentExam.durationMinutes * 60 * 1000;
+    }
 
+    const tick = () => {
+      if (isExamSubmittingRef.current) return;
+      const endAt = examEndAtRef.current;
+      if (!endAt) return;
+
+      const remainingMs = endAt - Date.now();
+      const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
+      setExamTimeRemaining(remainingSec);
+
+      if (remainingMs <= 0 && !isExamSubmittingRef.current) {
+        isExamSubmittingRef.current = true;
+        if (examTimerRef.current) {
+          clearInterval(examTimerRef.current);
+          examTimerRef.current = null;
+        }
+        toast.warning("Time's up!", {
+          description: "Your answers are being submitted automatically.",
+          duration: 6000,
+        });
+        completeExamSubmission();
+      }
+    };
+
+    tick();
+    examTimerRef.current = setInterval(tick, 250);
+
+    return () => {
+      if (examTimerRef.current) {
+        clearInterval(examTimerRef.current);
+        examTimerRef.current = null;
+      }
+    };
+  }, [currentExam]);
+  // ── Autosave exam answers (localStorage + server, debounced) ──
+  useEffect(() => {
+    if (!currentExam || !currentAttemptId) return;
+    if (isExamSubmittingRef.current) return;
+
+    const serialized = JSON.stringify(examAnswers);
+    // Nothing changed since the last save — skip
+    if (serialized === lastSavedAnswersRef.current) return;
+
+    // Clear any pending timers
+    if (localSaveTimerRef.current) clearTimeout(localSaveTimerRef.current);
+    if (serverSaveTimerRef.current) clearTimeout(serverSaveTimerRef.current);
+
+    // Save to localStorage after 500ms of inactivity
+    localSaveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(
+          `exam_draft_${currentAttemptId}`,
+          JSON.stringify({ answers: examAnswers, savedAt: Date.now() })
+        );
+        lastSavedAnswersRef.current = serialized;
+      } catch (err) {
+        console.warn("[autosave] localStorage failed:", err);
+      }
+    }, 500);
+
+    // Save to server after 3s of inactivity
+    serverSaveTimerRef.current = setTimeout(async () => {
+      try {
+        await CampusDatabase.updateExamAttempt(String(currentAttemptId), {
+          answers: examAnswers,
+        });
+      } catch (err) {
+        console.warn("[autosave] server save failed:", err);
+      }
+    }, 3000);
+
+    return () => {
+      if (localSaveTimerRef.current) clearTimeout(localSaveTimerRef.current);
+      if (serverSaveTimerRef.current) clearTimeout(serverSaveTimerRef.current);
+    };
+  }, [examAnswers, currentExam, currentAttemptId]);
   const isAlreadyRegistered = (courseId: string) =>
     grades.some((g) => isMe(g.studentId) && String(g.courseId) === String(courseId));
 
@@ -258,28 +347,38 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const handleEnroll = async (course: Course, force = false) => {
     if (isAlreadyRegistered(course.id)) {
-      alert(`You are already registered for ${course.courseCode}.`);
+      toast.info("Already registered", {
+        description: `You're already enrolled in ${course.courseCode}.`,
+      });
       return;
     }
-
     if (!force) {
       const prereqCheck = checkPrerequisites(course);
       if (!prereqCheck.ok) {
-        const proceed = window.confirm(
-          `Enrollment Denied (BR-01): You have not completed the required prerequisite: ${prereqCheck.missing.join(", ")}.\n\n` +
-          `Do you want to override (DEV ONLY) and enroll anyway?`
-        );
-        if (!proceed) return;
-        force = true;
+        showConfirm({
+          title: "Missing prerequisite",
+          description: `You have not completed: ${prereqCheck.missing.join(", ")}. Override and enroll anyway?`,
+          confirmLabel: "Override & Enroll",
+          variant: "warning",
+          onConfirm: () => {
+            closeConfirm();
+            handleEnroll(course, true);
+          },
+        });
+        return;
       }
 
       if (user.outstandingFees && user.outstandingFees > 0) {
-        alert(`Enrollment Blocked: You must clear outstanding fee balances. Current balance: ${user.outstandingFees} ETB.`);
+        toast.error("Enrollment blocked", {
+          description: `Outstanding balance of ${user.outstandingFees.toLocaleString()} ETB. Please clear your fees first.`,
+        });
         return;
       }
 
       if (course.enrolledStudentsCount >= course.capacity) {
-        alert("Course is full. Adding to waitlist.");
+        toast.warning("Course is full", {
+          description: `${course.courseCode} has reached capacity. You've been added to the waitlist.`,
+        });
         return;
       }
     }
@@ -333,10 +432,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         `Student registered for course: ${course.courseCode} - ${course.courseTitle}${force ? " (dev override)" : ""}`
       );
 
-      alert(`Successfully registered for ${course.courseCode}!`);
+      toast.success("Registered!", {
+        description: `You're now enrolled in ${course.courseCode} — ${course.courseTitle}.`,
+      });
     } catch (err: any) {
       console.error(err);
-      alert("Enrollment failed: " + (err?.message || "Unknown error"));
+      toast.error("Enrollment failed", {
+        description: err?.message || "Unknown error. Please try again.",
+      });
     }
   };
 
@@ -407,19 +510,23 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         `Submitted assignment file: ${fileName}`
       );
 
-      alert(`Successfully uploaded and submitted ${fileName}!`);
+      toast.success("Assignment submitted", {
+        description: `${fileName} was uploaded successfully.`,
+      });
     } catch (err: any) {
       console.error(err);
       const detail = err?.response?.data
         ? JSON.stringify(err.response.data)
         : err?.message || "Unknown error";
-      alert("Submission failed: " + detail);
+      toast.error("Submission failed", { description: detail });
     }
   };
 
   const startExam = async (exam: Exam) => {
     if (!exam) {
-      alert("No exam selected.");
+      toast.error("No exam selected", {
+        description: "Please select an exam to start.",
+      });
       return;
     }
 
@@ -464,12 +571,35 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       }
 
       // 3. Open exam
+      examEndAtRef.current = Date.now() + exam.durationMinutes * 60 * 1000;
       setCurrentAttemptId(Number(createdAttempt.id));
       setCurrentExam(exam);
       setExamAnswers({});
       setExamTimeRemaining(exam.durationMinutes * 60);
+      lastSavedAnswersRef.current = "{}"; // reset autosave baseline
       setExamCurrentIndex(0);
       isExamSubmittingRef.current = false;
+
+      // ── Restore any locally saved draft for this attempt ──
+      try {
+        const draftRaw = localStorage.getItem(
+          `exam_draft_${createdAttempt.id}`
+        );
+        if (draftRaw) {
+          const draft = JSON.parse(draftRaw);
+          if (draft?.answers && Object.keys(draft.answers).length > 0) {
+            setExamAnswers(draft.answers);
+            lastSavedAnswersRef.current = JSON.stringify(draft.answers);
+            toast.info("Restored your previous answers", {
+              description: `Resumed from ${new Date(
+                draft.savedAt
+              ).toLocaleTimeString()}`,
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("[autosave] draft restore failed:", err);
+      }
 
       await CampusDatabase.addAuditLog(
         user.id, user.fullName, "STUDENT", "Start Exam", "Exam", exam.id,
@@ -486,7 +616,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         err?.message ||
         String(err);
 
-      alert("Failed to start exam:\n\n" + detail);
+      toast.error("Failed to start exam", { description: detail, duration: 8000 });
     }
   };
 
@@ -495,15 +625,34 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   };
 
   const submitExamManual = () => {
-    if (window.confirm("Are you sure you want to submit your exam answers?")) {
-      isExamSubmittingRef.current = true;
-      completeExamSubmission();
-    }
+    if (!currentExam) return;
+    const total = currentExam.questions.length;
+    const answered = Object.keys(examAnswers).length;
+    const unanswered = total - answered;
+
+    showConfirm({
+      title: "Submit exam answers?",
+      description:
+        unanswered > 0
+          ? `You have ${unanswered} unanswered question${unanswered !== 1 ? "s" : ""}. This cannot be undone.`
+          : "All questions answered. Submit your exam now?",
+      confirmLabel: "Submit Exam",
+      variant: unanswered > 0 ? "danger" : "primary",
+      onConfirm: () => {
+        closeConfirm();
+        isExamSubmittingRef.current = true;
+        completeExamSubmission();
+      },
+    });
   };
 
   const completeExamSubmission = async () => {
     if (!currentExam || !currentAttemptId) return;
-    if (examTimerRef.current) clearInterval(examTimerRef.current);
+    if (examTimerRef.current) {
+      clearInterval(examTimerRef.current);
+      examTimerRef.current = null;
+    }
+    examEndAtRef.current = null;
 
     let calculatedScore = 0;
     currentExam.questions.forEach((q, idx) => {
@@ -567,6 +716,22 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         `Submitted attempt for ${currentExam.examTitle}. Scored ${calculatedScore}/${currentExam.totalMarks}`
       );
 
+      // Clear the autosave draft on successful submit
+      try {
+        localStorage.removeItem(`exam_draft_${currentAttemptId}`);
+      } catch (err) {
+        console.warn("[autosave] draft cleanup failed:", err);
+      }
+      lastSavedAnswersRef.current = "";
+      if (localSaveTimerRef.current) {
+        clearTimeout(localSaveTimerRef.current);
+        localSaveTimerRef.current = null;
+      }
+      if (serverSaveTimerRef.current) {
+        clearTimeout(serverSaveTimerRef.current);
+        serverSaveTimerRef.current = null;
+      }
+
       setViewingAttempt(normalizedAttempt);
       setCurrentExam(null);
       setCurrentAttemptId(null);
@@ -575,24 +740,28 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       const detail = err?.response?.data
         ? JSON.stringify(err.response.data, null, 2)
         : err?.message || "Unknown error";
-      alert("Exam submission failed:\n" + detail);
+      toast.error("Exam submission failed", { description: detail, duration: 8000 });
     }
   };
-
   const submitInstructorEvaluation = async () => {
     if (!evaluatorInstructorId) {
-      alert("Please select an instructor.");
+      toast.warning("Select an instructor", {
+        description: "Please choose an instructor to evaluate.",
+      });
       return;
     }
     if (!evaluationCourseId) {
-      alert("Please select a course.");
+      toast.warning("Select a course", {
+        description: "Please choose a course for this evaluation.",
+      });
       return;
     }
     if (!evaluationFeedback.trim()) {
-      alert("Please write your feedback.");
+      toast.warning("Write your feedback", {
+        description: "Your comments are required before submitting.",
+      });
       return;
     }
-
     const instructor = instructors.find((i) => i.id === evaluatorInstructorId);
     const course = courses.find((c) => String(c.id) === String(evaluationCourseId));
 
@@ -618,9 +787,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
        `Submitted evaluation for ${instructor?.fullName || "instructor"} — ${evaluationRating}/5`
       );
 
-      alert(
-        `Thank you for submitting your evaluation of ${instructor?.fullName || "the instructor"}! Rating: ${evaluationRating}/5. Your feedback has been stored anonymously for department head review.`
-      );
+      toast.success("Evaluation submitted", {
+        description: `Thank you for evaluating ${instructor?.fullName || "your instructor"}. Rating: ${evaluationRating}/5 (anonymous).`,
+      });
       setEvaluatorInstructorId(null);
       setEvaluationCourseId("");
       setEvaluationFeedback("");
@@ -630,13 +799,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       const detail = err?.response?.data
         ? JSON.stringify(err.response.data)
         : err?.message || "Unknown error";
-      alert("Evaluation submission failed: " + detail);
+      toast.error("Evaluation failed", { description: detail });
     }
   };
-
   const handlePayment = async () => {
     if (!cardNumber || payAmount <= 0) {
-      alert("Please enter a valid amount and credit card number.");
+      toast.warning("Invalid payment details", {
+        description: "Please enter a valid amount and card number.",
+      });
       return;
     }
 
@@ -651,14 +821,18 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         `Paid ${payAmount} ETB online. Card digits: ****${cardNumber.slice(-4)}`
       );
 
-      alert(`Successfully processed payment of ${payAmount} ETB! Balance updated.`);
+      toast.success("Payment successful", {
+        description: `${payAmount.toLocaleString()} ETB has been credited to your account.`,
+      });
       setPayAmount(0);
       setCardNumber("");
       setShowPayModal(false);
       await loadData();
     } catch (err: any) {
       console.error(err);
-      alert("Payment failed: " + (err?.message || "Unknown error"));
+      toast.error("Payment failed", {
+        description: err?.message || "Unknown error. Please try again.",
+      });
     }
   };
 
@@ -676,7 +850,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   const handlePreviewMaterial = (material: CourseMaterial) => {
     if (!material.fileData) {
-      alert(`No preview available for "${material.title}". Contact your instructor.`);
+      toast.info("No preview available", {
+        description: `"${material.title}" has no attached file. Contact your instructor.`,
+      });
       return;
     }
 
@@ -717,7 +893,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         newWindow.document.close();
       }
     } catch (err) {
-      alert("Could not open preview. File might be corrupted or too large.");
+      toast.error("Could not open preview", {
+        description: "The file may be corrupted or too large.",
+      });
       console.error("Preview error:", err);
     }
   };
@@ -779,7 +957,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
       } else {
-        alert(`No file data attached to "${material.title}". Contact your instructor.`);
+        toast.info("No file to download", {
+          description: `"${material.title}" has no attached file. Contact your instructor.`,
+        });
         setDownloadProgress((prev) => {
           const copy = { ...prev };
           delete copy[materialId];
@@ -798,7 +978,9 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       }, 1500);
     } catch (err: any) {
       console.error("Download failed:", err);
-      alert("Download failed: " + (err?.message || "Unknown error"));
+      toast.error("Download failed", {
+        description: err?.message || "Unknown error.",
+      });
       setDownloadProgress((prev) => {
         const copy = { ...prev };
         delete copy[materialId];
@@ -917,11 +1099,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
         res.id,
         `Downloaded "${res.title}" by ${res.author}`
       );
-alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : ""}`);    } catch (err: any) {
+      toast.success("Download started", {
+        description: `"${res.title}"${res.fileSize ? ` · ${res.fileSize}` : ""}`,
+      });
+    } catch (err: any) {
       const detail = err?.response?.data
         ? JSON.stringify(err.response.data)
         : err?.message || "Unknown error";
-      alert("Download failed: " + detail);
+      toast.error("Download failed", { description: detail });
     }
   };
 
@@ -3238,12 +3423,13 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
                 status: err?.response?.status,
                 data: err?.response?.data,
               });
-              alert("Failed to save photo: " + (err?.message || err?.response?.data?.detail || "Unknown"));
+              toast.error("Failed to save photo", {
+                description: err?.message || err?.response?.data?.detail || "Unknown error",
+              });
             }
           }}
         />
       )}
-
       {showVerification && pendingExam && (localAvatarUrl || user.avatarUrl) && (
         <FaceVerificationModal
           isOpen={showVerification}
@@ -3253,13 +3439,18 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
             setShowVerification(false);
             setPendingExam(null);
             if (!examToStart) {
-              alert("No exam selected. Please click Start Examination again.");
+              toast.error("No exam selected", {
+                description: "Please click Start Examination again.",
+              });
               return;
             }
             await startExam(examToStart);
           }}
           onFailed={(reason) => {
-            alert("Verification failed: " + reason + "\n\nYou cannot take this exam. Please contact your instructor.");
+            toast.error("Verification failed", {
+              description: `${reason} — You cannot take this exam. Please contact your instructor.`,
+              duration: 8000,
+            });
             setShowVerification(false);
             setPendingExam(null);
           }}
@@ -3269,7 +3460,7 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
           }}
         />
       )}
-            {openReaderResource && (
+      {openReaderResource && (
         <ResourceReader
           resource={openReaderResource}
           initialProgress={
@@ -3292,6 +3483,21 @@ alert(`Download started: "${res.title}"${res.fileSize ? ` (${res.fileSize})` : "
         />
       )}
       <AcademicFooter />
+
+      {/* ── Confirm Dialog (mounts modals for exam submit / enrollment override) ── */}
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        description={confirmState.description}
+        confirmLabel={confirmState.confirmLabel}
+        variant={
+          confirmState.variant === "default"
+            ? "primary"
+            : (confirmState.variant as "danger" | "warning" | "primary" | undefined)
+        }
+        onConfirm={confirmState.onConfirm}
+        onCancel={closeConfirm}
+      />
     </div>
   );
 }

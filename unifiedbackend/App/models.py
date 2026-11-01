@@ -184,6 +184,7 @@ class Submission(models.Model):
     submitted_at = models.DateTimeField(auto_now_add=True)
     file_url = models.URLField(max_length=500, blank=True, null=True)
     file_name = models.CharField(max_length=200, blank=True, null=True)
+    file = models.FileField(upload_to='submissions/%Y/%m/%d/', blank=True, null=True)
     score = models.FloatField(blank=True, null=True)
     feedback = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')

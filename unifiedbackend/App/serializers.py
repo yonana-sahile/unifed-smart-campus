@@ -111,9 +111,20 @@ class AssignmentSerializer(serializers.ModelSerializer):
 
 # ---------- SUBMISSION ----------
 class SubmissionSerializer(serializers.ModelSerializer):
+    file_url = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = Submission
         fields = '__all__'
+        read_only_fields = ['id', 'submitted_at']
+
+    def get_file_url(self, obj):
+        if obj.file:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.file.url)
+            return obj.file.url
+        return None
 
 
 # ---------- QUESTION ----------
