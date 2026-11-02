@@ -186,3 +186,24 @@ EMAIL_HOST_USER = 'tadessemersha2025@gmail.com'
 EMAIL_HOST_PASSWORD = 'ndqwmouekpymgchv' 
 
 DEFAULT_FROM_EMAIL = f'Unified Smart Campus <{EMAIL_HOST_USER}>'
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.security': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
