@@ -47,26 +47,25 @@ class User(AbstractUser):
     officer_id = models.CharField(max_length=20, blank=True, null=True, unique=True)
 
     bio = models.TextField(blank=True, null=True)
-
-    # ✅ FIX: Normalize empty string IDs to NULL before save to prevent unique constraint crashes
-    def clean(self):
-        super().clean()
-        for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
-            if getattr(self, field) == '':
-                setattr(self, field, None)
-
-        if self.role in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'DEAN'):
-            if not (self.department and str(self.department).strip()):
-                from django.core.exceptions import ValidationError
-                raise ValidationError({
-                    'department': f'A department is required for role {self.role}.'
-                })
-
-    def save(self, *args, **kwargs):
-        for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
-            if getattr(self, field) == '':
-                setattr(self, field, None)
-        super().save(*args, **kwargs)
+    # ✅ TEST: temporarily disabled to isolate admin 500
+    # def clean(self):
+    #     super().clean()
+    #     for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
+    #         if getattr(self, field) == '':
+    #             setattr(self, field, None)
+    #
+    #     if self.role in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'DEAN'):
+    #         if not (self.department and str(self.department).strip()):
+    #             from django.core.exceptions import ValidationError
+    #             raise ValidationError({
+    #                 'department': f'A department is required for role {self.role}.'
+    #             })
+    #
+    # def save(self, *args, **kwargs):
+    #     for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
+    #         if getattr(self, field) == '':
+    #             setattr(self, field, None)
+    #     super().save(*args, **kwargs)
 
     @property
     def full_name(self):
