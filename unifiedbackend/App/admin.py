@@ -44,10 +44,10 @@ class CustomUserAdmin(admin.ModelAdmin):  # <--- Change this line
             'fields': ('specialization', 'office_hours'),
             'classes': ('collapse',)
         }),
-        ('Permissions', {
-            'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
-            'classes': ('collapse',)
-        }),
+('Permissions', {
+    'fields': ('is_active', 'is_staff', 'is_superuser'),
+    'classes': ('collapse',)
+}),
         ('Important dates', {
             'fields': ('last_login', 'date_joined'),
             'classes': ('collapse',)
