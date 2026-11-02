@@ -10,8 +10,12 @@ class CustomUserAdmin(BaseUserAdmin):
     search_fields = ['username', 'email', 'student_id', 'instructor_id', 'staff_id']
     list_filter = ['role', 'is_active', 'is_staff', 'is_superuser']
     readonly_fields = ['last_login', 'date_joined']
-    add_form = None     # ✅ ADD THIS
-    form = None  
+
+    def get_form(self, request, obj=None, **kwargs):
+        kwargs['fields'] = None
+        kwargs['exclude'] = None
+        return super(BaseUserAdmin, self).get_form(request, obj, **kwargs)
+
     # ✅ Full edit form (when changing an existing user)
     fieldsets = (
         ('Personal Information', {
