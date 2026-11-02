@@ -202,6 +202,8 @@ EMAIL_HOST_USER = 'tadessemersha2025@gmail.com'
 EMAIL_HOST_PASSWORD = 'ndqwmouekpymgchv' 
 
 DEFAULT_FROM_EMAIL = f'Unified Smart Campus <{EMAIL_HOST_USER}>'
+ADMINS = [('Tadesse', 'tadessemersha2025@gmail.com')]
+
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -209,10 +211,14 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
         },
+        'mail_admins': {
+            'class': 'django.utils.log.AdminEmailHandler',
+            'level': 'ERROR',
+        },
     },
     'loggers': {
         'django.request': {
-            'handlers': ['console'],
+            'handlers': ['console', 'mail_admins'],
             'level': 'ERROR',
             'propagate': False,
         },
