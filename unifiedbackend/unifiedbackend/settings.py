@@ -12,7 +12,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
-DEBUG = True
+DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = [
     'unifed-smart-campus.onrender.com',
@@ -94,7 +94,7 @@ local_database_url = (
 DATABASES = {
     'default': dj_database_url.config(
         default=local_database_url,
-        conn_max_age=600,
+        conn_max_age=0,            # ✅ Close after each request
         conn_health_checks=True,
         ssl_require=bool(os.getenv('DATABASE_URL'))
     )
