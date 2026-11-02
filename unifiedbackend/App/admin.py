@@ -9,7 +9,21 @@ class CustomUserAdmin(admin.ModelAdmin):  # <--- Change this line
     search_fields = ['username', 'email', 'student_id', 'instructor_id', 'staff_id']
     list_filter = ['role', 'is_active', 'is_staff', 'is_superuser']
     readonly_fields = ['last_login', 'date_joined']
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        try:
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        except Exception:
+            import traceback
+            from django.http import HttpResponse
+            return HttpResponse("<pre>" + traceback.format_exc() + "</pre>", content_type="text/html", status=500)
 
+    def add_view(self, request, form_url='', extra_context=None):
+        try:
+            return super().add_view(request, form_url, extra_context)
+        except Exception:
+            import traceback
+            from django.http import HttpResponse
+            return HttpResponse("<pre>" + traceback.format_exc() + "</pre>", content_type="text/html", status=500)
     # Keep your fieldsets exactly as they are
     fieldsets = (
         ('Personal Information', {
