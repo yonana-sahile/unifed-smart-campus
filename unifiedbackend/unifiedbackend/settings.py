@@ -76,18 +76,33 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'unifiedbackend.wsgi.application'
 
-# Safe Database configuration enforcing port 5432 for Postgres
+
+# Database configuration
 db_port = os.getenv('DB_PORT', '5432')
-if db_port == '3306':  # Prevent accidental MySQL port mapping
+
+if db_port == '3306':
     db_port = '5432'
+
+local_database_url = (
+    f"postgresql://{os.getenv('DB_USER', 'postgres')}:"
+    f"{os.getenv('DB_PASSWORD', 'tadesse')}@"
+    f"{os.getenv('DB_HOST', '127.0.0.1')}:"
+    f"{db_port}/"
+    f"{os.getenv('DB_NAME', 'smartcampus_db')}"
+)
 
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"postgresql://{os.getenv('DB_USER', 'postgres')}:{os.getenv('DB_PASSWORD', 'tadesse')}@{os.getenv('DB_HOST', 'localhost')}:{db_port}/{os.getenv('DB_NAME', 'smartcampus_db')}",
+        default=local_database_url,
         conn_max_age=600,
         conn_health_checks=True,
+        ssl_require=bool(os.getenv('DATABASE_URL'))
     )
 }
+
+if not os.getenv('DATABASE_URL'):
+    DATABASES['default']['OPTIONS'] = {'sslmode': 'disable'}
+
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},

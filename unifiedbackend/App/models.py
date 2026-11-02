@@ -48,15 +48,13 @@ class User(AbstractUser):
 
     bio = models.TextField(blank=True, null=True)
 
-    # ✅ FIX: Normalize empty string IDs to NULL before validation and save to prevent unique constraint crashes
-       # ✅ FIX: Normalize empty string IDs to NULL before validation and save to prevent unique constraint crashes
+    # ✅ FIX: Normalize empty string IDs to NULL before save to prevent unique constraint crashes
     def clean(self):
         super().clean()
         for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
             if getattr(self, field) == '':
                 setattr(self, field, None)
 
-        # ✅ PERMANENT FIX: academic roles must have a department
         if self.role in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'DEAN'):
             if not (self.department and str(self.department).strip()):
                 from django.core.exceptions import ValidationError
@@ -65,7 +63,9 @@ class User(AbstractUser):
                 })
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
+            if getattr(self, field) == '':
+                setattr(self, field, None)
         super().save(*args, **kwargs)
 
     @property
@@ -75,19 +75,6 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.full_name} ({self.role})"
-
-    def save(self, *args, **kwargs):
-        self.full_clean()
-        super().save(*args, **kwargs)
-
-    @property
-    def full_name(self):
-        """Return the user's full name."""
-        return f"{self.first_name} {self.last_name}".strip()
-
-    def __str__(self):
-        return f"{self.full_name} ({self.role})"
-
 
 # ---------- COURSE ----------
 class Course(models.Model):
