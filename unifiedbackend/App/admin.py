@@ -4,67 +4,8 @@ from .models import *  # ✅ Imports all models from App/models.py
 
 
 @admin.register(User)
-class CustomUserAdmin(admin.ModelAdmin):  # <--- Change this line
-    list_display = ['id', 'username', 'full_name', 'email', 'role', 'is_active', 'phone_number']
-    search_fields = ['username', 'email', 'student_id', 'instructor_id', 'staff_id']
-    list_filter = ['role', 'is_active', 'is_staff', 'is_superuser']
-    readonly_fields = ['last_login', 'date_joined']
-    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
-        try:
-            return super().changeform_view(request, object_id, form_url, extra_context)
-        except Exception:
-            import traceback
-            from django.http import HttpResponse
-            return HttpResponse("<pre>" + traceback.format_exc() + "</pre>", content_type="text/html", status=500)
-
-    def add_view(self, request, form_url='', extra_context=None):
-        try:
-            return super().add_view(request, form_url, extra_context)
-        except Exception:
-            import traceback
-            from django.http import HttpResponse
-            return HttpResponse("<pre>" + traceback.format_exc() + "</pre>", content_type="text/html", status=500)
-    # Keep your fieldsets exactly as they are
-    fieldsets = (
-        ('Personal Information', {
-            'fields': ('first_name', 'last_name', 'email', 'phone_number', 'avatar_url', 'bio')
-        }),
-        ('Account Credentials', {
-            'fields': ('username', 'password')
-        }),
-        ('Role & Academic', {
-            'fields': ('role', 'student_id', 'instructor_id', 'staff_id', 'officer_id')
-        }),
-        ('Student Details', {
-            'fields': ('department', 'academic_year', 'semester', 'program', 'gpa', 'cgpa',
-                       'outstanding_fees', 'cost_sharing_balance'),
-            'classes': ('collapse',)
-        }),
-        ('Instructor Details', {
-            'fields': ('specialization', 'office_hours'),
-            'classes': ('collapse',)
-        }),
-('Permissions', {
-    'fields': ('is_active', 'is_staff', 'is_superuser'),
-    'classes': ('collapse',)
-}),
-        ('Important dates', {
-            'fields': ('last_login', 'date_joined'),
-            'classes': ('collapse',)
-        }),
-    )
-
-    # Keep your add_fieldsets exactly as they are
-    add_fieldsets = (
-        (None, {
-            'classes': ('wide',),
-            'fields': ('username', 'password'),
-        }),
-        ('Role & Academic', {
-            'fields': ('role', 'department', 'student_id', 'instructor_id', 'staff_id', 'officer_id'),
-        }),
-    )
-
+class CustomUserAdmin(admin.ModelAdmin):
+    pass
 # ---------- COURSE ----------
 @admin.register(Course)
 class CourseAdmin(admin.ModelAdmin):
