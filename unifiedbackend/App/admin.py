@@ -3,20 +3,14 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from .models import *  # ✅ Imports all models from App/models.py
 
 
-# ---------- USER ----------
 @admin.register(User)
-class CustomUserAdmin(BaseUserAdmin):
+class CustomUserAdmin(admin.ModelAdmin):  # <--- Change this line
     list_display = ['id', 'username', 'full_name', 'email', 'role', 'is_active', 'phone_number']
     search_fields = ['username', 'email', 'student_id', 'instructor_id', 'staff_id']
     list_filter = ['role', 'is_active', 'is_staff', 'is_superuser']
     readonly_fields = ['last_login', 'date_joined']
 
-    def get_form(self, request, obj=None, **kwargs):
-        kwargs['fields'] = None
-        kwargs['exclude'] = None
-        return super(BaseUserAdmin, self).get_form(request, obj, **kwargs)
-
-    # ✅ Full edit form (when changing an existing user)
+    # Keep your fieldsets exactly as they are
     fieldsets = (
         ('Personal Information', {
             'fields': ('first_name', 'last_name', 'email', 'phone_number', 'avatar_url', 'bio')
@@ -46,17 +40,16 @@ class CustomUserAdmin(BaseUserAdmin):
         }),
     )
 
-    # ✅ Add-user form (first page) — includes role so you can pick it immediately
+    # Keep your add_fieldsets exactly as they are
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username', 'password1', 'password2'),
+            'fields': ('username', 'password'),
         }),
         ('Role & Academic', {
             'fields': ('role', 'department', 'student_id', 'instructor_id', 'staff_id', 'officer_id'),
         }),
     )
-
 
 # ---------- COURSE ----------
 @admin.register(Course)
