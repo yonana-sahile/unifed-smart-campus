@@ -27,7 +27,7 @@ import type {
   CampusMediaPost,
 } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://unifed-smart-campus.onrender.com/api';
+const API_BASE = 'https://unifed-smart-campus-2.onrender.com/api';
 
 // ✅ FIX: Export the axios instance so other files can use it
 export const api = axios.create({
