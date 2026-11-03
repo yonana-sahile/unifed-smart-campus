@@ -255,7 +255,7 @@ export const CampusMediaBroadcast: React.FC<CampusMediaBroadcastProps> = ({
 
     const cleanUser = adminUsername.trim().toLowerCase();
     const cleanPass = adminPassword.trim();
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+   const API_BASE = 'https://unifed-smart-campus-2.onrender.com/api';
 
     try {
       const response = await fetch(`${API_BASE}/auth/login/`, {

@@ -175,7 +175,7 @@ export function CampusNewsAdminModal({
 
     const cleanUser = usernameInput.trim().toLowerCase();
     const cleanPass = passwordInput.trim();
-    const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+    const API_BASE = 'https://unifed-smart-campus-2.onrender.com/api';
 
     try {
       const response = await fetch(`${API_BASE}/auth/login/`, {
