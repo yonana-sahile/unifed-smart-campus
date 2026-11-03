@@ -11,8 +11,8 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
-DEBUG = os.getenv('DJANGO_DEBUG', 'False').lower() == 'true'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-me')
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = [
     'unifed-smart-campus.onrender.com',
@@ -134,6 +134,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://frontend:5173",
     "https://unifed-smart-campus.onrender.com",
+     "https://unifed-smart-campus-2.onrender.com", 
     "https://unifed-smart-campus.vercel.app",
 ]
 
@@ -151,6 +152,7 @@ CSRF_TRUSTED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://frontend:5173",
     "https://unifed-smart-campus.onrender.com",
+     "https://unifed-smart-campus-2.onrender.com", 
     "https://*.onrender.com",
     "https://*.vercel.app",
 ]
