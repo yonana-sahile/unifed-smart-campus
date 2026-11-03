@@ -23,9 +23,11 @@
 
 /* Default Light Mode & Dark Mode Global Configuration */
 body {
-  background-color: #f8fafc;
+  background-color: #FDFCF8;
   color: #0f172a;
   transition: background-color 0.25s ease, color 0.25s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .dark {
