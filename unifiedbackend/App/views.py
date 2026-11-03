@@ -20,7 +20,7 @@ from datetime import timedelta
 # ---------- AUTH ----------
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
-
+    serializer_class = UserSerializer  # ← add this
     @action(detail=False, methods=['post'])
     def login(self, request):
         username = request.data.get('username')
