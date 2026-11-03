@@ -11,6 +11,8 @@ import type {
   Grade,
   Transcript,
   AttendanceRecord,
+  AttendanceSession,
+  AttendanceCheckIn,
   LibraryResource,
   PaymentTransaction,
   Scholarship,
@@ -326,6 +328,45 @@ const mapAttendance = (a: any): AttendanceRecord => ({
   meetsMinimum: a.meets_minimum ?? a.meetsMinimum ?? false,
 } as AttendanceRecord);
 
+const mapAttendanceCheckIn = (c: any): AttendanceCheckIn => ({
+  id: String(c.id),
+  sessionId: String(c.session ?? c.sessionId ?? ''),
+  studentId: String(c.student ?? c.studentId ?? ''),
+  studentName: c.student_name ?? c.studentName ?? '',
+  status: c.status ?? 'PRESENT',
+  method: c.method ?? 'CODE',
+  checkedInAt: c.checked_in_at ?? c.checkedInAt ?? '',
+  ipAddress: c.ip_address ?? c.ipAddress ?? undefined,
+} as AttendanceCheckIn);
+
+const mapAttendanceSession = (s: any): AttendanceSession => ({
+  id: String(s.id),
+  courseId: String(s.course ?? s.courseId ?? ''),
+  courseCode: s.course_code ?? s.courseCode ?? '',
+  courseTitle: s.course_title ?? s.courseTitle ?? '',
+  instructorId: String(s.instructor ?? s.instructorId ?? ''),
+  instructorName: s.instructor_name ?? s.instructorName ?? '',
+  title: s.title ?? 'Class Session',
+  topic: s.topic ?? undefined,
+  location: s.location ?? undefined,
+  sessionDate: s.session_date ?? s.sessionDate ?? '',
+  startedAt: s.started_at ?? s.startedAt ?? '',
+  expiresAt: s.expires_at ?? s.expiresAt ?? '',
+  endedAt: s.ended_at ?? s.endedAt ?? undefined,
+  checkInCode: s.check_in_code ?? s.checkInCode ?? null,
+  status: s.status ?? 'CLOSED',
+  lateAfterMinutes: s.late_after_minutes ?? s.lateAfterMinutes ?? 10,
+  totalsApplied: s.totals_applied ?? s.totalsApplied ?? false,
+  checkIns: Array.isArray(s.check_ins)
+    ? s.check_ins.map(mapAttendanceCheckIn)
+    : Array.isArray(s.checkIns)
+      ? s.checkIns.map(mapAttendanceCheckIn)
+      : [],
+  checkedInCount: s.checked_in_count ?? s.checkedInCount ?? 0,
+  secondsRemaining: s.seconds_remaining ?? s.secondsRemaining ?? 0,
+  isExpired: s.is_expired ?? s.isExpired ?? false,
+} as AttendanceSession);
+
 // ---------- USERS ----------
 export const getUsers = (): Promise<User[]> =>
   api.get('/users/').then(r =>
@@ -597,6 +638,48 @@ export const updateAttendance = (id: string, data: any): Promise<any> =>
   api.patch(`/attendance/${numericId(id)}/`, data).then(r => r.data);
 export const deleteAttendance = (id: string): Promise<void> =>
   api.delete(`/attendance/${numericId(id)}/`).then(() => undefined);
+
+// ---------- LIVE ATTENDANCE SESSIONS ----------
+export const getAttendanceSessions = (): Promise<AttendanceSession[]> =>
+  api.get('/attendance-sessions/').then(r =>
+    unwrapList<any>(r.data).map(mapAttendanceSession)
+  );
+
+export const getAttendanceSession = (id: string): Promise<AttendanceSession> =>
+  api.get(`/attendance-sessions/${numericId(id)}/live/`).then(r => mapAttendanceSession(r.data));
+
+export const getActiveAttendanceSessions = (): Promise<AttendanceSession[]> =>
+  api.get('/attendance-sessions/active/').then(r =>
+    unwrapList<any>(r.data).map(mapAttendanceSession)
+  );
+
+export const openAttendanceSession = (payload: {
+  course: string | number;
+  title?: string;
+  topic?: string;
+  location?: string;
+  duration_minutes?: number;
+  late_after_minutes?: number;
+}): Promise<AttendanceSession> =>
+  api.post('/attendance-sessions/open/', {
+    ...payload,
+    course: toPk(payload.course),
+  }).then(r => mapAttendanceSession(r.data));
+
+export const closeAttendanceSession = (id: string): Promise<AttendanceSession> =>
+  api.post(`/attendance-sessions/${numericId(id)}/close/`).then(r => mapAttendanceSession(r.data));
+
+export const checkInAttendance = (code: string): Promise<{
+  message: string;
+  check_in: AttendanceCheckIn;
+  session: any;
+  attendance: AttendanceRecord;
+}> =>
+  api.post('/attendance-sessions/check-in/', { code: code.trim().toUpperCase() }).then(r => ({
+    ...r.data,
+    check_in: mapAttendanceCheckIn(r.data?.check_in ?? {}),
+    attendance: mapAttendance(r.data?.attendance ?? {}),
+  }));
 
 // ---------- LIBRARY RESOURCES ----------
 export const getLibraryResources = (): Promise<LibraryResource[]> =>
@@ -1027,6 +1110,14 @@ export const CampusDatabase = {
   addAttendance,
   updateAttendance,
   deleteAttendance,
+
+  // Live Attendance Sessions
+  getAttendanceSessions,
+  getAttendanceSession,
+  getActiveAttendanceSessions,
+  openAttendanceSession,
+  closeAttendanceSession,
+  checkInAttendance,
 
   // Library Resources
   getLibraryResources,

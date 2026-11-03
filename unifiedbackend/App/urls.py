@@ -17,6 +17,7 @@ router.register(r'exam-attempts', views.ExamAttemptViewSet, basename='examattemp
 router.register(r'grades', views.GradeViewSet, basename='grade')                       # ← ADD basename
 router.register(r'transcripts', views.TranscriptViewSet, basename='transcript')
 router.register(r'attendance', views.AttendanceRecordViewSet, basename='attendance')   # ← ADD basename
+router.register(r'attendance-sessions', views.AttendanceSessionViewSet, basename='attendance-session')
 router.register(r'library-resources', views.LibraryResourceViewSet)
 router.register(r'payments', views.PaymentTransactionViewSet)
 router.register(r'scholarships', views.ScholarshipViewSet)
@@ -39,6 +40,12 @@ router.register(r'monitoring-settings', views.ExamMonitoringSettingViewSet, base
 
 # ✅ Face Verification
 router.register(r'face-verification', views.FaceVerificationViewSet, basename='face-verification')
+
+# ✅ Dormitory Management
+router.register(r'dormitories/dorm-blocks', views.DormBlockViewSet, basename='dorm-block')
+router.register(r'dormitories/dorm-rooms', views.DormRoomViewSet, basename='dorm-room')
+router.register(r'dormitories/dorm-assignments', views.DormAssignmentViewSet, basename='dorm-assignment')
+router.register(r'dormitories/dorm-maintenance', views.DormMaintenanceRequestViewSet, basename='dorm-maintenance')
 
 urlpatterns = [
     path('ai/chat/', views.ai_chat, name='ai-chat'),

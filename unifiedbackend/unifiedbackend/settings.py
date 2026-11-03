@@ -76,14 +76,14 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'unifiedbackend.wsgi.application'
 
-
 # Database configuration
 db_port = os.getenv('DB_PORT', '5432')
 
 if db_port == '3306':
     db_port = '5432'
 
-local_database_url = (
+local_database_url = os.getenv(
+    'DATABASE_URL',
     f"postgresql://{os.getenv('DB_USER', 'postgres')}:"
     f"{os.getenv('DB_PASSWORD', 'tadesse')}@"
     f"{os.getenv('DB_HOST', '127.0.0.1')}:"

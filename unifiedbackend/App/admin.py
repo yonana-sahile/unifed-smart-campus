@@ -86,6 +86,39 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
     list_display = ['student_name', 'course_code', 'attendance_percentage', 'meets_minimum']
     raw_id_fields = ['student', 'course']
 
+
+# ---------- LIVE ATTENDANCE SESSION ----------
+class AttendanceCheckInInline(admin.TabularInline):
+    model = AttendanceCheckIn
+    extra = 0
+    readonly_fields = ['student', 'student_name', 'status', 'method', 'checked_in_at', 'ip_address']
+    can_delete = False
+
+
+@admin.register(AttendanceSession)
+class AttendanceSessionAdmin(admin.ModelAdmin):
+    list_display = [
+        'course_code', 'title', 'instructor_name', 'session_date',
+        'status', 'check_in_code', 'expires_at',
+    ]
+    search_fields = ['course_code', 'course_title', 'title', 'instructor_name']
+    list_filter = ['status', 'session_date', 'course']
+    raw_id_fields = ['course', 'instructor']
+    readonly_fields = ['started_at', 'ended_at', 'totals_applied']
+    inlines = [AttendanceCheckInInline]
+    ordering = ['-started_at']
+
+
+@admin.register(AttendanceCheckIn)
+class AttendanceCheckInAdmin(admin.ModelAdmin):
+    list_display = ['student_name', 'session', 'status', 'method', 'checked_in_at']
+    search_fields = ['student_name', 'session__course_code']
+    list_filter = ['status', 'method', 'checked_in_at']
+    raw_id_fields = ['session', 'student']
+    ordering = ['-checked_in_at']
+
+
+# ---------- INSTRUCTOR EVALUATION ----------
 @admin.register(InstructorEvaluation)
 class InstructorEvaluationAdmin(admin.ModelAdmin):
     list_display = ['student', 'instructor_name', 'course_code', 'overall_rating']
@@ -158,6 +191,43 @@ class CampusMediaPostAdmin(admin.ModelAdmin):
     list_filter = ['category', 'featured']
 
 
+# ---------- DORMITORY MANAGEMENT ----------
+@admin.register(DormBlock)
+class DormBlockAdmin(admin.ModelAdmin):
+    list_display = ['block_name', 'gender_type', 'total_rooms', 'occupied_rooms']
+    search_fields = ['block_name', 'gender_type']
+    ordering = ['block_name']
+
+    def occupied_rooms(self, obj):
+        return obj.rooms.filter(current_occupants_count__gt=0).count()
+
+
+# ---------- DORM ROOM ----------
+@admin.register(DormRoom)
+class DormRoomAdmin(admin.ModelAdmin):
+    list_display = ['block', 'room_number', 'capacity', 'current_occupants_count', 'is_available']
+    list_filter = ['block', 'is_available']
+    search_fields = ['room_number', 'block__block_name']
+    ordering = ['block__block_name', 'room_number']
+
+
+# ---------- DORM ASSIGNMENT ----------
+@admin.register(DormAssignment)
+class DormAssignmentAdmin(admin.ModelAdmin):
+    list_display = ['student', 'student_name', 'room', 'assigned_date', 'academic_year', 'status']
+    list_filter = ['status', 'academic_year']
+    ordering = ['-assigned_date']
+
+
+# ---------- DORM MAINTENANCE REQUEST ----------
+@admin.register(DormMaintenanceRequest)
+class DormMaintenanceRequestAdmin(admin.ModelAdmin):
+    list_display = ['room', 'reported_by', 'issue_description', 'status', 'created_at']
+    list_filter = ['status', 'room']
+    ordering = ['-created_at']
+
+
+# ---------- CUSTOM ADMIN SITE ----------
 admin.site.site_header = "Unified Smart Campus Management System"
 admin.site.site_title = "USCMS Admin Portal"
 admin.site.index_title = "Welcome to Mekdela Amba University Smart Campus Administration"

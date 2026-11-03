@@ -4,7 +4,7 @@ from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Q, F
 from django.utils import timezone
 from django.core.mail import send_mail
 from django.conf import settings
@@ -13,6 +13,7 @@ from .serializers import *
 from .permissions import *
 import json
 import random
+import secrets
 import string
 import uuid
 from datetime import timedelta
@@ -539,6 +540,324 @@ class AttendanceRecordViewSet(BaseViewSet):
         if user.role == 'STUDENT':
             return qs.filter(student=user)
         return qs
+
+
+# ============================================================================
+# LIVE ATTENDANCE CHECK-IN
+# ----------------------------------------------------------------------------
+# Instructors open a short-lived session; students check in with the code shown
+# in class. Closing a session applies one attendance unit to every enrolled
+# student's ledger and one attended unit for each check-in.
+# ============================================================================
+
+ATTENDANCE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+
+def _generate_attendance_code():
+    return ''.join(secrets.choice(ATTENDANCE_CODE_ALPHABET) for _ in range(6))
+
+
+def _can_manage_course(user, course):
+    if user.role in ('ADMIN', 'REGISTRAR'):
+        return True
+    if user.role == 'INSTRUCTOR':
+        return course.instructor_id == user.id
+    if user.role == 'DEPARTMENT_HEAD':
+        return (user.department or '').strip().lower() == (course.department or '').strip().lower()
+    return False
+
+
+def _ensure_attendance_records(course):
+    """Make sure every student registered for the course has a ledger row."""
+    student_ids = (
+        Grade.objects.filter(course=course, student__role='STUDENT')
+        .values_list('student_id', flat=True)
+        .distinct()
+    )
+    for student in User.objects.filter(id__in=list(student_ids)):
+        AttendanceRecord.objects.get_or_create(
+            student=student,
+            course=course,
+            defaults={
+                'student_name': student.full_name or student.username,
+                'course_code': course.course_code,
+            },
+        )
+
+
+def _finalize_attendance_session(session):
+    """Apply a closed session to the aggregate ledger exactly once."""
+    if session.totals_applied:
+        return
+
+    checked_in_ids = set(session.check_ins.values_list('student_id', flat=True))
+    for record in AttendanceRecord.objects.filter(course=session.course):
+        record.total_sessions += 1
+        if record.student_id in checked_in_ids:
+            record.attended_sessions += 1
+        record.save()
+
+    session.totals_applied = True
+    session.save(update_fields=['totals_applied'])
+
+
+class AttendanceSessionViewSet(BaseViewSet):
+    serializer_class = AttendanceSessionSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = AttendanceSession.objects.all().order_by('-started_at')
+        if not user.is_authenticated:
+            return qs.none()
+
+        if user.role == 'STUDENT':
+            course_ids = set(
+                Grade.objects.filter(student=user).values_list('course_id', flat=True)
+            )
+            return qs.filter(Q(course_id__in=course_ids) | Q(check_ins__student=user)).distinct()
+
+        if user.role == 'INSTRUCTOR':
+            return qs.filter(Q(instructor=user) | Q(course__instructor=user)).distinct()
+
+        if user.role == 'DEPARTMENT_HEAD':
+            dept = (getattr(user, 'department', None) or '').strip()
+            if not dept:
+                return qs.none()
+            return qs.filter(course__department__iexact=dept)
+
+        return qs
+
+    # Keep the generic CRUD endpoints from letting students create sessions.
+    def _deny_students(self):
+        if self.request.user.role == 'STUDENT':
+            return Response(
+                {'error': 'Only instructors and academic staff can manage attendance sessions.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    def create(self, request, *args, **kwargs):
+        denied = self._deny_students()
+        if denied:
+            return denied
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        denied = self._deny_students()
+        if denied:
+            return denied
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        denied = self._deny_students()
+        if denied:
+            return denied
+        return super().partial_update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        denied = self._deny_students()
+        if denied:
+            return denied
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=False, methods=['post'], url_path='open')
+    def open_session(self, request):
+        """Open a live attendance window and return its check-in code."""
+        if request.user.role not in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'ADMIN', 'REGISTRAR'):
+            return Response(
+                {'error': 'Only instructors and academic staff can open a session.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        course_id = request.data.get('course') or request.data.get('courseId')
+        if not course_id:
+            return Response({'error': 'course is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            course = Course.objects.get(pk=course_id)
+        except (Course.DoesNotExist, ValueError, TypeError):
+            return Response({'error': 'Course not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _can_manage_course(request.user, course):
+            return Response(
+                {'error': 'You are not allowed to open attendance for this course.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            duration_minutes = int(request.data.get('duration_minutes', 15))
+        except (TypeError, ValueError):
+            duration_minutes = 15
+        duration_minutes = max(1, min(duration_minutes, 120))
+
+        try:
+            late_after_minutes = int(request.data.get('late_after_minutes', 10))
+        except (TypeError, ValueError):
+            late_after_minutes = 10
+        late_after_minutes = max(0, min(late_after_minutes, duration_minutes))
+
+        # Close any stale window for this course before opening a new one.
+        for stale in AttendanceSession.objects.filter(course=course, status='OPEN'):
+            stale.status = 'CLOSED'
+            stale.ended_at = timezone.now()
+            stale.save(update_fields=['status', 'ended_at'])
+            _finalize_attendance_session(stale)
+
+        code = _generate_attendance_code()
+        for _ in range(25):
+            if not AttendanceSession.objects.filter(status='OPEN', check_in_code=code).exists():
+                break
+            code = _generate_attendance_code()
+
+        session = AttendanceSession.objects.create(
+            course=course,
+            course_code=course.course_code,
+            course_title=course.course_title,
+            instructor=request.user,
+            instructor_name=request.user.full_name or request.user.username,
+            title=(request.data.get('title') or 'Live Class Attendance')[:200],
+            topic=request.data.get('topic') or '',
+            location=(request.data.get('location') or '')[:100],
+            expires_at=timezone.now() + timedelta(minutes=duration_minutes),
+            check_in_code=code,
+            late_after_minutes=late_after_minutes,
+        )
+
+        _ensure_attendance_records(course)
+
+        return Response(
+            self.get_serializer(session).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=['post'], url_path='close')
+    def close_session(self, request, pk=None):
+        session = self.get_object()
+
+        if not _can_manage_course(request.user, session.course):
+            return Response(
+                {'error': 'You are not allowed to close this session.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if session.status == 'OPEN':
+            session.status = 'CLOSED'
+            session.ended_at = timezone.now()
+            session.save(update_fields=['status', 'ended_at'])
+
+        _finalize_attendance_session(session)
+        return Response(self.get_serializer(session).data)
+
+    @action(detail=False, methods=['post'], url_path='check-in')
+    def check_in(self, request):
+        """Student check-in using the code displayed by the instructor."""
+        if request.user.role != 'STUDENT':
+            return Response(
+                {'error': 'Only students can check in to a class session.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        code = str(request.data.get('code') or '').strip().upper()
+        if not code:
+            return Response({'error': 'Enter the check-in code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        session = (
+            AttendanceSession.objects
+            .filter(check_in_code=code, status='OPEN')
+            .order_by('-started_at')
+            .first()
+        )
+        if session is None:
+            return Response(
+                {'error': 'Invalid or closed check-in code. Ask your instructor for the current code.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if session.expires_at <= timezone.now():
+            session.status = 'CLOSED'
+            session.ended_at = timezone.now()
+            session.save(update_fields=['status', 'ended_at'])
+            _finalize_attendance_session(session)
+            return Response(
+                {'error': 'This check-in window has expired. Ask your instructor to open a new session.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if session.check_ins.filter(student=request.user).exists():
+            return Response(
+                {'error': 'You have already checked in to this session.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        is_registered = Grade.objects.filter(
+            student=request.user, course=session.course
+        ).exists()
+        if not is_registered:
+            return Response(
+                {'error': 'You are not registered for this course.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        record, _created = AttendanceRecord.objects.get_or_create(
+            student=request.user,
+            course=session.course,
+            defaults={
+                'student_name': request.user.full_name or request.user.username,
+                'course_code': session.course_code,
+            },
+        )
+
+        late_cutoff = session.started_at + timedelta(minutes=session.late_after_minutes)
+        attendance_status = 'LATE' if timezone.now() > late_cutoff else 'PRESENT'
+
+        forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
+        ip_address = (
+            forwarded.split(',')[0].strip()
+            if forwarded
+            else request.META.get('REMOTE_ADDR')
+        ) or None
+
+        checkin = AttendanceCheckIn.objects.create(
+            session=session,
+            student=request.user,
+            student_name=request.user.full_name or request.user.username,
+            status=attendance_status,
+            method='CODE',
+            ip_address=ip_address,
+        )
+
+        return Response(
+            {
+                'message': (
+                    f'Checked in successfully as {attendance_status.title()}. '
+                    'Your ledger updates when the instructor closes the session.'
+                ),
+                'check_in': AttendanceCheckInSerializer(checkin).data,
+                'session': {
+                    'id': session.id,
+                    'course_code': session.course_code,
+                    'course_title': session.course_title,
+                    'title': session.title,
+                    'status': session.status,
+                    'expires_at': session.expires_at,
+                },
+                'attendance': AttendanceRecordSerializer(record).data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=False, methods=['get'], url_path='active')
+    def active(self, request):
+        """Open check-in windows visible to the current user."""
+        qs = self.get_queryset().filter(
+            status='OPEN', expires_at__gt=timezone.now()
+        )
+        return Response(self.get_serializer(qs, many=True).data)
+
+    @action(detail=True, methods=['get'], url_path='live')
+    def live(self, request, pk=None):
+        session = self.get_object()
+        return Response(self.get_serializer(session).data)
 
 # ---------- INSTRUCTOR EVALUATION ----------
 class InstructorEvaluationViewSet(BaseViewSet):
@@ -1223,7 +1542,8 @@ class FaceVerificationViewSet(viewsets.GenericViewSet):
             'expires_at': expires_at,
             'message': 'Verification token issued. You may now start the exam.'
         })
-    # ============================================================================
+
+# ============================================================================
 # VOICE AI — Speech-to-Text + Text-to-Speech (server-side Groq key)
 # ============================================================================
 from django.http import HttpResponse
@@ -1346,3 +1666,252 @@ def ai_speak(request):
             {"error": "Text-to-speech service unavailable."},
             status=status.HTTP_502_BAD_GATEWAY,
         )
+
+
+# ---------- DORMITORY MANAGEMENT ----------
+DORM_MANAGER_ROLES = ('ADMIN', 'REGISTRAR')
+
+
+def _is_dorm_manager(user):
+    return getattr(user, 'role', None) in DORM_MANAGER_ROLES
+
+
+def _sync_block_total_rooms(block_id):
+    if not block_id:
+        return
+    block = DormBlock.objects.filter(pk=block_id).first()
+    if block is None:
+        return
+    block.total_rooms = block.rooms.count()
+    block.save(update_fields=['total_rooms'])
+
+
+class DormBlockViewSet(BaseViewSet):
+    queryset = DormBlock.objects.all().order_by('block_name')
+    serializer_class = DormBlockSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve', 'stats'):
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), IsDormManager()]
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def stats(self, request):
+        """Aggregate numbers used by the dormitory dashboard."""
+        rooms = list(DormRoom.objects.select_related('block').all())
+        blocks = list(DormBlock.objects.all().order_by('block_name'))
+
+        total_beds = sum(room.capacity for room in rooms)
+        occupied_beds = sum(room.current_occupants_count for room in rooms)
+        available_beds = max(0, total_beds - occupied_beds)
+        occupancy_rate = round((occupied_beds / total_beds) * 100, 1) if total_beds else 0.0
+
+        by_block = []
+        for block in blocks:
+            block_rooms = [room for room in rooms if room.block_id == block.id]
+            beds = sum(room.capacity for room in block_rooms)
+            occupied = sum(room.current_occupants_count for room in block_rooms)
+            by_block.append({
+                'id': block.id,
+                'block_name': block.block_name,
+                'gender_type': block.gender_type,
+                'total_rooms': len(block_rooms),
+                'available_rooms': len([r for r in block_rooms if r.is_available]),
+                'total_beds': beds,
+                'occupied_beds': occupied,
+                'available_beds': max(0, beds - occupied),
+                'occupancy_rate': round((occupied / beds) * 100, 1) if beds else 0.0,
+            })
+
+        return Response({
+            'total_blocks': len(blocks),
+            'total_rooms': len(rooms),
+            'total_beds': total_beds,
+            'occupied_beds': occupied_beds,
+            'available_beds': available_beds,
+            'occupancy_rate': occupancy_rate,
+            'active_assignments': DormAssignment.objects.filter(status='ACTIVE').count(),
+            'open_maintenance': DormMaintenanceRequest.objects.exclude(status='RESOLVED').count(),
+            'pending_maintenance': DormMaintenanceRequest.objects.filter(status='PENDING').count(),
+            'by_block': by_block,
+        })
+
+
+class DormRoomViewSet(BaseViewSet):
+    queryset = DormRoom.objects.select_related('block').all().order_by('block__block_name', 'room_number')
+    serializer_class = DormRoomSerializer
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve', 'available_rooms'):
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), IsDormManager()]
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated], url_path='available-rooms')
+    def available_rooms(self, request):
+        rooms = (
+            DormRoom.objects.filter(is_available=True, current_occupants_count__lt=F('capacity'))
+            .select_related('block')
+            .order_by('block__block_name', 'room_number')
+        )
+        return Response(self.get_serializer(rooms, many=True).data)
+
+    def perform_create(self, serializer):
+        room = serializer.save()
+        _sync_block_total_rooms(room.block_id)
+
+    def perform_update(self, serializer):
+        previous_block_id = serializer.instance.block_id
+        room = serializer.save()
+        _sync_block_total_rooms(previous_block_id)
+        _sync_block_total_rooms(room.block_id)
+
+    def perform_destroy(self, instance):
+        block_id = instance.block_id
+        instance.delete()
+        _sync_block_total_rooms(block_id)
+
+
+class DormAssignmentViewSet(BaseViewSet):
+    serializer_class = DormAssignmentSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = DormAssignment.objects.select_related('student', 'room__block').order_by('-assigned_date')
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'STUDENT':
+            return qs.filter(student=user)
+        if _is_dorm_manager(user):
+            return qs
+        return qs.none()
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve', 'my_assignment', 'assign_room'):
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), IsDormManager()]
+
+    @action(detail=False, methods=['get'], url_path='my-assignment')
+    def my_assignment(self, request):
+        assignment = (
+            DormAssignment.objects
+            .select_related('room__block')
+            .filter(student=request.user, status='ACTIVE')
+            .order_by('-assigned_date')
+            .first()
+        )
+        if assignment is None:
+            return Response(None)
+        return Response(self.get_serializer(assignment).data)
+
+    @action(detail=False, methods=['post'], url_path='assign-room')
+    def assign_room(self, request):
+        """Assign the current student (or a chosen student, for staff) to a room."""
+        if request.user.role not in ('STUDENT',) and not _is_dorm_manager(request.user):
+            return Response(
+                {'error': 'Only students and dormitory administrators can assign rooms.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        payload = {
+            'student': request.user.id if request.user.role == 'STUDENT' else request.data.get('student'),
+            'room': request.data.get('room'),
+        }
+        if request.data.get('assigned_date'):
+            payload['assigned_date'] = request.data.get('assigned_date')
+        if request.data.get('academic_year'):
+            payload['academic_year'] = request.data.get('academic_year')
+
+        serializer = self.get_serializer(data=payload)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        student = serializer.validated_data.get('student')
+        room = serializer.validated_data.get('room')
+        if student is None:
+            return Response({'error': 'A student is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if getattr(student, 'role', None) != 'STUDENT':
+            return Response({'error': 'Selected user is not a student.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        assigned_date = serializer.validated_data.get('assigned_date') or timezone.localdate()
+        academic_year = serializer.validated_data.get('academic_year') or (
+            f"{timezone.now().year}/{timezone.now().year + 1}"
+        )
+
+        from django.db import transaction
+
+        with transaction.atomic():
+            room = DormRoom.objects.select_for_update().select_related('block').get(pk=room.pk)
+            existing = (
+                DormAssignment.objects
+                .select_for_update()
+                .filter(student=student, status='ACTIVE')
+                .first()
+            )
+
+            if existing and existing.room_id == room.id:
+                return Response(self.get_serializer(existing).data, status=status.HTTP_200_OK)
+
+            active_count = (
+                DormAssignment.objects
+                .filter(room=room, status='ACTIVE')
+                .exclude(pk=existing.pk if existing else None)
+                .count()
+            )
+            if active_count >= room.capacity or not room.is_available:
+                return Response(
+                    {'error': 'This room is already full. Choose another available room.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            created = existing is None
+            if existing:
+                existing.room = room
+                existing.assigned_date = assigned_date
+                existing.academic_year = academic_year
+                existing.save()
+                assignment = existing
+            else:
+                assignment = DormAssignment.objects.create(
+                    student=student,
+                    student_name=getattr(student, 'full_name', None) or student.username,
+                    room=room,
+                    assigned_date=assigned_date,
+                    academic_year=academic_year,
+                )
+
+        return Response(
+            self.get_serializer(assignment).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    @action(detail=True, methods=['post'], url_path='terminate')
+    def terminate(self, request, pk=None):
+        assignment = self.get_object()
+        if assignment.status == 'TERMINATED':
+            return Response(self.get_serializer(assignment).data)
+        assignment.status = 'TERMINATED'
+        assignment.save(update_fields=['status'])
+        return Response(self.get_serializer(assignment).data)
+
+
+class DormMaintenanceRequestViewSet(BaseViewSet):
+    serializer_class = DormMaintenanceRequestSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = DormMaintenanceRequest.objects.select_related('room__block', 'reported_by').order_by('-created_at')
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'STUDENT':
+            return qs.filter(reported_by=user)
+        if _is_dorm_manager(user):
+            return qs
+        return qs.none()
+
+    def get_permissions(self):
+        if self.action in ('list', 'retrieve', 'create'):
+            return [permissions.IsAuthenticated()]
+        return [permissions.IsAuthenticated(), IsDormManager()]
+
+    def perform_create(self, serializer):
+        serializer.save(reported_by=self.request.user)

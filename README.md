@@ -31,6 +31,7 @@ The system provides dedicated dashboards for **9+ user roles**, live virtual cla
 - **Course Catalog & Registration** — enroll, drop, prerequisite validation, seat capacity
 - **Grade Management** — continuous assessment + mid-exam + final exam → automated letter grade & GPA
 - **Attendance Tracking** — minimum-threshold enforcement with a real-time ledger
+- **Live Attendance Check-In** — instructor opens a time-boxed session with a 6-character code; students check in from their dashboard and the ledger is updated exactly once when the window closes
 - **Online Examinations** — timed, auto-submitting exams with MCQ, True/False, and short-answer questions
 - **Transcripts & Certificates** — digitally generated academic records
 
@@ -53,6 +54,14 @@ The system provides dedicated dashboards for **9+ user roles**, live virtual cla
 - **`FloatingAIAssistant.tsx`** — always-available AI copilot for academic guidance
 - **Smart Exam Generator** — AI-assisted MCQ / True-False question generation
 - **Dropout Risk Predictor** — data-driven student risk classification
+
+### 🏠 Dormitory Management
+- **`pages/Dormitory/`** — dedicated residential-life module with overview, room allocation, and maintenance tabs
+- **`DormDashboard.tsx`** — live block occupancy, bed availability, occupancy rate, and open-ticket metrics
+- **`RoomAllocationView.tsx`** — browse beds by block, self-assign/transfer rooms, and manage active assignments
+- **`MaintenancePortal.tsx`** — report plumbing/electrical/furniture issues and track repair status
+- **Automatic occupancy sync** — room availability recalculates on assignment, transfer, termination, or deletion
+- **Role-aware API** — staff (`ADMIN`/`REGISTRAR`) manage inventory and tickets; students self-assign and see only their own records
 
 ### 🏛️ Administrative & Financial
 - **`SmartClearancePortal.tsx`** — multi-department clearance workflow (Library, Finance, Dormitory, Lab, Registrar)
@@ -311,11 +320,13 @@ npm run lint
 
 - [x] Role-based dashboards for 9+ user types
 - [x] Course catalog, grades, attendance, exams
+- [x] Live code-based attendance check-in with late detection
 - [x] Campus media broadcast with video upload
 - [x] Campus news ticker + admin publisher
 - [x] Zoom-style live teaching & classroom
 - [x] Floating AI assistant
 - [x] Digital clearance + facility booking
+- [x] Dormitory blocks, rooms, allocations, and maintenance portal
 - [x] Docker Compose deployment
 - [ ] Real Zoom SDK integration
 - [ ] WebSocket-based real-time chat

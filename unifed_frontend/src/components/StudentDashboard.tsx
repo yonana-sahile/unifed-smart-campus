@@ -9,10 +9,12 @@ import { ExamResultsModal } from "./ExamResultsModal";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
   Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock, LayoutGrid, List, ArrowLeft, Maximize2,
-  Hand,
+  Hand, Home,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
+import { StudentAttendanceCheckIn } from "./StudentAttendanceCheckIn";
+import { DormitoryManagement } from "../pages/Dormitory";
 import { WebcamMonitor } from "./WebcamMonitor";
 import { FaceCaptureModal } from "./FaceCaptureModal";
 import { FaceVerificationModal } from "./FaceVerificationModal";
@@ -42,7 +44,7 @@ const digits = (v: unknown) => String(v ?? "").replace(/\D/g, "");
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
   const [activeTab, setActiveTab] = useState<
     "dashboard" | "courses" | "materials" | "library" | "exams" | "zoom" | "grades" |
-    "transcript" | "fees" | "copilot" | "facilities" | "alerts" | "clearance"
+    "attendance" | "transcript" | "fees" | "dormitory" | "copilot" | "facilities" | "alerts" | "clearance"
   >("dashboard");
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -1181,8 +1183,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     { id: "library", label: "Digital Library", shortLabel: "Library", Icon: BookOpen },
     { id: "zoom", label: "Zoom Classroom", shortLabel: "Zoom", Icon: Video, isZoom: true },
     { id: "exams", label: "Online Examinations", shortLabel: "Exams", Icon: Play },
+    { id: "attendance", label: "Live Attendance", shortLabel: "Attendance", Icon: CheckCircle2 },
     { id: "grades", label: "Grades & Assessments", shortLabel: "Grades", Icon: CheckCircle2 },
     { id: "transcript", label: "Official Transcript", shortLabel: "Transcript", Icon: Award },
+    { id: "dormitory", label: "Dormitory Management", shortLabel: "Dormitory", Icon: Home },
     { id: "fees", label: "Finance & Tuition", shortLabel: "Tuition", Icon: CreditCard, isFees: true },
   ] as const;
 
@@ -2577,6 +2581,18 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
               </motion.div>
             )}
 
+            {activeTab === "attendance" && (
+              <motion.div
+                key="student-attendance-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-6"
+              >
+                <StudentAttendanceCheckIn student={user} courses={courses} />
+              </motion.div>
+            )}
+
             {activeTab === "grades" && (
               <motion.div
                 key="student-grades-tab"
@@ -3186,6 +3202,18 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   assignments={assignments}   // 👈 Add
   submissions={submissions}   // 👈 Add
 />
+              </motion.div>
+            )}
+
+            {activeTab === "dormitory" && (
+              <motion.div
+                key="student-dormitory-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                className="space-y-6"
+              >
+                <DormitoryManagement user={user} />
               </motion.div>
             )}
 
