@@ -134,8 +134,10 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:3000",
     "http://frontend:5173",
     "https://unifed-smart-campus.onrender.com",
-     "https://unifed-smart-campus-2.onrender.com", 
+    "https://unifed-smart-campus-2.onrender.com",
     "https://unifed-smart-campus.vercel.app",
+    "https://unified-smart-campus.vercel.app",
+    "https://unified-smart-campus-frontend.vercel.app",
 ]
 
 EXTRA_CORS_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', '')
