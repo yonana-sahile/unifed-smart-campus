@@ -190,6 +190,42 @@ export interface AttendanceRecord {
   meetsMinimum: boolean; // 80% threshold required for exam & grading
 }
 
+export interface AttendanceCheckIn {
+  id: string;
+  sessionId: string;
+  studentId: string;
+  studentName: string;
+  status: "PRESENT" | "LATE";
+  method: string;
+  checkedInAt: string;
+  ipAddress?: string;
+}
+
+export interface AttendanceSession {
+  id: string;
+  courseId: string;
+  courseCode: string;
+  courseTitle: string;
+  instructorId: string;
+  instructorName: string;
+  title: string;
+  topic?: string;
+  location?: string;
+  sessionDate: string;
+  startedAt: string;
+  expiresAt: string;
+  endedAt?: string;
+  /** Hidden from students by the API; only instructors and staff receive it. */
+  checkInCode: string | null;
+  status: "OPEN" | "CLOSED" | "CANCELLED";
+  lateAfterMinutes: number;
+  totalsApplied: boolean;
+  checkIns: AttendanceCheckIn[];
+  checkedInCount: number;
+  secondsRemaining: number;
+  isExpired: boolean;
+}
+
 export interface InstructorEvaluation {
   id: string;
   studentId: string;
@@ -461,6 +497,87 @@ export interface AIChatMessage {
   text: string;
   timestamp: string;
   suggestedActions?: string[];
+}
+
+// ============================================================
+// DORMITORY MANAGEMENT (Feature 15)
+// ============================================================
+
+export type DormGenderType = "M" | "F";
+
+export interface DormBlock {
+  id: string;
+  blockName: string;
+  genderType: DormGenderType;
+  totalRooms: number;
+  occupiedRooms?: number;
+  availableRooms?: number;
+  totalBeds?: number;
+  occupiedBeds?: number;
+}
+
+export interface DormRoom {
+  id: string;
+  block: string; // DormBlock id
+  blockName?: string;
+  genderType?: DormGenderType;
+  roomNumber: string;
+  capacity: number;
+  currentOccupantsCount: number;
+  availableBeds: number;
+  isAvailable: boolean;
+}
+
+export interface DormAssignment {
+  id: string;
+  student: string; // User id
+  studentName: string;
+  room: string; // DormRoom id
+  roomNumber: string;
+  blockName: string;
+  genderType?: DormGenderType;
+  assignedDate: string;
+  academicYear: string;
+  status: "ACTIVE" | "TERMINATED";
+}
+
+export type DormMaintenanceStatus = "PENDING" | "IN_PROGRESS" | "RESOLVED";
+
+export interface DormMaintenanceRequest {
+  id: string;
+  room: string; // DormRoom id
+  roomNumber: string;
+  blockName: string;
+  reportedBy: string; // User id
+  reportedByName: string;
+  issueDescription: string;
+  status: DormMaintenanceStatus;
+  createdAt: string;
+}
+
+export interface DormBlockStats {
+  id: string;
+  blockName: string;
+  genderType: DormGenderType;
+  totalRooms: number;
+  availableRooms: number;
+  totalBeds: number;
+  occupiedBeds: number;
+  availableBeds: number;
+  occupancyRate: number;
+}
+
+export interface DormStats {
+  totalBlocks: number;
+  totalRooms: number;
+  totalBeds: number;
+  occupiedBeds: number;
+  availableBeds: number;
+  occupancyRate: number;
+  activeAssignments: number;
+  openMaintenance: number;
+  pendingMaintenance: number;
+  byBlock: DormBlockStats[];
 }
 
 // ============================================================

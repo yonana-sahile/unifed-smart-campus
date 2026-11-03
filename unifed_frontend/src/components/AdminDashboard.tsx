@@ -6,6 +6,7 @@ import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusFacilities } from "./SmartCampusFacilities";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import CampusMediaBroadcast from "./CampusMediaBroadcast";
+import { DormitoryManagement } from "../pages/Dormitory";
 import {
   Users,
   List,
@@ -30,10 +31,11 @@ import {
   Clock,
   HardDrive,
   Wifi,
+  Home,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-type Tab = "users" | "audit" | "health" | "facilities" | "alerts" | "clearance" | "media";
+type Tab = "users" | "audit" | "health" | "facilities" | "dormitory" | "alerts" | "clearance" | "media";
 
 export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>("users");
@@ -206,6 +208,7 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
     { id: "health", label: "Telemetry & Health", shortLabel: "Telemetry", Icon: Activity },
     { id: "clearance", label: "Clearance Overseer", shortLabel: "Clearance", Icon: ShieldCheck },
     { id: "facilities", label: "Campus Facilities", shortLabel: "Facilities", Icon: Cpu },
+    { id: "dormitory", label: "Dormitory Management", shortLabel: "Dormitory", Icon: Home },
     { id: "alerts", label: "Broadcast Alerts", shortLabel: "Alerts", Icon: Radio },
     { id: "media", label: "Video & Media Screen", shortLabel: "Media", Icon: Video },
   ];
@@ -818,6 +821,19 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
                   transition={{ duration: 0.35 }}
                 >
                   <SmartCampusFacilities user={user} />
+                </motion.div>
+              )}
+
+              {/* ==================== DORMITORY ==================== */}
+              {activeTab === "dormitory" && (
+                <motion.div
+                  key="dormitory"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.35 }}
+                >
+                  <DormitoryManagement user={user} />
                 </motion.div>
               )}
 

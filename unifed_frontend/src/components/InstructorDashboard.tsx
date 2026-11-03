@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { InstructorZoomManager } from "./InstructorZoomManager";
+import { InstructorAttendanceManager } from "./InstructorAttendanceManager";
 
 interface InstructorDashboardProps {
   user: User;
@@ -2495,6 +2496,13 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 className="space-y-6"
                 key="instructor-attendance-tab"
               >
+                <InstructorAttendanceManager
+                  instructor={user}
+                  courses={courses}
+                  selectedCourseId={selectedCourseId}
+                  onAttendanceUpdated={loadData}
+                />
+
                 <div>
                   <h2 className="text-xl sm:text-2xl font-display font-bold text-slate-900">
                     Course Attendance Ledger

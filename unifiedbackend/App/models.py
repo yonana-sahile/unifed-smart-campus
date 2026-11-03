@@ -349,6 +349,84 @@ class AttendanceRecord(models.Model):
         return f"{self.student_name} - {self.course_code}"
 
 
+# ---------- LIVE ATTENDANCE SESSION ----------
+class AttendanceSession(models.Model):
+    """A single live class meeting that students can check into with a code."""
+
+    STATUS_CHOICES = (
+        ('OPEN', 'Open'),
+        ('CLOSED', 'Closed'),
+        ('CANCELLED', 'Cancelled'),
+    )
+
+    course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='attendance_sessions')
+    course_code = models.CharField(max_length=20)
+    course_title = models.CharField(max_length=200)
+
+    instructor = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='attendance_sessions_led',
+        limit_choices_to={'role__in': ['INSTRUCTOR', 'DEPARTMENT_HEAD']},
+    )
+    instructor_name = models.CharField(max_length=100)
+
+    title = models.CharField(max_length=200, default='Class Session')
+    topic = models.TextField(blank=True, null=True)
+    location = models.CharField(max_length=100, blank=True, null=True)
+
+    session_date = models.DateField(default=timezone.localdate)
+    started_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    ended_at = models.DateTimeField(blank=True, null=True)
+
+    check_in_code = models.CharField(max_length=8, db_index=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
+
+    late_after_minutes = models.IntegerField(default=10)
+    totals_applied = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-started_at']
+
+    @property
+    def is_expired(self):
+        return timezone.now() > self.expires_at
+
+    def __str__(self):
+        return f"{self.course_code} - {self.title} ({self.status})"
+
+
+# ---------- ATTENDANCE CHECK-IN ----------
+class AttendanceCheckIn(models.Model):
+    """One student's check-in against one live attendance session."""
+
+    STATUS_CHOICES = (
+        ('PRESENT', 'Present'),
+        ('LATE', 'Late'),
+    )
+
+    session = models.ForeignKey(AttendanceSession, on_delete=models.CASCADE, related_name='check_ins')
+    student = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='attendance_check_ins',
+        limit_choices_to={'role': 'STUDENT'},
+    )
+    student_name = models.CharField(max_length=100)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PRESENT')
+    method = models.CharField(max_length=20, default='CODE')
+    checked_in_at = models.DateTimeField(auto_now_add=True)
+    ip_address = models.GenericIPAddressField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-checked_in_at']
+        unique_together = ('session', 'student')
+
+    def __str__(self):
+        return f"{self.student_name} - {self.session.course_code} ({self.status})"
+
+
 # ---------- INSTRUCTOR EVALUATION ----------
 class InstructorEvaluation(models.Model):
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='evaluations',
@@ -853,3 +931,137 @@ class PasswordResetOTP(models.Model):
 
     def __str__(self):
         return f"{self.email} - {self.otp_code}"
+
+
+# ---------- DORMITORY MANAGEMENT ----------
+class DormBlock(models.Model):
+    GENDER_CHOICES = (
+        ('M', 'Male'),
+        ('F', 'Female'),
+    )
+
+    block_name = models.CharField(max_length=20, unique=True)
+    gender_type = models.CharField(max_length=1, choices=GENDER_CHOICES)
+    total_rooms = models.IntegerField(default=0)
+
+    class Meta:
+        ordering = ['block_name']
+
+    def __str__(self):
+        return f"{self.block_name}"
+
+
+# ---------- DORM ROOM ----------
+class DormRoom(models.Model):
+    block = models.ForeignKey(DormBlock, on_delete=models.CASCADE, related_name='rooms')
+    room_number = models.CharField(max_length=20)
+    capacity = models.IntegerField(default=4)
+    current_occupants_count = models.IntegerField(default=0)
+    is_available = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['block__block_name', 'room_number']
+        constraints = [
+            models.UniqueConstraint(fields=['block', 'room_number'], name='unique_dorm_room'),
+        ]
+
+    @property
+    def available_beds(self):
+        return max(0, self.capacity - self.current_occupants_count)
+
+    def sync_availability(self, save=True):
+        """Keep the availability flag aligned with real occupancy."""
+        available = self.current_occupants_count < self.capacity
+        if self.is_available != available:
+            self.is_available = available
+            if save and self.pk:
+                super(DormRoom, self).save(update_fields=['is_available'])
+        return self.is_available
+
+    def __str__(self):
+        return f"{self.block.block_name} - {self.room_number}"
+
+
+# ---------- DORM ASSIGNMENT ----------
+class DormAssignment(models.Model):
+    STATUS_CHOICES = (
+        ('ACTIVE', 'Active'),
+        ('TERMINATED', 'Terminated'),
+    )
+
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='dorm_assignments',
+                                limit_choices_to={'role': 'STUDENT'})
+    student_name = models.CharField(max_length=100)
+    room = models.ForeignKey(DormRoom, on_delete=models.CASCADE, related_name='dorm_assignments')
+    assigned_date = models.DateField()
+    academic_year = models.CharField(max_length=20, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='ACTIVE')
+
+    def clean(self):
+        super().clean()
+        if self.status != 'ACTIVE' or not self.room_id:
+            return
+        active = (
+            DormAssignment.objects
+            .filter(room_id=self.room_id, status='ACTIVE')
+            .exclude(pk=self.pk)
+            .count()
+        )
+        if active >= self.room.capacity:
+            from django.core.exceptions import ValidationError
+            raise ValidationError({'room': 'This room is already full.'})
+
+    @staticmethod
+    def recount_room(room_id):
+        """Recompute a room's occupancy from active assignments."""
+        if not room_id:
+            return
+        room = DormRoom.objects.filter(pk=room_id).first()
+        if room is None:
+            return
+        active = DormAssignment.objects.filter(room_id=room_id, status='ACTIVE').count()
+        room.current_occupants_count = active
+        room.is_available = active < room.capacity
+        room.save(update_fields=['current_occupants_count', 'is_available'])
+
+    def save(self, *args, **kwargs):
+        if not self.student_name and self.student_id:
+            self.student_name = self.student.full_name or self.student.username
+        previous_room_id = None
+        if self.pk:
+            previous = (
+                DormAssignment.objects.filter(pk=self.pk)
+                .values('room_id')
+                .first()
+            )
+            previous_room_id = previous['room_id'] if previous else None
+        super().save(*args, **kwargs)
+        self.recount_room(previous_room_id)
+        self.recount_room(self.room_id)
+
+    def delete(self, *args, **kwargs):
+        room_id = self.room_id
+        super().delete(*args, **kwargs)
+        self.recount_room(room_id)
+
+    def __str__(self):
+        return f"{self.student_name} - {self.room.room_number}"
+
+
+
+# ---------- DORM MAINTENANCE REQUEST ----------
+class DormMaintenanceRequest(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('IN_PROGRESS', 'In Progress'),
+        ('RESOLVED', 'Resolved'),
+    )
+
+    room = models.ForeignKey(DormRoom, on_delete=models.CASCADE, related_name='maintenance_requests')
+    reported_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='dorm_maintenance_requests')
+    issue_description = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.room.room_number} - {self.status}"

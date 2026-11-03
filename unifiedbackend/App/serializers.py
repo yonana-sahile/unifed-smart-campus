@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
+from django.utils import timezone
 from .models import *
 
 
@@ -229,6 +230,66 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+# ---------- LIVE ATTENDANCE ----------
+class AttendanceCheckInSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AttendanceCheckIn
+        fields = [
+            'id', 'session', 'student', 'student_name', 'status',
+            'method', 'checked_in_at', 'ip_address',
+        ]
+        read_only_fields = ['id', 'checked_in_at']
+
+
+class AttendanceSessionSerializer(serializers.ModelSerializer):
+    check_ins = serializers.SerializerMethodField()
+    checked_in_count = serializers.SerializerMethodField()
+    seconds_remaining = serializers.SerializerMethodField()
+    is_expired = serializers.BooleanField(read_only=True)
+    check_in_code = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AttendanceSession
+        fields = [
+            'id', 'course', 'course_code', 'course_title',
+            'instructor', 'instructor_name', 'title', 'topic', 'location',
+            'session_date', 'started_at', 'expires_at', 'ended_at',
+            'check_in_code', 'status', 'late_after_minutes',
+            'totals_applied', 'check_ins', 'checked_in_count',
+            'seconds_remaining', 'is_expired',
+        ]
+        read_only_fields = [
+            'id', 'course_code', 'course_title', 'instructor_name',
+            'session_date', 'started_at', 'expires_at', 'ended_at',
+            'status', 'totals_applied',
+        ]
+
+    def _request_user(self):
+        return self.context.get('request').user if self.context.get('request') else None
+
+    def get_check_in_code(self, obj):
+        """Only instructors/staff may read the code. Students must be given it in class."""
+        user = self._request_user()
+        if user and getattr(user, 'role', None) == 'STUDENT':
+            return None
+        return obj.check_in_code
+
+    def get_check_ins(self, obj):
+        qs = obj.check_ins.all()
+        user = self._request_user()
+        if user and getattr(user, 'role', None) == 'STUDENT':
+            qs = qs.filter(student=user)
+        return AttendanceCheckInSerializer(qs, many=True).data
+
+    def get_checked_in_count(self, obj):
+        return obj.check_ins.count()
+
+    def get_seconds_remaining(self, obj):
+        if obj.status != 'OPEN':
+            return 0
+        return max(0, int((obj.expires_at - timezone.now()).total_seconds()))
+
+
 # ---------- INSTRUCTOR EVALUATION ----------
 class InstructorEvaluationSerializer(serializers.ModelSerializer):
     class Meta:
@@ -369,3 +430,109 @@ class ExamMonitoringSettingSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamMonitoringSetting
         fields = '__all__'
+
+
+# ---------- DORMITORY MANAGEMENT ----------
+class DormBlockSerializer(serializers.ModelSerializer):
+    occupied_rooms = serializers.SerializerMethodField()
+    available_rooms = serializers.SerializerMethodField()
+    total_beds = serializers.SerializerMethodField()
+    occupied_beds = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DormBlock
+        fields = [
+            'id', 'block_name', 'gender_type', 'total_rooms',
+            'occupied_rooms', 'available_rooms', 'total_beds', 'occupied_beds',
+        ]
+
+    def get_occupied_rooms(self, obj):
+        return obj.rooms.filter(current_occupants_count__gt=0).count()
+
+    def get_available_rooms(self, obj):
+        return obj.rooms.filter(is_available=True).count()
+
+    def get_total_beds(self, obj):
+        return sum(room.capacity for room in obj.rooms.all())
+
+    def get_occupied_beds(self, obj):
+        return sum(room.current_occupants_count for room in obj.rooms.all())
+
+
+class DormRoomSerializer(serializers.ModelSerializer):
+    block_name = serializers.CharField(source='block.block_name', read_only=True)
+    gender_type = serializers.CharField(source='block.gender_type', read_only=True)
+    available_beds = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DormRoom
+        fields = [
+            'id', 'block', 'block_name', 'gender_type', 'room_number', 'capacity',
+            'current_occupants_count', 'available_beds', 'is_available',
+        ]
+        read_only_fields = ['id', 'current_occupants_count', 'available_beds', 'is_available']
+
+    def get_available_beds(self, obj):
+        return max(0, obj.capacity - obj.current_occupants_count)
+
+
+class DormAssignmentSerializer(serializers.ModelSerializer):
+    student_name = serializers.SerializerMethodField()
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
+    block_name = serializers.CharField(source='room.block.block_name', read_only=True)
+    gender_type = serializers.CharField(source='room.block.gender_type', read_only=True)
+
+    class Meta:
+        model = DormAssignment
+        fields = [
+            'id', 'student', 'student_name', 'room', 'room_number', 'block_name',
+            'gender_type', 'assigned_date', 'academic_year', 'status',
+        ]
+        read_only_fields = ['id', 'status']
+        extra_kwargs = {
+            'academic_year': {'required': False, 'allow_blank': True, 'allow_null': True},
+            'assigned_date': {'required': False},
+        }
+
+    def get_student_name(self, obj):
+        full_name = getattr(obj.student, 'full_name', None)
+        return full_name or obj.student_name or getattr(obj.student, 'username', '')
+
+    def validate(self, attrs):
+        room = attrs.get('room') or getattr(self.instance, 'room', None)
+        status_value = attrs.get('status') or getattr(self.instance, 'status', 'ACTIVE')
+        if room is not None and status_value == 'ACTIVE':
+            active = (
+                DormAssignment.objects
+                .filter(room=room, status='ACTIVE')
+                .exclude(pk=getattr(self.instance, 'pk', None))
+                .count()
+            )
+            if active >= room.capacity:
+                raise serializers.ValidationError({'room': 'This room is already full.'})
+        return attrs
+
+
+class DormMaintenanceRequestSerializer(serializers.ModelSerializer):
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
+    block_name = serializers.CharField(source='room.block.block_name', read_only=True)
+    reported_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = DormMaintenanceRequest
+        fields = [
+            'id', 'room', 'room_number', 'block_name', 'reported_by',
+            'reported_by_name', 'issue_description', 'status', 'created_at',
+        ]
+        read_only_fields = ['id', 'reported_by', 'created_at']
+        extra_kwargs = {
+            'room': {'required': True},
+            'issue_description': {'required': True, 'allow_blank': False},
+            'status': {'required': False},
+        }
+
+    def get_reported_by_name(self, obj):
+        return (
+            getattr(obj.reported_by, 'full_name', None)
+            or getattr(obj.reported_by, 'username', '')
+        )

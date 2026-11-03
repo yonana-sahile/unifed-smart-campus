@@ -19,3 +19,9 @@ class IsRegistrar(permissions.BasePermission):
 class IsAuditor(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user.is_authenticated and request.user.role == 'AUDITOR'
+
+class IsDormManager(permissions.BasePermission):
+    """Only administrative staff may configure dormitory inventory."""
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role in ('ADMIN', 'REGISTRAR')
+
