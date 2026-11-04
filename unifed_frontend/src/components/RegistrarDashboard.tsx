@@ -113,7 +113,8 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
-
+  const [currentPage, setCurrentPage] = useState(1);
+  const studentsPerPage = 10;
   const [editingStudent, setEditingStudent] = useState<User | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -421,7 +422,17 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
         );
       })
     : [];
+  // ── Pagination ───────────────────────────────────────────────
+  const indexOfLastStudent = currentPage * studentsPerPage;
+  const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
+  const currentStudents = filteredStudents.slice(indexOfFirstStudent, indexOfLastStudent);
+  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
 
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+    }
+  };
   // dashboard stats
   const totalStudents = students.length;
   const studentsWithFees = students.filter((s) => (s.outstandingFees ?? 0) > 0).length;
@@ -887,7 +898,10 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
                       placeholder="Search by name, ID, program, or username…"
                       className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-9 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        setCurrentPage(1); // Reset to page 1 on search
+                      }}
                     />
                     {searchQuery && (
                       <button
@@ -961,7 +975,7 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
                           </td>
                         </tr>
                       )}
-                      {filteredStudents.map((st) => {
+                      {currentStudents.map((st) => {
                         const hasFees = (st.outstandingFees ?? 0) > 0;
                         const hasCGPA = (st.cgpa ?? 0) > 0;
                         return (
@@ -1070,6 +1084,44 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
                     </tbody>
                   </table>
                 </div>
+
+                {/* ── PAGINATION CONTROLS ────────────────────────── */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-5 py-3 border-t border-slate-200 bg-[#FAFAF9]">
+                    <span className="text-xs text-slate-500 font-mono">
+                      Showing {indexOfFirstStudent + 1}-{Math.min(indexOfLastStudent, filteredStudents.length)} of {filteredStudents.length}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                        className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        Previous
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                        <button
+                          key={page}
+                          onClick={() => handlePageChange(page)}
+                          className={`w-7 h-7 rounded-md text-xs font-mono font-semibold transition ${
+                            currentPage === page
+                              ? "bg-slate-900 text-white shadow-sm"
+                              : "text-slate-600 hover:bg-slate-200"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                        className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* ============ EDIT MODAL ============ */}
