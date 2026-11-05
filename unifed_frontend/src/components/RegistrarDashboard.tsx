@@ -121,6 +121,7 @@ const [activeTab, setActiveTab] = useState<
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
 const [searchQuery, setSearchQuery] = useState("");
+const searchInputRef = useRef<HTMLInputElement>(null);
 const [currentPage, setCurrentPage] = useState(1);
 
 // ── Filters (NEW) ────────────────────────────────────────────
@@ -158,7 +159,16 @@ const [isCreating, setIsCreating] = useState(false);
   useEffect(() => {
     loadData();
   }, []);
-
+  // ── Auto-focus the search input when opening the Records tab ──
+  useEffect(() => {
+    if (activeTab === "records" && searchInputRef.current) {
+      // Small delay to let the tab transition render first
+      const t = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 80);
+      return () => clearTimeout(t);
+    }
+  }, [activeTab]);
 const loadData = async () => {
   setLoading(true);
   setLoadError(null);
@@ -1029,6 +1039,7 @@ const navItems = [
                   <div className="relative flex-1 sm:w-96">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                     <input
+                      ref={searchInputRef}
                       type="text"
                       placeholder="Search by name, ID, program, or username…"
                       className="w-full bg-white border border-slate-200 rounded-lg pl-9 pr-9 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition"
