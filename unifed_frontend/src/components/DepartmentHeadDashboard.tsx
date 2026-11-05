@@ -32,6 +32,10 @@ import {
   PartyPopper,
   CheckCircle2,
   AlertCircle,
+    Sun,
+  Sunset,
+  Moon,
+  Clock,
 } from "lucide-react";
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "motion/react";
 import confetti from "canvas-confetti";
@@ -73,6 +77,37 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
   const [toasts, setToasts] = useState<
     { id: string; type: "success" | "error"; title: string; message?: string }[]
   >([]);
+
+  // ---- Live clock (greeting) ----
+  const [now, setNow] = useState<Date>(new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const getGreeting = (d: Date) => {
+    const h = d.getHours();
+    if (h >= 5 && h < 12) return { text: "Good morning", icon: Sun };
+    if (h >= 12 && h < 17) return { text: "Good afternoon", icon: Sun };
+    if (h >= 17 && h < 21) return { text: "Good evening", icon: Sunset };
+    return { text: "Good evening", icon: Moon };
+  };
+
+  const formatDate = (d: Date) =>
+    d.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+
+  const formatTime = (d: Date) =>
+    d.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
 
   const pushToast = (toast: {
     type: "success" | "error";
@@ -633,27 +668,111 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8"
               >
                 <div className="space-y-3 max-w-2xl">
+                  {/* Top pill: academic year */}
                   <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm text-[11px] font-mono font-bold text-amber-300 tracking-wider">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                       <span>ACADEMIC YEAR {academicYearLabel()} • SEMESTER II</span>
+                    <span>ACADEMIC YEAR {academicYearLabel()} • SEMESTER II</span>
                   </div>
-                  <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-black text-white tracking-tight leading-tight">
-                    Department Performance
-                  </h1>
+
+                  {/* Greeting + date/time */}
+                  {(() => {
+                    const { text, icon: GreetIcon } = getGreeting(now);
+                    return (
+                      <div className="space-y-1.5">
+                        <div className="flex items-center space-x-2">
+                          <GreetIcon className="w-5 h-5 sm:w-6 sm:h-6 text-amber-300" />
+                          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-display font-black text-white tracking-tight leading-tight">
+                            {text},{" "}
+                            <span className="bg-gradient-to-r from-amber-300 via-amber-200 to-amber-400 bg-clip-text text-transparent">
+                              {user.fullName.split(" ")[0]}
+                            </span>
+                          </h1>
+                        </div>
+                        <div className="flex items-center space-x-2 text-[11px] sm:text-xs font-mono text-slate-300/90">
+                          <Clock className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{formatDate(now)}</span>
+                          <span className="text-slate-500">·</span>
+                          <span className="tabular-nums">{formatTime(now)}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Subtitle / context line */}
                   <p className="text-slate-300/90 text-sm leading-relaxed">
-                    Real-time academic intelligence — faculty workloads, student outcomes, and course delivery in one view.
+                    Here&apos;s your department at a glance — real-time academic intelligence in one view.
                   </p>
 
-                  <motion.button
-                    onClick={loadData}
-                    disabled={loading}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    className="mt-2 inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md text-white text-xs font-bold transition disabled:opacity-50"
-                  >
-                    <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                    <span>{loading ? "Syncing…" : "Sync Data"}</span>
-                  </motion.button>
+                  {/* Context chips — dynamic from insights */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {insights.length > 0 ? (
+                      <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-white/10 border border-white/20 text-[11px] font-mono font-bold text-amber-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                        <span>
+                          {insights.length} signal{insights.length !== 1 ? "s" : ""} need{insights.length === 1 ? "s" : ""} attention
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/40 text-[11px] font-mono font-bold text-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                        <span>All clear</span>
+                      </span>
+                    )}
+                    {(() => {
+                      const un = courses.filter((c) => !c.instructorId && !c.instructorName).length;
+                      return un > 0 ? (
+                        <span className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-lg bg-red-500/15 border border-red-400/40 text-[11px] font-mono font-bold text-red-200">
+                          <BookOpen className="w-3 h-3" />
+                          <span>
+                            {un} course{un !== 1 ? "s" : ""} unassigned
+                          </span>
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+
+                  {/* CTA buttons row */}
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <motion.button
+                      onClick={loadData}
+                      disabled={loading}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md text-white text-xs font-bold transition disabled:opacity-50"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                      <span>{loading ? "Syncing…" : "Sync Data"}</span>
+                    </motion.button>
+
+                    {(() => {
+                      const un = courses.filter((c) => !c.instructorId && !c.instructorName).length;
+                      return un > 0 ? (
+                        <motion.button
+                          onClick={() => setIsBoardOpen(true)}
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.97 }}
+                          className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white text-xs font-bold shadow-lg shadow-amber-500/30 transition"
+                        >
+                          <Layers className="w-4 h-4" />
+                          <span>Open Board</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </motion.button>
+                      ) : null;
+                    })()}
+
+                    <motion.button
+                      onClick={() => {
+                        const el = document.getElementById("smart-insights-panel");
+                        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md text-white text-xs font-bold transition"
+                    >
+                      <Zap className="w-4 h-4 text-amber-300" />
+                      <span>View Insights</span>
+                    </motion.button>
+                  </div>
                 </div>
 
                 {/* PULSE GAUGES */}
@@ -751,7 +870,9 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                     <OverviewSkeleton />
                   ) : (
                     <>
-                  <SmartInsights insights={insights} onAction={handleInsightAction} />
+                                <div id="smart-insights-panel" className="scroll-mt-24">
+                    <SmartInsights insights={insights} onAction={handleInsightAction} />
+                  </div>
 
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
                     <div className="flex items-center justify-between">
