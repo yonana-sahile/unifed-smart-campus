@@ -130,7 +130,8 @@ const [filterCgpaBand, setFilterCgpaBand] = useState<"all" | "high" | "mid" | "l
 // ── Bulk selection (NEW) ─────────────────────────────────────
 const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 const [bulkBusy, setBulkBusy] = useState(false);
-const studentsPerPage = 10;
+const [studentsPerPage, setStudentsPerPage] = useState(10);
+const [jumpToPage, setJumpToPage] = useState("");
 const [editingStudent, setEditingStudent] = useState<User | null>(null);
 const [saving, setSaving] = useState(false);
 const [viewingStudent, setViewingStudent] = useState<User | null>(null);
@@ -473,10 +474,15 @@ const filteredStudents = Array.isArray(students)
     })
   : [];
   // ── Pagination ───────────────────────────────────────────────
-  const indexOfLastStudent = currentPage * studentsPerPage;
+  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
+
+  // Guard: if currentPage > totalPages (e.g., after changing page size
+  // or filtering down), snap back to page 1
+  const safeCurrentPage = Math.min(Math.max(1, currentPage), Math.max(1, totalPages));
+
+  const indexOfLastStudent = safeCurrentPage * studentsPerPage;
   const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
   const currentStudents = filteredStudents.slice(indexOfFirstStudent, indexOfLastStudent);
-  const totalPages = Math.ceil(filteredStudents.length / studentsPerPage);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -1360,41 +1366,118 @@ const navItems = [
                   </table>
                 </div>
 
-                {/* ── PAGINATION CONTROLS ────────────────────────── */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between px-5 py-3 border-t border-slate-200 bg-[#FAFAF9]">
-                    <span className="text-xs text-slate-500 font-mono">
-                      Showing {indexOfFirstStudent + 1}-{Math.min(indexOfLastStudent, filteredStudents.length)} of {filteredStudents.length}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                        className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                      >
-                        Previous
-                      </button>
-                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                        <button
-                          key={page}
-                          onClick={() => handlePageChange(page)}
-                          className={`w-7 h-7 rounded-md text-xs font-mono font-semibold transition ${
-                            currentPage === page
-                              ? "bg-slate-900 text-white shadow-sm"
-                              : "text-slate-600 hover:bg-slate-200"
-                          }`}
+                {/* ── PAGINATION CONTROLS (ENHANCED) ────────────────── */}
+                {filteredStudents.length > 0 && (
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-3 border-t border-slate-200 bg-[#FAFAF9]">
+                    {/* Left: showing X-Y of Z + page size selector */}
+                    <div className="flex items-center gap-3 text-xs text-slate-500 font-mono flex-wrap">
+                      <span>
+                        Showing{" "}
+                        <span className="text-slate-700 tabular-nums font-semibold">
+                          {filteredStudents.length === 0 ? 0 : indexOfFirstStudent + 1}-
+                          {Math.min(indexOfLastStudent, filteredStudents.length)}
+                        </span>{" "}
+                        of{" "}
+                        <span className="text-slate-700 tabular-nums font-semibold">
+                          {filteredStudents.length}
+                        </span>
+                      </span>
+
+                      <span className="hidden sm:inline text-slate-300">·</span>
+
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-slate-500">Show</span>
+                        <select
+                          value={studentsPerPage}
+                          onChange={(e) => {
+                            setStudentsPerPage(Number(e.target.value));
+                            setCurrentPage(1);
+                          }}
+                          className="bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs text-slate-700 font-mono focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition cursor-pointer"
                         >
-                          {page}
-                        </button>
-                      ))}
-                      <button
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                        className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                      >
-                        Next
-                      </button>
+                          {[10, 25, 50, 100, 500].map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-slate-500">per page</span>
+                      </div>
                     </div>
+
+                    {/* Right: jump to page + nav buttons */}
+                    {totalPages > 1 && (
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {/* Jump to page */}
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 font-mono">
+                          <span className="hidden sm:inline">Jump to</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={totalPages}
+                            value={jumpToPage}
+                            onChange={(e) => setJumpToPage(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                const n = parseInt(jumpToPage);
+                                if (!isNaN(n) && n >= 1 && n <= totalPages) {
+                                  handlePageChange(n);
+                                  setJumpToPage("");
+                                }
+                              }
+                            }}
+                            onBlur={() => {
+                              // Also accept on blur if valid
+                              const n = parseInt(jumpToPage);
+                              if (!isNaN(n) && n >= 1 && n <= totalPages) {
+                                handlePageChange(n);
+                                setJumpToPage("");
+                              } else if (jumpToPage !== "") {
+                                // Reset invalid input
+                                setJumpToPage("");
+                              }
+                            }}
+                            placeholder="—"
+                            className="w-12 text-center bg-white border border-slate-200 rounded-md px-1.5 py-1 text-xs text-slate-700 font-mono focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition"
+                          />
+                          <span className="text-slate-400">/ {totalPages}</span>
+                        </div>
+
+                        {/* Prev / Next + first/last */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handlePageChange(1)}
+                            disabled={currentPage === 1}
+                            title="First page"
+                            className="w-7 h-7 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            «
+                          </button>
+                          <button
+                            onClick={() => handlePageChange(currentPage - 1)}
+                            disabled={currentPage === 1}
+                            className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                          >
+                            Previous
+                          </button>
+                          <button
+                            onClick={() => handlePageChange(currentPage + 1)}
+                            disabled={currentPage === totalPages}
+                            className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                          >
+                            Next
+                          </button>
+                          <button
+                            onClick={() => handlePageChange(totalPages)}
+                            disabled={currentPage === totalPages}
+                            title="Last page"
+                            className="w-7 h-7 rounded-md text-xs font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition"
+                          >
+                            »
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
