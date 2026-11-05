@@ -5,6 +5,7 @@ import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
 import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { RegistrarCommandCenter } from "./RegistrarCommandCenter";
+import { StudentPortfolio } from "./StudentPortfolio";
 import {
   Users,
   FileText,
@@ -132,7 +133,7 @@ const [bulkBusy, setBulkBusy] = useState(false);
 const studentsPerPage = 10;
 const [editingStudent, setEditingStudent] = useState<User | null>(null);
 const [saving, setSaving] = useState(false);
-
+const [viewingStudent, setViewingStudent] = useState<User | null>(null);
 // ── Load state (NEW) ─────────────────────────────────────────
 const [loading, setLoading] = useState(true);
 const [loadError, setLoadError] = useState<string | null>(null);
@@ -1268,9 +1269,13 @@ const navItems = [
                                   </div>
                                 )}
                                 <div className="min-w-0">
-                                  <p className="font-medium text-slate-900 text-sm truncate">
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingStudent(st)}
+                                    className="font-medium text-blue-600 text-sm truncate hover:text-blue-800 hover:underline underline-offset-2 text-left w-full"
+                                  >
                                     {st.fullName || st.username || "Unnamed"}
-                                  </p>
+                                  </button>
                                   <p className="text-[11px] text-slate-400 truncate font-mono">
                                     @{st.username || "—"}
                                   </p>
@@ -1851,6 +1856,21 @@ const navItems = [
                       </div>
                     </motion.div>
                   </div>
+                )}
+              </AnimatePresence>
+
+              {/* Student Portfolio (NEW) */}
+              <AnimatePresence>
+                {viewingStudent && (
+                  <StudentPortfolio
+                    student={viewingStudent}
+                    allGrades={grades}
+                    onClose={() => setViewingStudent(null)}
+                    onEdit={(s) => {
+                      setViewingStudent(null);
+                      setEditingStudent(s);
+                    }}
+                  />
                 )}
               </AnimatePresence>
             </motion.div>
