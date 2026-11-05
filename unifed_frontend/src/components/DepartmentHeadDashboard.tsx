@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import type { User, Course, Grade, InstructorEvaluation } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
@@ -22,8 +22,19 @@ import {
   Target,
   Radio,
   Cpu,
+  Command,
+  ArrowRight,
+  CornerDownLeft,
+  Hash,
+  GripVertical,
+  Layers,
+  User as UserIcon,
+  PartyPopper,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "motion/react";
+import confetti from "canvas-confetti";
 
 type Tab = "overview" | "courses" | "faculty" | "evaluations" | "alerts" | "facilities";
 
@@ -40,7 +51,45 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
   const [pickedInstructorId, setPickedInstructorId] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  // ---- Command Palette (⌘K) ----
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  // ---- Drag-and-Drop Reassign Board ----
+  const [isBoardOpen, setIsBoardOpen] = useState(false);
 
+  // ---- Toasts (confetti + feedback) ----
+  const [toasts, setToasts] = useState<
+    { id: string; type: "success" | "error"; title: string; message?: string }[]
+  >([]);
+
+  const pushToast = (toast: {
+    type: "success" | "error";
+    title: string;
+    message?: string;
+  }) => {
+    const id = `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((prev) => [...prev, { ...toast, id }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3500);
+  };
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsPaletteOpen((prev) => !prev);
+      }
+      if (e.key === "Escape") {
+        setIsPaletteOpen(false);
+        setIsBoardOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
   useEffect(() => {
     loadData();
   }, []);
@@ -81,6 +130,69 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
     return { totalGrades: total, passed, failed, passRate, failRate, avgGrade, avgLoad };
   }, [grades, courses.length, instructors.length]);
 
+  // ---------- PULSE GAUGE METRICS ----------
+  const pulseMetrics = useMemo(() => {
+    // 1. Pass rate (already computed, but re-exposed cleanly)
+    const passRate = stats.passRate;
+
+    // 2. Faculty load health: 100% = every instructor at ideal load (3 courses)
+    //    Overloaded (>4) or underloaded (<1) reduces the score.
+    const IDEAL_LOAD = 3;
+    const MAX_ACCEPTABLE_LOAD = 6;
+    let loadHealth = 0;
+    if (instructors.length > 0) {
+      const totalCourses = courses.length;
+      const avgLoad = totalCourses / instructors.length;
+      // 100 if avgLoad is at or below ideal; drops linearly to 0 at MAX
+      loadHealth =
+        avgLoad <= IDEAL_LOAD
+          ? 100
+          : Math.max(
+              0,
+              ((MAX_ACCEPTABLE_LOAD - avgLoad) /
+                (MAX_ACCEPTABLE_LOAD - IDEAL_LOAD)) *
+                100
+            );
+    }
+
+    // 3. Student satisfaction: avg rating out of 5 → normalized to %
+    const rated = evaluations.filter(
+      (e) => typeof e.overallRating === "number" && e.overallRating > 0
+    );
+    const avgRating =
+      rated.length > 0
+        ? rated.reduce((s, e) => s + (e.overallRating || 0), 0) / rated.length
+        : 0;
+    const satisfaction = (avgRating / 5) * 100;
+
+    // 4. Coverage: % of courses that have an instructor assigned
+    const assigned = courses.filter((c) => c.instructorId || c.instructorName).length;
+    const coverage = courses.length > 0 ? (assigned / courses.length) * 100 : 0;
+
+    return {
+      passRate: {
+        value: passRate,
+        label: "Pass Rate",
+        suffix: "%",
+      },
+      loadHealth: {
+        value: loadHealth,
+        label: "Load Health",
+        suffix: "%",
+      },
+      satisfaction: {
+        value: satisfaction,
+        label: "Satisfaction",
+        suffix: "%",
+      },
+      coverage: {
+        value: coverage,
+        label: "Coverage",
+        suffix: "%",
+      },
+    };
+  }, [stats.passRate, instructors.length, courses, evaluations]);
+
   // ---------- REASSIGN ----------
   const openReassign = (course: Course) => {
     setReassigning(course);
@@ -92,7 +204,11 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
 
   const handleSaveReassign = async () => {
     if (!reassigning || !pickedInstructorId) {
-      alert("Please select an instructor.");
+      pushToast({
+        type: "error",
+        title: "No instructor selected",
+        message: "Pick an instructor before confirming.",
+      });
       return;
     }
     setSaving(true);
@@ -124,15 +240,101 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
         `Assigned ${newInstructor.fullName} to ${reassigning.courseCode}`
       );
 
+      fireConfettiBurst();
+      pushToast({
+        type: "success",
+        title: "Reassignment saved",
+        message: `${newInstructor.fullName} → ${reassigning.courseCode}`,
+      });
+
       setReassigning(null);
       setPickedInstructorId("");
     } catch (err: any) {
       const detail = err?.response?.data
         ? JSON.stringify(err.response.data)
         : err?.message || "Unknown error";
-      alert("Failed to reassign faculty: " + detail);
+      pushToast({
+        type: "error",
+        title: "Reassignment failed",
+        message: detail,
+      });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ---------- BOARD REASSIGN (drag-and-drop) ----------
+  const boardReassign = async (
+    courseId: string,
+    instructorId: string | null
+  ): Promise<boolean> => {
+    const course = courses.find((c) => c.id === courseId);
+    if (!course) return false;
+
+    const previousCourses = courses;
+    const newInstructor = instructorId
+      ? instructors.find((i) => i.id === instructorId) || null
+      : null;
+
+    setCourses((prev) =>
+      prev.map((c) =>
+        c.id === courseId
+          ? {
+              ...c,
+              instructorId: newInstructor ? String(newInstructor.id) : "",
+              instructorName: newInstructor ? newInstructor.fullName : "",
+            }
+          : c
+      )
+    );
+
+    try {
+      if (newInstructor) {
+        const numericId = String(newInstructor.id).replace(/^U_/, "");
+        await CampusDatabase.updateCourse(courseId, {
+          instructor: Number(numericId) || numericId,
+          instructor_name: newInstructor.fullName,
+        });
+      } else {
+        await CampusDatabase.updateCourse(courseId, {
+          instructor: null,
+          instructor_name: "",
+        });
+      }
+
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "DEPARTMENT_HEAD",
+        "Reassign Faculty (Board)",
+        "Course",
+        courseId,
+        newInstructor
+          ? `Assigned ${newInstructor.fullName} to ${course.courseCode}`
+          : `Unassigned ${course.courseCode}`
+      );
+
+      fireConfettiBurst({ x: 0.8, y: 0.6, count: 45 });
+      pushToast({
+        type: "success",
+        title: newInstructor ? "Instructor assigned" : "Course unassigned",
+        message: newInstructor
+          ? `${newInstructor.fullName} → ${course.courseCode}`
+          : `${course.courseCode} moved to Unassigned`,
+      });
+
+      return true;
+    } catch (err: any) {
+      setCourses(previousCourses);
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      pushToast({
+        type: "error",
+        title: "Reassignment failed",
+        message: detail,
+      });
+      return false;
     }
   };
 
@@ -172,7 +374,36 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
     setActiveTab(id as Tab);
     setIsMobileNavOpen(false);
   };
-
+  // Called when a command palette item is selected
+  const handlePaletteAction = (action: {
+    type: "tab" | "course" | "instructor" | "reassign";
+    id: string;
+  }) => {
+    setIsPaletteOpen(false);
+    if (action.type === "tab") {
+      setActiveTab(action.id as Tab);
+      return;
+    }
+    if (action.type === "reassign") {
+      const course = courses.find((c) => c.id === action.id);
+      if (course) {
+        setActiveTab("courses");
+        openReassign(course);
+      }
+      return;
+    }
+    if (action.type === "course") {
+      const course = courses.find((c) => c.id === action.id);
+      if (course) {
+        setActiveTab("courses");
+        setSearchQuery(course.courseCode);
+      }
+      return;
+    }
+    if (action.type === "instructor") {
+      setActiveTab("faculty");
+    }
+  };
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans" id="dept_head_dashboard_main">
       <UniversityTopBar
@@ -373,9 +604,9 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6 }}
-                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6"
+                className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-8"
               >
-                <div className="space-y-3">
+                <div className="space-y-3 max-w-2xl">
                   <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm text-[11px] font-mono font-bold text-amber-300 tracking-wider">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     <span>ACADEMIC YEAR 2025/2026 • SEMESTER II</span>
@@ -383,21 +614,52 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                   <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-black text-white tracking-tight leading-tight">
                     Department Performance
                   </h1>
-                  <p className="text-slate-300/90 text-sm max-w-2xl leading-relaxed">
+                  <p className="text-slate-300/90 text-sm leading-relaxed">
                     Real-time academic intelligence — faculty workloads, student outcomes, and course delivery in one view.
                   </p>
+
+                  <motion.button
+                    onClick={loadData}
+                    disabled={loading}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    className="mt-2 inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md text-white text-xs font-bold transition disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                    <span>{loading ? "Syncing…" : "Sync Data"}</span>
+                  </motion.button>
                 </div>
 
-                <motion.button
-                  onClick={loadData}
-                  disabled={loading}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="self-start inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-md text-white text-xs font-bold transition disabled:opacity-50"
-                >
-                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-                  <span>{loading ? "Syncing…" : "Sync Data"}</span>
-                </motion.button>
+                {/* PULSE GAUGES */}
+                <PulseGaugesGrid
+                  loading={loading}
+                  metrics={[
+                    {
+                      value: pulseMetrics.passRate.value,
+                      label: pulseMetrics.passRate.label,
+                      suffix: pulseMetrics.passRate.suffix,
+                      accent: "emerald",
+                    },
+                    {
+                      value: pulseMetrics.loadHealth.value,
+                      label: pulseMetrics.loadHealth.label,
+                      suffix: pulseMetrics.loadHealth.suffix,
+                      accent: "blue",
+                    },
+                    {
+                      value: pulseMetrics.satisfaction.value,
+                      label: pulseMetrics.satisfaction.label,
+                      suffix: pulseMetrics.satisfaction.suffix,
+                      accent: "amber",
+                    },
+                    {
+                      value: pulseMetrics.coverage.value,
+                      label: pulseMetrics.coverage.label,
+                      suffix: pulseMetrics.coverage.suffix,
+                      accent: "violet",
+                    },
+                  ]}
+                />
               </motion.div>
             </div>
 
@@ -415,6 +677,7 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 sub={`${stats.avgLoad.toFixed(1)} avg load`}
                 accent="from-blue-500 to-indigo-600"
                 delay={0.05}
+                loading={loading}
               />
               <StatCard
                 icon={BookOpen}
@@ -423,6 +686,7 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 sub="Current catalogue"
                 accent="from-violet-500 to-purple-600"
                 delay={0.1}
+                loading={loading}
               />
               <StatCard
                 icon={Target}
@@ -431,6 +695,7 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 sub={`${stats.passed} of ${stats.totalGrades} students`}
                 accent="from-emerald-500 to-teal-600"
                 delay={0.15}
+                loading={loading}
               />
               <StatCard
                 icon={AlertTriangle}
@@ -439,6 +704,7 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 sub={`${stats.failed} flagged`}
                 accent="from-amber-500 to-orange-600"
                 delay={0.2}
+                loading={loading}
               />
             </div>
           </div>
@@ -455,6 +721,10 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                   transition={{ duration: 0.35 }}
                   className="space-y-6"
                 >
+                  {loading ? (
+                    <OverviewSkeleton />
+                  ) : (
+                    <>
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
@@ -591,6 +861,8 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                       </div>
                     </div>
                   </div>
+                    </>
+                  )}
                 </motion.div>
               )}
 
@@ -611,15 +883,29 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                         {courses.length} courses • {instructors.length} instructors
                       </p>
                     </div>
-                    <div className="relative w-full sm:w-72">
-                      <Search className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search courses…"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
-                      />
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setIsBoardOpen(true)}
+                        className="inline-flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-primary to-indigo-600 text-white text-xs font-bold shadow-md shadow-primary/30 hover:shadow-lg transition shrink-0"
+                      >
+                        <Layers className="w-4 h-4" />
+                        <span>Reassign Board</span>
+                      </motion.button>
+                      <button
+                        onClick={() => setIsPaletteOpen(true)}
+                        className="flex-1 sm:flex-none sm:w-56 flex items-center justify-between px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-500 hover:border-primary/40 hover:shadow-sm transition group"
+                      >
+                        <span className="flex items-center space-x-2">
+                          <Search className="w-4 h-4 text-slate-400" />
+                          <span>Search…</span>
+                        </span>
+                        <kbd className="hidden sm:inline-flex items-center space-x-0.5 px-1.5 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-[10px] font-mono font-bold text-slate-500 group-hover:border-primary/30">
+                          <Command className="w-2.5 h-2.5" />
+                          <span>K</span>
+                        </kbd>
+                      </button>
                     </div>
                   </div>
 
@@ -988,6 +1274,30 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
         )}
       </AnimatePresence>
 
+      {/* ==================== COMMAND PALETTE (⌘K) ==================== */}
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        courses={courses}
+        instructors={instructors}
+        navItems={[...navItems, ...smartItems]}
+        onAction={handlePaletteAction}
+        onOpenReassign={openReassign}
+      />
+
+      {/* ==================== REASSIGN BOARD (Drag & Drop) ==================== */}
+      {/* ==================== REASSIGN BOARD (Drag & Drop) ==================== */}
+      <ReassignBoard
+        isOpen={isBoardOpen}
+        onClose={() => setIsBoardOpen(false)}
+        courses={courses}
+        instructors={instructors}
+        onReassign={boardReassign}
+      />
+
+      {/* ==================== TOASTS ==================== */}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
       <AcademicFooter />
     </div>
   );
@@ -1002,6 +1312,7 @@ function StatCard({
   sub,
   accent,
   delay = 0,
+  loading = false,
 }: {
   icon: typeof Layout;
   label: string;
@@ -1009,6 +1320,7 @@ function StatCard({
   sub: string;
   accent: string;
   delay?: number;
+  loading?: boolean;
 }) {
   return (
     <motion.div
@@ -1031,16 +1343,24 @@ function StatCard({
           <span className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest">
             {label}
           </span>
-          <strong className="block text-2xl font-display font-bold text-slate-900 mt-1">
-            {value}
-          </strong>
-          <span className="block text-[11px] text-slate-500 mt-0.5">{sub}</span>
+          {loading ? (
+            <>
+              <Skeleton className="h-8 w-20 mt-1.5" />
+              <Skeleton className="h-3 w-28 mt-2" />
+            </>
+          ) : (
+            <>
+              <strong className="block text-2xl font-display font-bold text-slate-900 mt-1">
+                <AnimatedNumber value={value} delay={delay} />
+              </strong>
+              <span className="block text-[11px] text-slate-500 mt-0.5">{sub}</span>
+            </>
+          )}
         </div>
       </div>
     </motion.div>
   );
 }
-
 function DistributionBar({
   label,
   value,
@@ -1146,3 +1466,1026 @@ function RatingBadge({ average }: { average: number | null }) {
     </span>
   );
 } 
+/* ==================== COMMAND PALETTE (⌘K) ==================== */
+
+type PaletteAction = {
+  type: "tab" | "course" | "instructor" | "reassign";
+  id: string;
+};
+
+type PaletteItem = {
+  key: string;
+  group: "Actions" | "Navigate" | "Courses" | "Instructors";
+  label: string;
+  sub?: string;
+  icon: typeof Layout;
+  action: PaletteAction;
+};
+
+function CommandPalette({
+  isOpen,
+  onClose,
+  courses,
+  instructors,
+  navItems,
+  onAction,
+  onOpenReassign,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  courses: Course[];
+  instructors: User[];
+  navItems: { id: string; label: string; Icon: typeof Layout }[];
+  onAction: (action: PaletteAction) => void;
+  onOpenReassign: (course: Course) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Focus input + reset when opened
+  useEffect(() => {
+    if (isOpen) {
+      setQuery("");
+      setActiveIndex(0);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [isOpen]);
+
+  // Build the flat, ordered list of items
+  const items = useMemo<PaletteItem[]>(() => {
+    const q = query.trim().toLowerCase();
+    const match = (...fields: (string | undefined)[]) =>
+      !q || fields.some((f) => (f || "").toLowerCase().includes(q));
+
+    const navResults: PaletteItem[] = navItems
+      .filter((n) => match(n.label))
+      .map((n) => ({
+        key: `nav-${n.id}`,
+        group: "Navigate",
+        label: n.label,
+        icon: n.Icon,
+        action: { type: "tab", id: n.id },
+      }));
+
+    const courseResults: PaletteItem[] = courses
+      .filter((c) => match(c.courseCode, c.courseTitle, c.instructorName))
+      .slice(0, 6)
+      .map((c) => ({
+        key: `course-${c.id}`,
+        group: "Courses",
+        label: c.courseTitle,
+        sub: `${c.courseCode} · ${c.instructorName || "Unassigned"}`,
+        icon: BookOpen,
+        action: { type: "course", id: c.id },
+      }));
+
+    const instructorResults: PaletteItem[] = instructors
+      .filter((i) => match(i.fullName, i.specialization, i.department))
+      .slice(0, 6)
+      .map((i) => ({
+        key: `inst-${i.id}`,
+        group: "Instructors",
+        label: i.fullName,
+        sub: i.specialization || i.department || "Faculty",
+        icon: UserIcon,
+        action: { type: "instructor", id: i.id },
+      }));
+
+    const reassignResults: PaletteItem[] = courses
+      .filter((c) => match(c.courseCode, c.courseTitle))
+      .slice(0, 4)
+      .map((c) => ({
+        key: `reassign-${c.id}`,
+        group: "Actions",
+        label: `Reassign ${c.courseCode}`,
+        sub: c.instructorName ? `Currently: ${c.instructorName}` : "Unassigned",
+        icon: Zap,
+        action: { type: "reassign", id: c.id },
+      }));
+
+    return [...reassignResults, ...navResults, ...courseResults, ...instructorResults];
+  }, [query, courses, instructors, navItems]);
+
+  // Clamp activeIndex when list shrinks
+  useEffect(() => {
+    if (activeIndex >= items.length) {
+      setActiveIndex(items.length > 0 ? items.length - 1 : 0);
+    }
+  }, [items.length, activeIndex]);
+
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, items.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const item = items[activeIndex];
+      if (item) {
+        onAction(item.action);
+        if (item.action.type === "reassign") {
+          const c = courses.find((x) => x.id === item.action.id);
+          if (c) onOpenReassign(c);
+        }
+      }
+    } else if (e.key === "Escape") {
+      onClose();
+    }
+  };
+
+  // Scroll active item into view
+  useEffect(() => {
+    const el = listRef.current?.querySelector<HTMLElement>(
+      `[data-idx="${activeIndex}"]`
+    );
+    el?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex]);
+
+  // Group items for rendering, but keep flat index mapping
+  const grouped = useMemo(() => {
+    const groups: { name: string; entries: { item: PaletteItem; index: number }[] }[] = [];
+    items.forEach((item, index) => {
+      let g = groups.find((x) => x.name === item.group);
+      if (!g) {
+        g = { name: item.group, entries: [] };
+        groups.push(g);
+      }
+      g.entries.push({ item, index });
+    });
+    return groups;
+  }, [items]);
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center pt-[10vh] px-4">
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+          />
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: -10 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: -10 }}
+            transition={{ type: "spring", damping: 28, stiffness: 320 }}
+            className="relative w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
+          >
+            {/* Input row */}
+            <div className="flex items-center space-x-3 px-4 py-3.5 border-b border-slate-100">
+              <Search className="w-4 h-4 text-slate-400 shrink-0" />
+              <input
+                ref={inputRef}
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value);
+                  setActiveIndex(0);
+                }}
+                onKeyDown={handleKeyDown}
+                placeholder="Search courses, faculty, actions…"
+                className="flex-1 bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none"
+              />
+              <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded-md border border-slate-200 bg-slate-50 text-[10px] font-mono font-bold text-slate-500">
+                ESC
+              </kbd>
+            </div>
+
+            {/* Results */}
+            <div ref={listRef} className="max-h-[55vh] overflow-y-auto p-2">
+              {items.length === 0 && (
+                <div className="text-center py-10 text-sm text-slate-400">
+                  No results for "<span className="font-semibold text-slate-600">{query}</span>"
+                </div>
+              )}
+
+              {grouped.map((group) => (
+                <div key={group.name} className="mb-1">
+                  <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    {group.name}
+                  </div>
+                  {group.entries.map(({ item, index }) => {
+                    const isActive = index === activeIndex;
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.key}
+                        data-idx={index}
+                        onMouseEnter={() => setActiveIndex(index)}
+                        onClick={() => {
+                          onAction(item.action);
+                          if (item.action.type === "reassign") {
+                            const c = courses.find((x) => x.id === item.action.id);
+                            if (c) onOpenReassign(c);
+                          }
+                        }}
+                        className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-left transition ${
+                          isActive
+                            ? "bg-primary text-white shadow-sm"
+                            : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <div
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                            isActive
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          <Icon className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold truncate">
+                            {item.label}
+                          </div>
+                          {item.sub && (
+                            <div
+                              className={`text-[11px] font-mono truncate ${
+                                isActive ? "text-white/70" : "text-slate-400"
+                              }`}
+                            >
+                              {item.sub}
+                            </div>
+                          )}
+                        </div>
+                        {isActive && (
+                          <CornerDownLeft className="w-3.5 h-3.5 text-white/80 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+
+            {/* Footer hints */}
+            <div className="flex items-center justify-between px-4 py-2.5 border-t border-slate-100 bg-slate-50/60 text-[10px] font-mono text-slate-500">
+              <div className="flex items-center space-x-3">
+                <span className="flex items-center space-x-1">
+                  <kbd className="px-1.5 py-0.5 rounded border border-slate-200 bg-white">↑</kbd>
+                  <kbd className="px-1.5 py-0.5 rounded border border-slate-200 bg-white">↓</kbd>
+                  <span>navigate</span>
+                </span>
+                <span className="flex items-center space-x-1">
+                  <kbd className="px-1.5 py-0.5 rounded border border-slate-200 bg-white">↵</kbd>
+                  <span>select</span>
+                </span>
+              </div>
+              <span className="flex items-center space-x-1">
+                <Command className="w-2.5 h-2.5" />
+                <span>K to toggle</span>
+              </span>
+            </div>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+/* ==================== ANIMATED NUMBER ==================== */
+
+/**
+ * Renders a number that counts up from 0 to its target value.
+ * Understands strings like "12", "78.4%", "-3", "1,204".
+ * Preserves the prefix/suffix (e.g. "%", ",", "pts").
+ */
+function AnimatedNumber({
+  value,
+  delay = 0,
+  duration = 1.1,
+}: {
+  value: string | number;
+  delay?: number;
+  duration?: number;
+}) {
+  // Split the input into: prefix, numeric part, suffix
+  const raw = String(value);
+  const match = raw.match(/^([^\d.-]*)(-?[\d.,]+)(.*)$/);
+
+  const prefix = match?.[1] ?? "";
+  const numericStr = match?.[2] ?? raw;
+  const suffix = match?.[3] ?? "";
+
+  const hasComma = numericStr.includes(",");
+  const cleaned = numericStr.replace(/,/g, "");
+  const target = parseFloat(cleaned);
+  const decimals = cleaned.includes(".") ? cleaned.split(".")[1].length : 0;
+
+  const isNumeric = Number.isFinite(target);
+
+  const motionVal = useMotionValue(0);
+  const display = useTransform(motionVal, (latest) => {
+    if (!isNumeric) return numericStr;
+    const fixed = latest.toFixed(decimals);
+    return hasComma
+      ? Number(fixed).toLocaleString("en-US", {
+          minimumFractionDigits: decimals,
+          maximumFractionDigits: decimals,
+        })
+      : fixed;
+  });
+
+  // Re-run animation whenever the target value or delay changes
+  useEffect(() => {
+    if (!isNumeric) return;
+    const controls = animate(motionVal, target, {
+      duration,
+      delay,
+      ease: [0.22, 1, 0.36, 1], // easeOutQuint — feels premium
+    });
+    return () => controls.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target, delay, duration, isNumeric]);
+
+  if (!isNumeric) {
+    return <span>{raw}</span>;
+  }
+
+  return (
+    <span className="tabular-nums inline-flex items-baseline">
+      {prefix && <span>{prefix}</span>}
+      <motion.span>{display}</motion.span>
+      {suffix && <span>{suffix}</span>}
+    </span>
+  );
+}
+/* ==================== SKELETON PRIMITIVES ==================== */
+
+function Skeleton({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`relative overflow-hidden bg-slate-200/70 rounded-md ${className}`}
+    >
+      <motion.div
+        initial={{ x: "-100%" }}
+        animate={{ x: "100%" }}
+        transition={{
+          repeat: Infinity,
+          duration: 1.4,
+          ease: "linear",
+        }}
+        className="absolute inset-0 bg-gradient-to-r from-transparent via-white/70 to-transparent"
+      />
+    </div>
+  );
+}
+/* ==================== OVERVIEW SKELETON ==================== */
+
+function OverviewSkeleton() {
+  return (
+    <>
+      {/* Grade distribution skeleton */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <Skeleton className="w-5 h-5 rounded" />
+            <Skeleton className="h-5 w-56" />
+          </div>
+          <Skeleton className="h-3 w-16" />
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <Skeleton className="h-2.5 w-full rounded-full" />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <Skeleton className="h-2.5 w-full rounded-full" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-4 pt-2">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="flex items-center space-x-3 p-3 rounded-xl bg-slate-50 border border-slate-100"
+            >
+              <Skeleton className="w-9 h-9 rounded-lg shrink-0" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-2.5 w-16" />
+                <Skeleton className="h-3.5 w-12" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Two-column lists skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {[0, 1].map((col) => (
+          <div
+            key={col}
+            className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="h-3 w-14" />
+            </div>
+            <div className="space-y-3">
+              {[0, 1, 2, 3].map((row) => (
+                <div
+                  key={row}
+                  className="flex items-center justify-between py-2.5 border-b border-slate-100 last:border-0"
+                >
+                  <div className="flex items-center space-x-3">
+                    <Skeleton className="w-9 h-9 rounded-xl shrink-0" />
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-3 w-28" />
+                      <Skeleton className="h-2.5 w-20" />
+                    </div>
+                  </div>
+                  <Skeleton className="h-6 w-16 rounded-lg" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+/* ==================== PULSE GAUGES ==================== */
+
+type GaugeAccent = "emerald" | "blue" | "amber" | "violet";
+
+const GAUGE_ACCENTS: Record<
+  GaugeAccent,
+  { stroke: string; glow: string; text: string; track: string }
+> = {
+  emerald: {
+    stroke: "#34d399",
+    glow: "rgba(52, 211, 153, 0.45)",
+    text: "text-emerald-300",
+    track: "rgba(52, 211, 153, 0.15)",
+  },
+  blue: {
+    stroke: "#60a5fa",
+    glow: "rgba(96, 165, 250, 0.45)",
+    text: "text-blue-300",
+    track: "rgba(96, 165, 250, 0.15)",
+  },
+  amber: {
+    stroke: "#fbbf24",
+    glow: "rgba(251, 191, 36, 0.45)",
+    text: "text-amber-300",
+    track: "rgba(251, 191, 36, 0.15)",
+  },
+  violet: {
+    stroke: "#a78bfa",
+    glow: "rgba(167, 139, 250, 0.45)",
+    text: "text-violet-300",
+    track: "rgba(167, 139, 250, 0.15)",
+  },
+};
+
+function PulseGauge({
+  value,
+  label,
+  suffix = "%",
+  accent,
+  delay = 0,
+  size = 92,
+  stroke = 8,
+}: {
+  value: number;
+  label: string;
+  suffix?: string;
+  accent: GaugeAccent;
+  delay?: number;
+  size?: number;
+  stroke?: number;
+}) {
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(100, value));
+  const offset = circumference * (1 - clamped / 100);
+
+  const theme = GAUGE_ACCENTS[accent];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12, scale: 0.94 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.55, delay, type: "spring", stiffness: 140 }}
+      className="flex flex-col items-center"
+    >
+      <div className="relative" style={{ width: size, height: size }}>
+        {/* Outer glow */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0.9, 0.55] }}
+          transition={{ duration: 2.4, delay: delay + 0.3, repeat: Infinity, repeatType: "reverse" }}
+          className="absolute inset-0 rounded-full blur-xl"
+          style={{ background: theme.glow }}
+        />
+
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          className="relative -rotate-90"
+        >
+          {/* Track */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={theme.track}
+            strokeWidth={stroke}
+          />
+          {/* Progress arc */}
+          <motion.circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={theme.stroke}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            initial={{ strokeDashoffset: circumference }}
+            animate={{ strokeDashoffset: offset }}
+            transition={{
+              duration: 1.4,
+              delay: delay + 0.15,
+              ease: [0.22, 1, 0.36, 1],
+            }}
+            style={{ filter: `drop-shadow(0 0 6px ${theme.glow})` }}
+          />
+        </svg>
+
+        {/* Center value */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span
+            className={`font-display font-black text-base tabular-nums ${theme.text}`}
+          >
+            <AnimatedNumber value={`${Math.round(clamped)}${suffix}`} delay={delay + 0.2} duration={1.2} />
+          </span>
+        </div>
+      </div>
+      <span className="mt-2 text-[10px] font-mono font-bold uppercase tracking-wider text-white/60">
+        {label}
+      </span>
+    </motion.div>
+  );
+}
+
+function PulseGaugesGrid({
+  metrics,
+  loading,
+}: {
+  metrics: {
+    value: number;
+    label: string;
+    suffix?: string;
+    accent: GaugeAccent;
+  }[];
+  loading: boolean;
+}) {
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-3 shrink-0">
+      {metrics.map((m, i) => (
+        <PulseGauge
+          key={m.label}
+          value={loading ? 0 : m.value}
+          label={m.label}
+          suffix={m.suffix}
+          accent={m.accent}
+          delay={0.15 + i * 0.1}
+          size={86}
+          stroke={7}
+        />
+      ))}
+    </div>
+  );
+}
+/* ==================== REASSIGN BOARD (Drag & Drop) ==================== */
+
+function ReassignBoard({
+  isOpen,
+  onClose,
+  courses,
+  instructors,
+  onReassign,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  courses: Course[];
+  instructors: User[];
+  onReassign: (courseId: string, instructorId: string | null) => Promise<boolean>;
+}) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [hoverColumnId, setHoverColumnId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+
+  const MAX_LOAD = 5;
+
+  const unassigned = courses.filter((c) => !c.instructorId && !c.instructorName);
+  const coursesFor = (inst: User) =>
+    courses.filter(
+      (c) =>
+        String(c.instructorId).replace(/^U_/, "") ===
+        String(inst.id).replace(/^U_/, "")
+    );
+
+  const handleDrop = async (targetInstructorId: string | null) => {
+    if (!draggingId) return;
+    setHoverColumnId(null);
+
+    const course = courses.find((c) => c.id === draggingId);
+    if (!course) return;
+
+    const currentInstId = course.instructorId
+      ? String(course.instructorId).replace(/^U_/, "")
+      : "";
+    const targetId = targetInstructorId
+      ? String(targetInstructorId).replace(/^U_/, "")
+      : "";
+
+    if (currentInstId === targetId) {
+      setDraggingId(null);
+      return;
+    }
+
+    setSavingId(draggingId);
+    setDraggingId(null);
+    await onReassign(course.id, targetInstructorId);
+    setSavingId(null);
+  };
+
+  const columns = [
+    { id: null as string | null, name: "Unassigned", subtitle: undefined, courses: unassigned, load: unassigned.length },
+    ...instructors.map((inst) => {
+      const list = coursesFor(inst);
+      return {
+        id: inst.id as string | null,
+        name: inst.fullName,
+        subtitle: inst.specialization,
+        courses: list,
+        load: list.length,
+      };
+    }),
+  ];
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[55] flex flex-col bg-slate-950/85 backdrop-blur-md"
+        >
+          {/* Header */}
+          <motion.div
+            initial={{ y: -20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -20, opacity: 0 }}
+            transition={{ type: "spring", damping: 26, stiffness: 300 }}
+            className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-900 border-b border-slate-800 shrink-0"
+          >
+            <div className="flex items-center space-x-3 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center shadow-lg shadow-primary/30 shrink-0">
+                <Layers className="w-4 h-4 text-white" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-display font-bold text-white text-sm sm:text-base truncate">
+                  Faculty Reassignment Board
+                </h2>
+                <p className="text-[10px] sm:text-xs font-mono text-slate-400 truncate">
+                  Drag a course card onto an instructor column · Changes save instantly
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 flex items-center justify-center text-slate-300 transition shrink-0"
+              aria-label="Close board"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </motion.div>
+
+          {/* Columns */}
+          <div className="flex-1 overflow-x-auto overflow-y-hidden p-4 sm:p-6">
+            <div className="flex items-stretch gap-3 sm:gap-4 h-full min-w-max">
+              {columns.map((col, i) => {
+                const isOverloaded = col.load >= MAX_LOAD;
+                const isWarn = col.load === MAX_LOAD - 1;
+                const isHover = hoverColumnId === col.id;
+                const isUnassigned = col.id === null;
+
+                return (
+                  <motion.div
+                    key={col.id ?? "__unassigned__"}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setHoverColumnId(col.id);
+                    }}
+                    onDragLeave={() => {
+                      if (hoverColumnId === col.id) setHoverColumnId(null);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      handleDrop(col.id);
+                    }}
+                    className={`relative flex flex-col w-64 shrink-0 rounded-2xl border transition-colors overflow-hidden ${
+                      isUnassigned
+                        ? "bg-slate-900/60 border-slate-700"
+                        : isHover
+                        ? "bg-emerald-950/40 border-emerald-500/60"
+                        : "bg-slate-900/60 border-slate-800"
+                    }`}
+                  >
+                    {/* Column header */}
+                    <div className="p-3 border-b border-slate-800 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center space-x-1.5">
+                          <span className="text-xs font-bold text-white truncate">
+                            {col.name}
+                          </span>
+                          {!isUnassigned && isOverloaded && (
+                            <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
+                          )}
+                          {!isUnassigned && isWarn && (
+                            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                          )}
+                        </div>
+                        {col.subtitle && (
+                          <p className="text-[10px] font-mono text-slate-500 truncate">
+                            {col.subtitle}
+                          </p>
+                        )}
+                      </div>
+                      <span
+                        className={`shrink-0 inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] font-mono font-bold ${
+                          isUnassigned
+                            ? "bg-slate-800 text-slate-400 border-slate-700"
+                            : isOverloaded
+                            ? "bg-red-500/15 text-red-300 border-red-500/40"
+                            : isWarn
+                            ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+                            : "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                        }`}
+                      >
+                        {col.load}
+                        {!isUnassigned && `/${MAX_LOAD}`}
+                      </span>
+                    </div>
+
+                    {/* Course cards */}
+                    <div className="p-2 flex-1 space-y-2 overflow-y-auto min-h-[200px]">
+                      {col.courses.map((c) => {
+                        const isSaving = savingId === c.id;
+                        const isDragging = draggingId === c.id;
+                        return (
+                          <motion.div
+                            key={c.id}
+                            layout
+                            draggable={!isSaving}
+                            onDragStart={(e) => {
+                              if (isSaving) {
+                                e.preventDefault();
+                                return;
+                              }
+                              setDraggingId(c.id);
+                              try {
+                                (e as any).dataTransfer?.setData("text/plain", c.id);
+                              } catch {}
+                            }}
+                            onDragEnd={() => {
+                              setDraggingId(null);
+                              setHoverColumnId(null);
+                            }}
+                            whileDrag={{ scale: 1.04, rotate: 2, zIndex: 50 }}
+                            whileHover={{ y: -1 }}
+                            className={`group relative bg-slate-800 border border-slate-700 rounded-xl p-2.5 cursor-grab active:cursor-grabbing transition shadow-sm hover:shadow-md hover:border-primary/40 ${
+                              isDragging
+                                ? "opacity-40 border-dashed"
+                                : isSaving
+                                ? "opacity-70 cursor-wait"
+                                : ""
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <span className="inline-block text-[9px] font-mono font-bold text-primary bg-primary/10 border border-primary/30 px-1.5 py-0.5 rounded">
+                                  {c.courseCode}
+                                </span>
+                                <p className="text-[11px] text-slate-300 font-medium truncate mt-1.5">
+                                  {c.courseTitle}
+                                </p>
+                              </div>
+                              {isSaving ? (
+                                <RefreshCw className="w-3 h-3 text-amber-400 animate-spin shrink-0 mt-1" />
+                              ) : (
+                                <GripVertical className="w-3.5 h-3.5 text-slate-500 group-hover:text-slate-300 shrink-0 mt-0.5 transition" />
+                              )}
+                            </div>
+                            <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-700/60">
+                              <span className="text-[9px] font-mono text-slate-500">
+                                {c.creditHours ?? "?"} CR
+                              </span>
+                              {!isUnassigned && (
+                                <button
+                                  onClick={() => handleDrop(null)}
+                                  className="text-[9px] font-mono font-bold text-slate-500 hover:text-red-400 transition"
+                                  title="Unassign"
+                                >
+                                  × unassign
+                                </button>
+                              )}
+                            </div>
+                          </motion.div>
+                        );
+                      })}
+
+                      {col.courses.length === 0 && (
+                        <div
+                          className={`flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed transition ${
+                            isHover
+                              ? "border-emerald-500/60 bg-emerald-500/5"
+                              : "border-slate-700/60"
+                          }`}
+                        >
+                          <p className="text-[10px] font-mono text-slate-500">
+                            {isHover ? "Drop here" : "Empty"}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+
+                    {isHover && (
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-emerald-400/40"
+                      />
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+/* ==================== CONFETTI ==================== */
+
+function fireConfettiBurst({
+  x = 0.5,
+  y = 0.7,
+  count = 70,
+}: {
+  x?: number;
+  y?: number;
+  count?: number;
+} = {}) {
+  const palette = ["#3b82f6", "#8b5cf6", "#10b981", "#fbbf24", "#a78bfa"];
+
+  confetti({
+    particleCount: count,
+    spread: 70,
+    origin: { x, y },
+    colors: palette,
+    scalar: 0.95,
+    ticks: 180,
+    gravity: 0.9,
+    decay: 0.92,
+    startVelocity: 45,
+    zIndex: 9999,
+  });
+
+  setTimeout(() => {
+    confetti({
+      particleCount: Math.floor(count * 0.55),
+      spread: 110,
+      origin: { x, y },
+      colors: palette,
+      scalar: 0.7,
+      ticks: 140,
+      gravity: 0.8,
+      zIndex: 9999,
+    });
+  }, 120);
+}
+
+/* ==================== TOAST STACK ==================== */
+
+type ToastShape = {
+  id: string;
+  type: "success" | "error";
+  title: string;
+  message?: string;
+};
+
+function ToastStack({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ToastShape[];
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <div className="fixed top-4 right-4 z-[70] flex flex-col items-end space-y-2 pointer-events-none">
+      <AnimatePresence>
+        {toasts.map((t) => {
+          const isSuccess = t.type === "success";
+          const Icon = isSuccess ? CheckCircle2 : AlertCircle;
+          return (
+            <motion.div
+              key={t.id}
+              layout
+              initial={{ opacity: 0, x: 60, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 60, scale: 0.9 }}
+              transition={{ type: "spring", damping: 24, stiffness: 300 }}
+              className="pointer-events-auto w-full max-w-sm bg-white rounded-2xl shadow-2xl shadow-slate-900/10 border border-slate-200 overflow-hidden"
+            >
+              <div
+                className={`h-1 w-full ${
+                  isSuccess
+                    ? "bg-gradient-to-r from-emerald-400 to-teal-500"
+                    : "bg-gradient-to-r from-red-400 to-orange-500"
+                }`}
+              />
+
+              <div className="p-3.5 flex items-start space-x-3">
+                <motion.div
+                  initial={{ scale: 0, rotate: -90 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{
+                    type: "spring",
+                    damping: 12,
+                    stiffness: 260,
+                    delay: 0.08,
+                  }}
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    isSuccess
+                      ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+                      : "bg-red-50 text-red-600 border border-red-200"
+                  }`}
+                >
+                  <Icon className="w-5 h-5" />
+                </motion.div>
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center space-x-1.5">
+                    <h4 className="text-sm font-bold text-slate-900 truncate">
+                      {t.title}
+                    </h4>
+                    {isSuccess && (
+                      <PartyPopper className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    )}
+                  </div>
+                  {t.message && (
+                    <p className="text-[11px] text-slate-500 font-mono mt-0.5 line-clamp-2 break-words">
+                      {t.message}
+                    </p>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => onDismiss(t.id)}
+                  className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition shrink-0"
+                  aria-label="Dismiss"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <motion.div
+                initial={{ width: "100%" }}
+                animate={{ width: "0%" }}
+                transition={{ duration: 3.5, ease: "linear" }}
+                className={`h-0.5 ${
+                  isSuccess ? "bg-emerald-400/70" : "bg-red-400/70"
+                }`}
+              />
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+    </div>
+  );
+}
