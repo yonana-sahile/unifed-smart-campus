@@ -28,6 +28,7 @@ import {
   UserCircle2,
   RefreshCw,
   Home,
+  Trash2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Toaster, toast } from "sonner";
@@ -136,6 +137,9 @@ const [studentsPerPage, setStudentsPerPage] = useState(10);
 const [jumpToPage, setJumpToPage] = useState("");
 const [editingStudent, setEditingStudent] = useState<User | null>(null);
 const [saving, setSaving] = useState(false);
+const [deletingStudent, setDeletingStudent] = useState<User | null>(null);
+const [deleteConfirmText, setDeleteConfirmText] = useState("");
+const [deleting, setDeleting] = useState(false);
 const [viewingStudent, setViewingStudent] = useState<User | null>(null);
 // ── Load state (NEW) ─────────────────────────────────────────
 const [loading, setLoading] = useState(true);
@@ -247,6 +251,58 @@ const loadData = async () => {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ── DELETE a student ───────────────────────────────────────
+  const handleDeleteStudent = async () => {
+    if (!deletingStudent) return;
+    if (deleteConfirmText.trim().toUpperCase() !== "DELETE") {
+      toast.error("Please type DELETE to confirm");
+      return;
+    }
+
+    setDeleting(true);
+    const tId = toast.loading(`Deleting ${deletingStudent.fullName}…`);
+
+    try {
+      const numericId = String(deletingStudent.id).replace(/^U_/, "");
+
+      await CampusDatabase.deleteUser(numericId);
+
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "REGISTRAR",
+        "Delete Student Record",
+        "User",
+        deletingStudent.id,
+        `Deleted student: ${deletingStudent.fullName} (${deletingStudent.studentId || "no ID"})`
+      );
+
+      toast.success("Student deleted", {
+        id: tId,
+        description: `${deletingStudent.fullName} has been removed.`,
+        duration: 4000,
+      });
+
+      setDeletingStudent(null);
+      setDeleteConfirmText("");
+      await loadData();
+    } catch (error: any) {
+      console.error("Failed to delete student:", error);
+      const detail =
+        error?.response?.data?.detail ||
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unknown error";
+      toast.error("Couldn't delete student", {
+        id: tId,
+        description: detail,
+        duration: 8000,
+      });
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -1357,13 +1413,27 @@ const navItems = [
 
                             {/* ACTION — hover reveal */}
                             <td className="px-5 py-4 text-right">
-                              <button
-                                onClick={() => setEditingStudent(st)}
-                               className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 hover:bg-slate-100 hover:text-slate-900 transition-all"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                                <span>Edit</span>
-                              </button>
+                              <div className="inline-flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => setEditingStudent(st)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all"
+                                  title="Edit student"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Edit</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setDeletingStudent(st);
+                                    setDeleteConfirmText("");
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-400 hover:bg-red-50 hover:text-red-700 transition-all"
+                                  title="Delete student"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  <span className="hidden sm:inline">Delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -1949,6 +2019,114 @@ const navItems = [
                             <>
                               <Save className="w-3.5 h-3.5" />
                               <span>Save Changes</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
+
+              {/* ============ DELETE CONFIRMATION MODAL (NEW) ============ */}
+              <AnimatePresence>
+                {deletingStudent && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      onClick={() => {
+                        if (deleting) return;
+                        setDeletingStudent(null);
+                        setDeleteConfirmText("");
+                      }}
+                      className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm"
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.96, y: 12 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.96, y: 12 }}
+                      transition={{ type: "spring", damping: 28, stiffness: 320, mass: 0.8 }}
+                      className="relative bg-white w-full max-w-md rounded-2xl shadow-[0_24px_64px_-12px_rgba(15,23,42,0.25)] overflow-hidden"
+                    >
+                      {/* Header */}
+                      <div className="px-6 py-5 border-b border-slate-200 flex items-start gap-4">
+                        <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                          <Trash2 className="w-5 h-5 text-red-600" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-display text-lg text-slate-900 leading-tight">
+                            Delete student record?
+                          </h3>
+                          <p className="text-xs text-slate-500 mt-1">
+                            This action cannot be undone.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Body */}
+                      <div className="px-6 py-5 space-y-4">
+                        <div className="bg-red-50 border border-red-100 rounded-lg px-4 py-3">
+                          <p className="text-sm text-red-900 font-medium truncate">
+                            {deletingStudent.fullName || "Unnamed Student"}
+                          </p>
+                          <p className="text-xs font-mono text-red-700 mt-0.5">
+                            {deletingStudent.studentId || "No ID"} ·{" "}
+                            {deletingStudent.program || "No program"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                            Type <span className="font-mono text-red-600">DELETE</span> to confirm
+                          </label>
+                          <input
+                            type="text"
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                            placeholder="DELETE"
+                            autoFocus
+                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-900 font-mono placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition"
+                          />
+                        </div>
+
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          The record will be permanently removed. Audit history is retained for compliance.
+                        </p>
+                      </div>
+
+                      {/* Footer */}
+                      <div className="px-6 py-4 border-t border-slate-200 bg-[#FAFAF9] flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => {
+                            if (deleting) return;
+                            setDeletingStudent(null);
+                            setDeleteConfirmText("");
+                          }}
+                          disabled={deleting}
+                          className="px-4 py-2 rounded-lg text-sm font-medium text-slate-600 hover:bg-white hover:border-slate-200 border border-transparent transition disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={handleDeleteStudent}
+                          disabled={
+                            deleting ||
+                            deleteConfirmText.trim().toUpperCase() !== "DELETE"
+                          }
+                          className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                          {deleting ? (
+                            <>
+                              <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                              <span>Deleting…</span>
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Delete permanently</span>
                             </>
                           )}
                         </button>
