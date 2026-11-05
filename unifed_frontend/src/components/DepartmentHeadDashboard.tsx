@@ -2489,3 +2489,24 @@ function ToastStack({
     </div>
   );
 }
+/* ==================== UPGRADE HELPERS ==================== */
+
+/**
+ * Strips a "U_" prefix from an id so numeric ids can be compared reliably.
+ * "U_5" → "5", "5" → "5", null → ""
+ */
+function normId(id: string | number | null | undefined): string {
+  return String(id ?? "").replace(/^U_/, "");
+}
+
+/**
+ * Computes the academic year label from today's date.
+ * Academic year starts in September.
+ * Example: Nov 2024 → "2024/2025"
+ */
+function academicYearLabel(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0 = Jan, 8 = Sep
+  const startYear = month >= 8 ? year : year - 1;
+  return `${startYear}/${startYear + 1}`;
+}
