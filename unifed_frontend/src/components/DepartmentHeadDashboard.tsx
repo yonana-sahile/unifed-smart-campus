@@ -37,7 +37,20 @@ import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "
 import confetti from "canvas-confetti";
 
 type Tab = "overview" | "courses" | "faculty" | "evaluations" | "alerts" | "facilities";
+type InsightSeverity = "critical" | "warning" | "info";
 
+type InsightAction =
+  | { kind: "tab"; target: string }
+  | { kind: "board" };
+
+type Insight = {
+  id: string;
+  severity: InsightSeverity;
+  title: string;
+  detail: string;
+  icon: "unassigned" | "overload" | "idle" | "lowRating" | "lowPass";
+  action?: InsightAction;
+};
 export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -2509,4 +2522,313 @@ function academicYearLabel(now: Date = new Date()): string {
   const month = now.getMonth(); // 0 = Jan, 8 = Sep
   const startYear = month >= 8 ? year : year - 1;
   return `${startYear}/${startYear + 1}`;
+}
+/* ==================== INSIGHTS ENGINE ==================== */
+
+function buildInsights({
+  courses,
+  instructors,
+  grades,
+  evaluations,
+}: {
+  courses: Course[];
+  instructors: User[];
+  grades: Grade[];
+  evaluations: InstructorEvaluation[];
+}): Insight[] {
+  const out: Insight[] = [];
+
+  // 1. Unassigned courses
+  const unassigned = courses.filter((c) => !c.instructorId && !c.instructorName);
+  if (unassigned.length > 0) {
+    out.push({
+      id: "unassigned-courses",
+      severity: unassigned.length >= 3 ? "critical" : "warning",
+      title:
+        unassigned.length === 1
+          ? "1 course has no instructor"
+          : `${unassigned.length} courses have no instructor`,
+      detail: unassigned
+        .slice(0, 3)
+        .map((c) => c.courseCode)
+        .join(", ") + (unassigned.length > 3 ? "…" : ""),
+      icon: "unassigned",
+      action: { kind: "board" },
+    });
+  }
+
+  // 2. Overloaded instructors (>= 5 courses)
+  const overloaded = instructors
+    .map((inst) => {
+      const load = courses.filter(
+        (c) => normId(c.instructorId) === normId(inst.id)
+      ).length;
+      return { inst, load };
+    })
+    .filter((x) => x.load >= 5);
+
+  if (overloaded.length > 0) {
+    out.push({
+      id: "overloaded-instructors",
+      severity: "critical",
+      title:
+        overloaded.length === 1
+          ? "1 instructor is overloaded"
+          : `${overloaded.length} instructors are overloaded`,
+      detail: overloaded
+        .map((x) => `${x.inst.fullName} (${x.load})`)
+        .slice(0, 3)
+        .join(" · "),
+      icon: "overload",
+      action: { kind: "tab", target: "faculty" },
+    });
+  }
+
+  // 3. Idle instructors (0 courses)
+  if (courses.length > 0) {
+    const idle = instructors.filter(
+      (inst) =>
+        courses.filter((c) => normId(c.instructorId) === normId(inst.id)).length === 0
+    );
+    if (idle.length > 0) {
+      out.push({
+        id: "idle-instructors",
+        severity: "info",
+        title:
+          idle.length === 1
+            ? "1 instructor has no courses"
+            : `${idle.length} instructors have no courses`,
+        detail: idle
+          .map((i) => i.fullName)
+          .slice(0, 3)
+          .join(" · ") + (idle.length > 3 ? "…" : ""),
+        icon: "idle",
+        action: { kind: "tab", target: "faculty" },
+      });
+    }
+  }
+
+  // 4. Low-rated instructors (< 3.0 avg, min 3 evals)
+  const ratings = instructors
+    .map((inst) => {
+      const evs = evaluations.filter(
+        (e) => normId(e.instructorId) === normId(inst.id)
+      );
+      if (evs.length < 3) return null;
+      const avg =
+        evs.reduce((s, e) => s + (e.overallRating || 0), 0) / evs.length;
+      return { inst, avg };
+    })
+    .filter((x): x is { inst: User; avg: number } => x !== null && x.avg < 3.0);
+
+  if (ratings.length > 0) {
+    out.push({
+      id: "low-rated",
+      severity: "warning",
+      title:
+        ratings.length === 1
+          ? "1 instructor rated below 3.0"
+          : `${ratings.length} instructors rated below 3.0`,
+      detail: ratings
+        .map((x) => `${x.inst.fullName} (${x.avg.toFixed(1)}★)`)
+        .slice(0, 3)
+        .join(" · "),
+      icon: "lowRating",
+      action: { kind: "tab", target: "evaluations" },
+    });
+  }
+
+  // 5. Courses with low pass rate (< 50%, min 5 grades, requires courseId on Grade)
+  //    Only fires if Grade has a courseId field — otherwise no insight appears.
+  const gradesWithCourse = grades.filter(
+    (g: any) => typeof g.courseId !== "undefined" && g.courseId !== null
+  );
+  if (gradesWithCourse.length > 0) {
+    const lowPass: { code: string; rate: number }[] = [];
+    courses.forEach((c) => {
+      const cg = gradesWithCourse.filter(
+        (g: any) => normId(g.courseId) === normId(c.id)
+      );
+      if (cg.length < 5) return;
+      const passed = cg.filter((g) => (g.totalGrade ?? 0) >= 50).length;
+      const rate = (passed / cg.length) * 100;
+      if (rate < 50) lowPass.push({ code: c.courseCode, rate });
+    });
+    if (lowPass.length > 0) {
+      out.push({
+        id: "low-pass-courses",
+        severity: "critical",
+        title:
+          lowPass.length === 1
+            ? "1 course has pass rate below 50%"
+            : `${lowPass.length} courses have pass rate below 50%`,
+        detail: lowPass
+          .map((x) => `${x.code} (${x.rate.toFixed(0)}%)`)
+          .slice(0, 3)
+          .join(" · "),
+        icon: "lowPass",
+        action: { kind: "tab", target: "courses" },
+      });
+    }
+  }
+
+  // Sort by severity: critical → warning → info
+  const rank = { critical: 0, warning: 1, info: 2 } as const;
+  return out.sort((a, b) => rank[a.severity] - rank[b.severity]);
+}
+/* ==================== SMART INSIGHTS PANEL ==================== */
+
+function SmartInsights({
+  insights,
+  onAction,
+}: {
+  insights: Insight[];
+  onAction: (a: InsightAction) => void;
+}) {
+  if (insights.length === 0) {
+    return (
+      <div className="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 p-6 flex items-center space-x-4">
+        <div className="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-300/60 flex items-center justify-center text-emerald-600 shrink-0">
+          <CheckCircle2 className="w-6 h-6" />
+        </div>
+        <div>
+          <h3 className="font-display font-bold text-emerald-900">
+            All clear
+          </h3>
+          <p className="text-xs text-emerald-700 mt-0.5">
+            No faculty, course, or student issues need attention right now.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const severityStyles: Record<
+    InsightSeverity,
+    {
+      container: string;
+      iconWrap: string;
+      iconColor: string;
+      titleColor: string;
+      detailColor: string;
+      badge: string;
+      badgeLabel: string;
+    }
+  > = {
+    critical: {
+      container:
+        "bg-red-50/80 border-red-200 hover:border-red-300 hover:bg-red-50",
+      iconWrap: "bg-red-500/15 border-red-300/60",
+      iconColor: "text-red-600",
+      titleColor: "text-red-900",
+      detailColor: "text-red-700",
+      badge: "bg-red-500/15 text-red-700 border-red-300/60",
+      badgeLabel: "CRITICAL",
+    },
+    warning: {
+      container:
+        "bg-amber-50/80 border-amber-200 hover:border-amber-300 hover:bg-amber-50",
+      iconWrap: "bg-amber-500/15 border-amber-300/60",
+      iconColor: "text-amber-600",
+      titleColor: "text-amber-900",
+      detailColor: "text-amber-700",
+      badge: "bg-amber-500/15 text-amber-700 border-amber-300/60",
+      badgeLabel: "WARNING",
+    },
+    info: {
+      container:
+        "bg-blue-50/80 border-blue-200 hover:border-blue-300 hover:bg-blue-50",
+      iconWrap: "bg-blue-500/15 border-blue-300/60",
+      iconColor: "text-blue-600",
+      titleColor: "text-blue-900",
+      detailColor: "text-blue-700",
+      badge: "bg-blue-500/15 text-blue-700 border-blue-300/60",
+      badgeLabel: "INFO",
+    },
+  };
+
+  const iconFor = (icon: Insight["icon"]) => {
+    switch (icon) {
+      case "unassigned":
+        return BookOpen;
+      case "overload":
+        return AlertTriangle;
+      case "idle":
+        return Users;
+      case "lowRating":
+        return Sparkles;
+      case "lowPass":
+        return Target;
+      default:
+        return AlertCircle;
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-2">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center shadow-sm">
+            <Zap className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-slate-900 text-sm">
+              What needs your attention
+            </h3>
+            <p className="text-[10px] font-mono text-slate-400">
+              {insights.length} signal{insights.length !== 1 ? "s" : ""} · computed from live data
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        {insights.map((insight, i) => {
+          const style = severityStyles[insight.severity];
+          const Icon = iconFor(insight.icon);
+          const clickable = Boolean(insight.action);
+          return (
+            <motion.button
+              key={insight.id}
+              type="button"
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.04 }}
+              onClick={() => insight.action && onAction(insight.action)}
+              disabled={!clickable}
+              className={`w-full text-left rounded-xl border p-3 transition-all flex items-start space-x-3 ${
+                style.container
+              } ${clickable ? "cursor-pointer" : "cursor-default"}`}
+            >
+              <div
+                className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${style.iconWrap}`}
+              >
+                <Icon className={`w-4 h-4 ${style.iconColor}`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center space-x-2 flex-wrap gap-y-0.5">
+                  <span className={`text-xs font-bold ${style.titleColor}`}>
+                    {insight.title}
+                  </span>
+                  <span
+                    className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${style.badge}`}
+                  >
+                    {style.badgeLabel}
+                  </span>
+                </div>
+                <p className={`text-[11px] mt-0.5 truncate ${style.detailColor}`}>
+                  {insight.detail}
+                </p>
+              </div>
+              {clickable && (
+                <ChevronRight
+                  className={`w-4 h-4 shrink-0 mt-1 ${style.iconColor} opacity-60`}
+                />
+              )}
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
