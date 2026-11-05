@@ -118,9 +118,16 @@ const [activeTab, setActiveTab] = useState<
   const [students, setStudents] = useState<User[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [settings, setSettings] = useState<SystemSettings | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [currentPage, setCurrentPage] = useState(1);
-  const studentsPerPage = 10;
+const [searchQuery, setSearchQuery] = useState("");
+const [currentPage, setCurrentPage] = useState(1);
+
+// ── Filters (NEW) ────────────────────────────────────────────
+const [filterProgram, setFilterProgram] = useState<string>("");
+const [filterYear, setFilterYear] = useState<string>("");
+const [filterFeeStatus, setFilterFeeStatus] = useState<"all" | "cleared" | "owing">("all");
+const [filterCgpaBand, setFilterCgpaBand] = useState<"all" | "high" | "mid" | "low" | "risk">("all");
+
+const studentsPerPage = 10;
 const [editingStudent, setEditingStudent] = useState<User | null>(null);
 const [saving, setSaving] = useState(false);
 
@@ -427,17 +434,41 @@ const loadData = async () => {
       });
     }
   };
-  const filteredStudents = Array.isArray(students)
-    ? students.filter((st) => {
-        const q = searchQuery.toLowerCase();
-        return (
-          st.fullName?.toLowerCase().includes(q) ||
-          st.studentId?.toLowerCase().includes(q) ||
-          st.program?.toLowerCase().includes(q) ||
-          st.username?.toLowerCase().includes(q)
-        );
-      })
-    : [];
+const filteredStudents = Array.isArray(students)
+  ? students.filter((st) => {
+      // ── Text search (existing) ──────────────────────────────
+      const q = searchQuery.toLowerCase();
+      const matchesSearch =
+        !q ||
+        st.fullName?.toLowerCase().includes(q) ||
+        st.studentId?.toLowerCase().includes(q) ||
+        st.program?.toLowerCase().includes(q) ||
+        st.username?.toLowerCase().includes(q);
+
+      if (!matchesSearch) return false;
+
+      // ── Program filter (NEW) ────────────────────────────────
+      if (filterProgram && st.program !== filterProgram) return false;
+
+      // ── Year filter (NEW) ───────────────────────────────────
+      if (filterYear && String(st.academicYear ?? "") !== filterYear) return false;
+
+      // ── Fee status filter (NEW) ─────────────────────────────
+      if (filterFeeStatus === "cleared" && (st.outstandingFees ?? 0) > 0) return false;
+      if (filterFeeStatus === "owing" && (st.outstandingFees ?? 0) === 0) return false;
+
+      // ── CGPA band filter (NEW) ──────────────────────────────
+      if (filterCgpaBand !== "all") {
+        const cgpa = st.cgpa ?? 0;
+        if (filterCgpaBand === "high" && cgpa < 3.5) return false;
+        if (filterCgpaBand === "mid" && (cgpa < 3.0 || cgpa >= 3.5)) return false;
+       if (filterCgpaBand === "low" && (cgpa < 2.0 || cgpa >= 3.0)) return false;
+        if (filterCgpaBand === "risk" && cgpa >= 2.0) return false;
+      }
+
+      return true;
+    })
+  : [];
   // ── Pagination ───────────────────────────────────────────────
   const indexOfLastStudent = currentPage * studentsPerPage;
   const indexOfFirstStudent = indexOfLastStudent - studentsPerPage;
@@ -932,6 +963,9 @@ const navItems = [
                       {totalStudents}
                     </span>{" "}
                     students
+                    {(filterProgram || filterYear || filterFeeStatus !== "all" || filterCgpaBand !== "all") && (
+                      <span className="text-amber-700 font-medium"> (filtered)</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -980,6 +1014,113 @@ const navItems = [
                     )}
                   </div>
                 </div>
+              </div>
+
+              {/* ============ FILTER BAR (NEW) ============ */}
+              <div className="bg-white border border-slate-200/70 rounded-2xl p-3 flex flex-wrap items-center gap-2">
+                <span className="text-[10px] font-mono uppercase tracking-[0.15em] text-slate-500 font-semibold px-1">
+                  Filters
+                </span>
+
+                {/* Program */}
+                <select
+                  value={filterProgram}
+                  onChange={(e) => {
+                    setFilterProgram(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition"
+                >
+                  <option value="">All programs</option>
+{Array.from(
+  new Set(
+    students
+      .map((s) => s.program)
+      .filter((p): p is string => typeof p === "string" && p.length > 0)
+  )
+)
+  .sort()
+  .map((p) => (
+    <option key={p} value={p}>
+      {p}
+    </option>
+  ))}
+                </select>
+
+                {/* Year */}
+                <select
+                  value={filterYear}
+                  onChange={(e) => {
+                    setFilterYear(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition"
+                >
+                  <option value="">All years</option>
+                  {[1, 2, 3, 4, 5, 6, 7].map((y) => (
+                    <option key={y} value={String(y)}>
+                      Year {y}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Fee status */}
+                <select
+                  value={filterFeeStatus}
+                  onChange={(e) => {
+                    setFilterFeeStatus(e.target.value as any);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition"
+                >
+                  <option value="all">All fee statuses</option>
+                  <option value="cleared">Cleared</option>
+                  <option value="owing">Owing fees</option>
+                </select>
+
+                {/* CGPA band */}
+                <select
+                  value={filterCgpaBand}
+                  onChange={(e) => {
+                    setFilterCgpaBand(e.target.value as any);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/5 focus:border-slate-900 transition"
+                >
+                  <option value="all">All CGPA bands</option>
+                  <option value="high">High (≥ 3.50)</option>
+                  <option value="mid">Mid (3.00 – 3.49)</option>
+                  <option value="low">Low (2.00 – 2.99)</option>
+                  <option value="risk">At Risk (&lt; 2.00)</option>
+                </select>
+
+                {/* Active count + Clear all */}
+                {(filterProgram || filterYear || filterFeeStatus !== "all" || filterCgpaBand !== "all") && (
+                  <div className="flex items-center gap-2 ml-auto">
+                    <span className="text-[10px] font-mono text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      {[
+                        filterProgram,
+                        filterYear,
+                        filterFeeStatus !== "all" ? "fees" : "",
+                        filterCgpaBand !== "all" ? "cgpa" : "",
+                      ].filter(Boolean).length}{" "}
+                      active
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFilterProgram("");
+                        setFilterYear("");
+                        setFilterFeeStatus("all");
+                        setFilterCgpaBand("all");
+                        setCurrentPage(1);
+                      }}
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 underline underline-offset-4 transition"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* TABLE */}
