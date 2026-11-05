@@ -364,6 +364,19 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
       return { instructor: inst, count: instEvals.length, average: avg };
     });
   }, [instructors, evaluations]);
+  // ---------- SMART INSIGHTS ----------
+  const insights = useMemo(
+    () => buildInsights({ courses, instructors, grades, evaluations }),
+    [courses, instructors, grades, evaluations]
+  );
+
+  const handleInsightAction = (a: InsightAction) => {
+    if (a.kind === "board") {
+      setIsBoardOpen(true);
+    } else {
+      setActiveTab(a.target as Tab);
+    }
+  };
 
   const filteredCourses = courses.filter(
     (c) =>
@@ -622,7 +635,7 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 <div className="space-y-3 max-w-2xl">
                   <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-sm text-[11px] font-mono font-bold text-amber-300 tracking-wider">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>ACADEMIC YEAR 2025/2026 • SEMESTER II</span>
+                                       <span>ACADEMIC YEAR {academicYearLabel()} • SEMESTER II</span>
                   </div>
                   <h1 className="text-3xl sm:text-4xl lg:text-5xl font-display font-black text-white tracking-tight leading-tight">
                     Department Performance
@@ -738,6 +751,8 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                     <OverviewSkeleton />
                   ) : (
                     <>
+                  <SmartInsights insights={insights} onAction={handleInsightAction} />
+
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-2">
@@ -1298,7 +1313,6 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
         onOpenReassign={openReassign}
       />
 
-      {/* ==================== REASSIGN BOARD (Drag & Drop) ==================== */}
       {/* ==================== REASSIGN BOARD (Drag & Drop) ==================== */}
       <ReassignBoard
         isOpen={isBoardOpen}
