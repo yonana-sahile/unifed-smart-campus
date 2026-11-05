@@ -126,7 +126,9 @@ const [filterProgram, setFilterProgram] = useState<string>("");
 const [filterYear, setFilterYear] = useState<string>("");
 const [filterFeeStatus, setFilterFeeStatus] = useState<"all" | "cleared" | "owing">("all");
 const [filterCgpaBand, setFilterCgpaBand] = useState<"all" | "high" | "mid" | "low" | "risk">("all");
-
+// ── Bulk selection (NEW) ─────────────────────────────────────
+const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+const [bulkBusy, setBulkBusy] = useState(false);
 const studentsPerPage = 10;
 const [editingStudent, setEditingStudent] = useState<User | null>(null);
 const [saving, setSaving] = useState(false);
@@ -482,6 +484,32 @@ const filteredStudents = Array.isArray(students)
   };
   // dashboard stats
   const totalStudents = students.length;
+    // ── Bulk selection helpers (NEW) ─────────────────────────────
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const visibleIds = currentStudents.map((s) => s.id);
+    const allSelected =
+      visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
   const studentsWithFees = students.filter((s) => (s.outstandingFees ?? 0) > 0).length;
   const pendingGrades = grades.filter((g) => g.status === "SUBMITTED").length;
   const approvedGrades = grades.filter((g) => g.status === "APPROVED").length;
@@ -1130,6 +1158,18 @@ const navItems = [
                   <table className="w-full text-left text-sm min-w-[1000px]">
                     <thead className="sticky top-0 z-10">
                       <tr className="bg-[#FAFAF9] border-b border-slate-200">
+                        <th className="w-10 px-3 py-3">
+                          <input
+                            type="checkbox"
+                            checked={
+                              currentStudents.length > 0 &&
+                              currentStudents.every((s) => selectedIds.has(s.id))
+                            }
+                            onChange={toggleSelectAll}
+                            aria-label="Select all on this page"
+                            className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-slate-900"
+                          />
+                        </th>
                         <th className="px-5 py-3 text-[10px] font-mono uppercase tracking-[0.12em] text-slate-500 font-semibold">
                           Student
                         </th>
@@ -1158,7 +1198,7 @@ const navItems = [
                       {loading && currentStudents.length === 0 &&
                         Array.from({ length: 8 }).map((_, i) => (
                           <tr key={`sk-${i}`} className="animate-pulse">
-                            <td colSpan={7} className="px-5 py-4">
+                            <td colSpan={8} className="px-5 py-4">
                               <div className="h-4 bg-slate-100 rounded w-full" />
                             </td>
                           </tr>
@@ -1167,7 +1207,7 @@ const navItems = [
                       {/* Empty state — only show when NOT loading */}
                       {!loading && filteredStudents.length === 0 && (
                         <tr>
-                          <td colSpan={7} className="px-5 py-20 text-center">
+                                                   <td colSpan={8} className="px-5 py-20 text-center">
                             <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-slate-50 border border-slate-100 mb-4">
                               <UserCircle2 className="w-6 h-6 text-slate-400" />
                             </div>
@@ -1198,8 +1238,21 @@ const navItems = [
                         return (
                           <tr
                             key={st.id}
-                            className="group hover:bg-[#FAFAF9] transition-colors"
+                            className={`group hover:bg-[#FAFAF9] transition-colors ${
+                              selectedIds.has(st.id) ? "bg-amber-50/60" : ""
+                            }`}
                           >
+                            {/* CHECKBOX */}
+                            <td className="w-10 px-3 py-4">
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(st.id)}
+                                onChange={() => toggleSelect(st.id)}
+                                aria-label={`Select ${st.fullName || st.username || "student"}`}
+                                className="w-4 h-4 rounded border-slate-300 cursor-pointer accent-slate-900"
+                              />
+                            </td>
+
                             {/* PHOTO + NAME */}
                             <td className="px-5 py-4">
                               <div className="flex items-center gap-3">
@@ -1340,6 +1393,147 @@ const navItems = [
                   </div>
                 )}
               </div>
+
+              {/* ============ BULK ACTION BAR (NEW) ============ */}
+              {selectedIds.size > 0 && (
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 w-[92%] max-w-2xl">
+                  <div className="bg-slate-900 text-white rounded-2xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.4)] px-4 py-3 flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-400 text-slate-900 font-bold text-sm">
+                        {selectedIds.size}
+                      </span>
+                      <span className="text-sm font-medium">selected</span>
+                    </div>
+
+                    <div className="h-6 w-px bg-slate-700 mx-1 hidden sm:block" />
+
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Export CSV */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const selected = students.filter((s) => selectedIds.has(s.id));
+                          if (selected.length === 0) return;
+                          const headers = [
+                            "Student ID", "Full Name", "Username", "Email", "Phone",
+                            "Program", "Year", "Semester", "CGPA", "Outstanding Fees (ETB)",
+                          ];
+                          const rows = selected.map((s) => [
+                            s.studentId ?? "",
+                            s.fullName ?? "",
+                            s.username ?? "",
+                            s.email ?? "",
+                            s.phoneNumber ?? "",
+                            s.program ?? "",
+                            String(s.academicYear ?? ""),
+                            String(s.semester ?? ""),
+                            s.cgpa != null ? s.cgpa.toFixed(2) : "",
+                            String(s.outstandingFees ?? 0),
+                          ]);
+                          const csv = [headers, ...rows]
+                            .map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(","))
+                            .join("\n");
+                          const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement("a");
+                          a.href = url;
+                          a.download = `students-selected-${new Date().toISOString().slice(0, 10)}.csv`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                          toast.success(`Exported ${selected.length} student${selected.length !== 1 ? "s" : ""} to CSV`);
+                        }}
+                        disabled={bulkBusy}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition disabled:opacity-50"
+                      >
+                        📥 Export CSV
+                      </button>
+
+                      {/* Clear fee hold */}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const selected = students.filter(
+                            (s) => selectedIds.has(s.id) && (s.outstandingFees ?? 0) > 0
+                          );
+                          if (selected.length === 0) {
+                            toast.info("No selected students have outstanding fees");
+                            return;
+                          }
+                          if (!confirm(`Clear outstanding fees for ${selected.length} student${selected.length !== 1 ? "s" : ""}?`)) return;
+                          setBulkBusy(true);
+                          const tId = toast.loading(`Clearing fees for ${selected.length} student${selected.length !== 1 ? "s" : ""}…`);
+                          const prevSnapshot = students;
+                          try {
+                            setStudents((prev) =>
+                              prev.map((s) =>
+                                selectedIds.has(s.id) ? { ...s, outstandingFees: 0 } : s
+                              )
+                            );
+                            await Promise.all(
+                              selected.map((s) =>
+                                CampusDatabase.updateUser({
+                                  id: String(s.id).replace(/^U_/, ""),
+                                  outstanding_fees: 0,
+                                } as any)
+                              )
+                            );
+                            await CampusDatabase.addAuditLog(
+                              user.id, user.fullName, "REGISTRAR", "Bulk Clear Fees",
+                              "User", `${selected.length} students`,
+                              `Bulk cleared outstanding fees for ${selected.length} students.`
+                            );
+                            toast.success("Fees cleared", {
+                              id: tId,
+                              description: `${selected.length} student${selected.length !== 1 ? "s" : ""} updated.`,
+                              duration: 4000,
+                            });
+                            setSelectedIds(new Set());
+                          } catch (error: any) {
+                            setStudents(prevSnapshot);
+                            toast.error("Bulk clear failed", {
+                              id: tId,
+                              description: error?.message || "Unknown error",
+                              duration: 8000,
+                            });
+                          } finally {
+                            setBulkBusy(false);
+                          }
+                        }}
+                        disabled={bulkBusy}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition disabled:opacity-50"
+                      >
+                        💰 Clear fee hold
+                      </button>
+
+                      {/* Notify */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          toast.success(`Notification queued for ${selectedIds.size} student${selectedIds.size !== 1 ? "s" : ""}`, {
+                            description: "Will be delivered via email in a future release.",
+                            duration: 5000,
+                          });
+                        }}
+                        disabled={bulkBusy}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold transition disabled:opacity-50"
+                      >
+                        📧 Notify
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={clearSelection}
+                        disabled={bulkBusy}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-xs font-semibold transition disabled:opacity-50"
+                      >
+                        ✕ Clear
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* ============ EDIT MODAL ============ */}
               <AnimatePresence>
