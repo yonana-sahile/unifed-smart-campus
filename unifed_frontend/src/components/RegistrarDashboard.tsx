@@ -4,6 +4,7 @@ import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
 import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
+import { RegistrarCommandCenter } from "./RegistrarCommandCenter";
 import {
   Users,
   FileText,
@@ -23,6 +24,8 @@ import {
   Plus,
   Save,
   UserCircle2,
+  RefreshCw,
+  Home,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { Toaster, toast } from "sonner";
@@ -39,21 +42,24 @@ import {
  */
 function useCountUp(target: number, duration = 700) {
   const [value, setValue] = useState(0);
-  const ranRef = useRef(false);
+  const valueRef = useRef(0);
+
+  // keep ref in sync so we can animate *from* the current value
+  useEffect(() => {
+    valueRef.current = value;
+  }, [value]);
 
   useEffect(() => {
-    if (ranRef.current) return;
-    ranRef.current = true;
-    if (target === 0) {
-      setValue(0);
-      return;
-    }
+    const from = valueRef.current;
+    if (from === target) return;
+
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
       const progress = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - progress, 3);
-      setValue(Math.round(eased * target));
+      const next = Math.round(from + (target - from) * eased);
+      setValue(next);
       if (progress < 1) raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -105,9 +111,9 @@ function StatCard({
 }
 
 export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
-  const [activeTab, setActiveTab] = useState<
-    "records" | "grades" | "calendar" | "clearance" | "alerts"
-  >("records");
+const [activeTab, setActiveTab] = useState<
+  "overview" | "records" | "grades" | "calendar" | "clearance" | "alerts"
+>("overview");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [students, setStudents] = useState<User[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -115,11 +121,16 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const studentsPerPage = 10;
-  const [editingStudent, setEditingStudent] = useState<User | null>(null);
-  const [saving, setSaving] = useState(false);
+const [editingStudent, setEditingStudent] = useState<User | null>(null);
+const [saving, setSaving] = useState(false);
 
-  // ── Create-student mode ──────────────────────────────────────
-  const [isCreating, setIsCreating] = useState(false);
+// ── Load state (NEW) ─────────────────────────────────────────
+const [loading, setLoading] = useState(true);
+const [loadError, setLoadError] = useState<string | null>(null);
+const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+// ── Create-student mode ──────────────────────────────────────
+const [isCreating, setIsCreating] = useState(false);
   const [readIds, setReadIds] = useState<Set<string>>(getReadIds());
   const [newStudentDraft, setNewStudentDraft] = useState<Partial<User>>({
     fullName: "",
@@ -136,26 +147,31 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
     loadData();
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [usersData, gradesData, settingsData] = await Promise.all([
-        CampusDatabase.getUsers(),
-        CampusDatabase.getGrades(),
-        CampusDatabase.getSettings().catch(() => null),
-      ]);
+const loadData = async () => {
+  setLoading(true);
+  setLoadError(null);
+  try {
+    const [usersData, gradesData, settingsData] = await Promise.all([
+      CampusDatabase.getUsers(),
+      CampusDatabase.getGrades(),
+      CampusDatabase.getSettings().catch(() => null),
+    ]);
 
-      setStudents(
-        Array.isArray(usersData) ? usersData.filter((u) => u.role === "STUDENT") : []
-      );
-      setGrades(Array.isArray(gradesData) ? gradesData : []);
-      setSettings(settingsData || null);
-    } catch (error) {
-      console.error("Failed to load registrar data:", error);
-      setStudents([]);
-      setGrades([]);
-      setSettings(null);
-    }
-  };
+    setStudents(
+      Array.isArray(usersData) ? usersData.filter((u) => u.role === "STUDENT") : []
+    );
+    setGrades(Array.isArray(gradesData) ? gradesData : []);
+    setSettings(settingsData || null);
+    setLastUpdated(new Date());
+  } catch (error: any) {
+    console.error("Failed to load registrar data:", error);
+    setLoadError(error?.message ?? "Failed to load data from server");
+    // Deliberately do NOT wipe students/grades/settings —
+    // if this is a refresh, keep showing last-known-good data.
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleUpdateStudent = async () => {
     if (!editingStudent) return;
@@ -522,13 +538,14 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
       });
     }
   };
-  const navItems = [
-    { id: "records", label: "Student Records", shortLabel: "Records", Icon: Users },
-    { id: "grades", label: "Verify Instructor Grades", shortLabel: "Grades", Icon: FileText },
-    { id: "calendar", label: "Academic Calendar", shortLabel: "Calendar", Icon: Calendar },
-    { id: "clearance", label: "Digital Clearance", shortLabel: "Clearance", Icon: ShieldCheck },
-    { id: "alerts", label: "Broadcast Circulars", shortLabel: "Alerts", Icon: Radio },
-  ] as const;
+const navItems = [
+  { id: "overview", label: "Command Center", shortLabel: "Home", Icon: Home },
+  { id: "records", label: "Student Records", shortLabel: "Records", Icon: Users },
+  { id: "grades", label: "Verify Instructor Grades", shortLabel: "Grades", Icon: FileText },
+  { id: "calendar", label: "Academic Calendar", shortLabel: "Calendar", Icon: Calendar },
+  { id: "clearance", label: "Digital Clearance", shortLabel: "Clearance", Icon: ShieldCheck },
+  { id: "alerts", label: "Broadcast Circulars", shortLabel: "Alerts", Icon: Radio },
+] as const;
 
   const goToTab = (id: string) => {
     setActiveTab(id as any);
@@ -754,16 +771,44 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
         </aside>
 
         <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto min-w-0 space-y-6">
+          {/* ============ OVERVIEW / COMMAND CENTER TAB ============ */}
+          {activeTab === "overview" && (
+            <RegistrarCommandCenter
+              user={user}
+              students={students}
+              grades={grades}
+              settings={settings}
+              loading={loading}
+              lastUpdated={lastUpdated}
+              onRefresh={loadData}
+              onNavigate={goToTab}
+            />
+          )}
+
           {/* ============ STUDENT RECORDS TAB ============ */}
           {activeTab === "records" && (
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35 }}
-              className="space-y-6"
-            >
-              {/* HERO */}
-              <div className="relative overflow-hidden rounded-2xl bg-[#071526] text-white">
+  <motion.div
+    initial={{ opacity: 0, y: 15 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.35 }}
+    className="space-y-6"
+  >
+    {/* NEW — error banner */}
+    {loadError && (
+      <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2">
+        <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+        <p className="text-sm text-red-800 flex-1">{loadError}</p>
+        <button
+          onClick={loadData}
+          className="text-xs font-semibold text-red-700 hover:underline shrink-0"
+        >
+          Retry
+        </button>
+      </div>
+    )}
+
+    {/* HERO */}
+    <div className="relative overflow-hidden rounded-2xl bg-[#071526] text-white">
                 <div
                   aria-hidden="true"
                   className="absolute inset-0 opacity-[0.06] pointer-events-none"
@@ -781,9 +826,29 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
                 <div className="relative px-6 sm:px-9 py-7 sm:py-10">
                   <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
                     <div className="max-w-xl">
-                      <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#c59b27]/90 font-semibold">
-                        Academic Records · Live
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#c59b27]/90 font-semibold">
+                          Academic Records
+                        </p>
+                        {lastUpdated && (
+                          <>
+                            <span className="text-slate-700">·</span>
+                            <span className="text-[11px] font-mono text-slate-500 tabular-nums">
+                              Updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                          </>
+                        )}
+                        <button
+                          type="button"
+                          onClick={loadData}
+                          disabled={loading}
+                          aria-label="Refresh data"
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white/5 hover:bg-white/10 border border-white/10 text-[10px] font-mono font-semibold text-slate-300 hover:text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+                          <span>Refresh</span>
+                        </button>
+                      </div>
                       <h1 className="font-display text-3xl sm:text-4xl leading-[1.1] mt-2.5 tracking-tight">
                         Student Records
                       </h1>
@@ -948,7 +1013,18 @@ export function RegistrarDashboard({ user, onLogout }: { user: User; onLogout: (
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredStudents.length === 0 && (
+                      {/* NEW — skeleton rows while first load is in flight */}
+                      {loading && currentStudents.length === 0 &&
+                        Array.from({ length: 8 }).map((_, i) => (
+                          <tr key={`sk-${i}`} className="animate-pulse">
+                            <td colSpan={7} className="px-5 py-4">
+                              <div className="h-4 bg-slate-100 rounded w-full" />
+                            </td>
+                          </tr>
+                        ))}
+
+                      {/* Empty state — only show when NOT loading */}
+                      {!loading && filteredStudents.length === 0 && (
                         <tr>
                           <td colSpan={7} className="px-5 py-20 text-center">
                             <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-slate-50 border border-slate-100 mb-4">
