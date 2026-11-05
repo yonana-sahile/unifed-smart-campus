@@ -6,6 +6,7 @@ import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { RegistrarCommandCenter } from "./RegistrarCommandCenter";
 import { StudentPortfolio } from "./StudentPortfolio";
+import { CopyableId } from "./CopyableId";
 import {
   Users,
   FileText,
@@ -1291,13 +1292,7 @@ const navItems = [
 
                             {/* STUDENT ID */}
                             <td className="px-5 py-4">
-                              {st.studentId ? (
-                                <span className="font-mono text-xs text-slate-600 tracking-wide tabular-nums">
-                                  {st.studentId}
-                                </span>
-                              ) : (
-                                <span className="text-slate-300 font-mono text-xs">—</span>
-                              )}
+                              <CopyableId id={st.studentId} size="sm" />
                             </td>
 
                             {/* PROGRAM */}
@@ -1671,17 +1666,27 @@ const navItems = [
                                   ? "Create Student Record"
                                   : editingStudent?.fullName || "Unnamed Student"}
                               </h3>
-                              <p className="text-xs font-mono text-slate-500 mt-0.5 tabular-nums">
-                                {isCreating
-                                  ? "Fill in the details below"
-                                  : editingStudent?.studentId || "No ID assigned"}
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                {isCreating ? (
+                                  <span className="text-xs font-mono text-slate-500">
+                                    Fill in the details below
+                                  </span>
+                                ) : editingStudent?.studentId ? (
+                                  <CopyableId id={editingStudent.studentId} size="sm" />
+                                ) : (
+                                  <span className="text-xs font-mono text-slate-500">
+                                    No ID assigned
+                                  </span>
+                                )}
                                 {!isCreating && editingStudent?.program && (
                                   <>
-                                    <span className="mx-1.5 text-slate-300">·</span>
-                                    {editingStudent.program}
+                                    <span className="text-slate-300">·</span>
+                                    <span className="text-xs font-mono text-slate-500">
+                                      {editingStudent.program}
+                                    </span>
                                   </>
                                 )}
-                              </p>
+                              </div>
                             </div>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">

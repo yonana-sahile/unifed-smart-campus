@@ -19,7 +19,7 @@ import {
   Clock,
 } from "lucide-react";
 import type { User as UserType, Grade } from "../types";
-
+import { CopyableId } from "./CopyableId";
 type Props = {
   student: UserType;
   allGrades: Grade[];
@@ -113,7 +113,11 @@ export function StudentPortfolio({ student, allGrades, onClose, onEdit }: Props)
                   {student.fullName || "Unnamed Student"}
                 </h2>
                 <div className="flex flex-wrap items-center gap-2 mt-2 text-xs font-mono text-slate-400">
-                  <span>{student.studentId || "No ID"}</span>
+                  {student.studentId ? (
+                    <CopyableId id={student.studentId} size="sm" variant="light" />
+                  ) : (
+                    <span>No ID</span>
+                  )}
                   {student.program && (
                     <>
                       <span>·</span>
