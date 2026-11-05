@@ -2,9 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Mic,
-  MicOff,
   Square,
-  Volume2,
   VolumeX,
   X,
   Minimize2,
@@ -16,7 +14,8 @@ import {
 } from "lucide-react";
 import type { User } from "../types";
 import { sendChatMessage, api } from "../services/api";
-import { RobotFace } from "./RobotFace";   
+import { RobotFace } from "./RobotFace";
+
 interface FloatingVoiceAssistantProps {
   currentUser?: User | null;
 }
@@ -33,9 +32,6 @@ interface VoiceMessage {
 const GROQ_TTS_VOICE = "troy";
 const TTS_CHAR_LIMIT = 200;
 
-// ---------------------------------------------------------------------------
-// Hook: record microphone audio, return a Blob
-// ---------------------------------------------------------------------------
 function useMediaRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -79,7 +75,6 @@ function useMediaRecorder() {
     }
   }, []);
 
-  // Auto-stop after 15 seconds to avoid runaway recordings
   useEffect(() => {
     if (!isRecording) return;
     const t = setTimeout(stop, 15000);
@@ -97,9 +92,6 @@ function useMediaRecorder() {
   return { start, stop, isRecording };
 }
 
-// ---------------------------------------------------------------------------
-// Groq STT — via Django backend (key stays server-side)
-// ---------------------------------------------------------------------------
 async function transcribeAudio(
   blob: Blob,
   language: "en" | "am" = "en"
@@ -114,9 +106,6 @@ async function transcribeAudio(
   return (res.data.text || "").trim();
 }
 
-// ---------------------------------------------------------------------------
-// Groq TTS — via Django backend (key stays server-side)
-// ---------------------------------------------------------------------------
 async function speakText(text: string): Promise<HTMLAudioElement | null> {
   const trimmed = text.slice(0, TTS_CHAR_LIMIT);
 
@@ -130,9 +119,6 @@ async function speakText(text: string): Promise<HTMLAudioElement | null> {
   return new Audio(url);
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
 export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
   currentUser,
 }) => {
@@ -150,8 +136,7 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const { start: startRecording, stop: stopRecording, isRecording } =
-    useMediaRecorder();
+  const { start: startRecording, stop: stopRecording } = useMediaRecorder();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -160,7 +145,6 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
     if (isOpen && !isMinimized) scrollToBottom();
   }, [messages, isOpen, isMinimized]);
 
-  // Cleanup audio on unmount
   useEffect(() => {
     return () => {
       if (audioRef.current) {
@@ -185,7 +169,6 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
     ]);
   };
 
-  // Full pipeline: text -> AI reply -> TTS
   const runPipeline = async (userText: string) => {
     if (!userText.trim()) return;
     setErrorMsg(null);
@@ -203,7 +186,6 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
       });
       pushMessage("ai", reply);
 
-      // Speak
       try {
         const audio = await speakText(reply);
         if (audio) {
@@ -238,7 +220,6 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
     }
   };
 
-  // Mic tap: start recording; second tap stops and submits
   const handleMicTap = async () => {
     if (phase !== "idle") return;
     setErrorMsg(null);
@@ -248,7 +229,6 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
       return;
     }
 
-    // Cancel any speech still playing
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -308,38 +288,35 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
 
   return (
     <>
-     {/* FLOATING TRIGGER — bottom LEFT (robot) */}
-<AnimatePresence>
-  {!isOpen && (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.8, y: 12 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.8, y: 12 }}
-      transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="fixed bottom-5 left-5 z-[9999] flex flex-col items-center gap-1"
-    >
-      <motion.button
-        onClick={() => {
-          setIsOpen(true);
-          if (isMinimized) setIsMinimized(false);
-        }}
-        whileHover={{ scale: 1.06 }}
-        whileTap={{ scale: 0.94 }}
-        className="relative rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2"
-        aria-label="Open voice assistant — tap to talk"
-        title="Talk to your AI companion"
-      >
-       
-<RobotFace phase={phase} size={110} />
-      </motion.button>
-      <span className="text-[9px] font-bold text-cyan-200/90 font-mono tracking-wider bg-slate-950/70 px-2 py-0.5 rounded-full border border-cyan-400/30 backdrop-blur-sm">
-        Talk • ተናገር
-      </span>
-    </motion.div>
-  )}
-</AnimatePresence>
+      <AnimatePresence>
+        {!isOpen && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 12 }}
+            transition={{ type: "spring", stiffness: 300, damping: 22 }}
+            className="fixed bottom-5 left-5 z-[9999] flex flex-col items-center gap-1"
+          >
+            <motion.button
+              onClick={() => {
+                setIsOpen(true);
+                if (isMinimized) setIsMinimized(false);
+              }}
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.94 }}
+              className="relative rounded-full cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 focus-visible:ring-offset-2"
+              aria-label="Open voice assistant — tap to talk"
+              title="Talk to your AI companion"
+            >
+              <RobotFace phase={phase} size={110} />
+            </motion.button>
+            <span className="text-[9px] font-bold text-cyan-200/90 font-mono tracking-wider bg-slate-950/70 px-2 py-0.5 rounded-full border border-cyan-400/30 backdrop-blur-sm">
+              Talk • ተናገር
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* PANEL — bottom LEFT */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -351,17 +328,14 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
               isMinimized ? "h-[76px]" : "h-[620px] max-h-[82vh]"
             }`}
           >
-            {/* Header */}
             <div className="p-4 bg-gradient-to-r from-cyan-700 via-blue-700 to-indigo-800 text-white flex items-center justify-between border-b border-cyan-400/30 shrink-0">
               <div className="flex items-center space-x-3">
-<div className="w-9 h-9 rounded-2xl bg-cyan-400/20 border border-cyan-300/40 flex items-center justify-center text-cyan-100 overflow-hidden">
-  <RobotFace phase={phase} size={28} />
-</div>
+                <div className="w-9 h-9 rounded-2xl bg-cyan-400/20 border border-cyan-300/40 flex items-center justify-center text-cyan-100 overflow-hidden">
+                  <RobotFace phase={phase} size={28} />
+                </div>
                 <div>
                   <div className="flex items-center space-x-1.5">
-                    <h3 className="font-bold text-sm">
-                      Campus Voice Companion
-                    </h3>
+                    <h3 className="font-bold text-sm">Campus Voice Companion</h3>
                     <span
                       className={`w-2 h-2 rounded-full ${
                         phase === "error"
@@ -399,16 +373,13 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
 
             {!isMinimized && (
               <>
-                {/* Messages */}
                 <div className="flex-1 p-4 overflow-y-auto space-y-3 text-xs sm:text-sm bg-slate-50 dark:bg-slate-950/70">
                   {messages.length === 0 && (
                     <div className="text-center text-slate-500 dark:text-slate-400 mt-8">
                       <Bot className="w-10 h-10 mx-auto mb-2 text-cyan-500" />
-                      <p className="font-semibold">
-                        Tap the mic and ask anything
-                      </p>
+                      <p className="font-semibold">Tap the mic and ask anything</p>
                       <p className="text-[11px] mt-1">
-                        “What are my assignments?” • “Explain my last grade.”
+                        "What are my assignments?" • "Explain my last grade."
                       </p>
                     </div>
                   )}
@@ -454,7 +425,6 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Controls */}
                 <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-center gap-3">
                     {phase === "listening" ? (
@@ -487,7 +457,6 @@ export const FloatingVoiceAssistant: React.FC<FloatingVoiceAssistantProps> = ({
                     )}
                   </div>
 
-                  {/* Typed fallback */}
                   <form
                     onSubmit={handleTypedSubmit}
                     className="flex items-center space-x-2"
