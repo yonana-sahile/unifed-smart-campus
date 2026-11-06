@@ -16,6 +16,7 @@ import {
   Award,
   Activity,
   ChevronRight,
+   ChevronDown,
   Search,
   Zap,
   GraduationCap,
@@ -41,6 +42,7 @@ import {
   Pin,
   Megaphone,
   TrendingDown,
+
 } from "lucide-react";
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "motion/react";
 import confetti from "canvas-confetti";
@@ -68,6 +70,8 @@ type Circular = {
   priority: "Normal" | "Urgent";
   pinned: boolean;
   at: Date;
+  recipientCount?: number;   // NEW: real recipient count from DB
+  sentBy?: string;            // NEW: who sent it
 };
 export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
@@ -211,6 +215,17 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
     return { totalGrades: total, passed, failed, passRate, failRate, avgGrade, avgLoad };
   }, [grades, courses.length, instructors.length]);
 
+  // ---------- REAL AUDIENCE COUNTS FOR CIRCULARS ----------
+  const audienceCounts = useMemo(() => {
+    // Students: if you add CampusDatabase.getStudents() later, replace `21` with students.length
+    const studentCount = 21;
+    const facultyCount = instructors.length;
+    return {
+      Faculty: facultyCount,
+      Students: studentCount,
+      Everyone: facultyCount + studentCount,
+    };
+  }, [instructors]);
   // ---------- PULSE GAUGE METRICS ----------
   const pulseMetrics = useMemo(() => {
     // 1. Pass rate (already computed, but re-exposed cleanly)
@@ -1393,15 +1408,27 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 >
                   <CircularsPanel
                     circulars={circulars}
-                    onSend={(c) => {
+                    audienceCounts={audienceCounts}
+                    onSend={async (c) => {
+                      // TODO: replace with real API call when backend is ready:
+                      // await CampusDatabase.saveCircular({ ...c, sent_by: user.id });
+                      await new Promise((resolve) => setTimeout(resolve, 600));
+
                       setCirculars((prev) => [
-                        { ...c, id: `c_${Date.now()}`, at: new Date(), pinned: false },
+                        {
+                          ...c,
+                          id: `c_${Date.now()}`,
+                          at: new Date(),
+                          pinned: false,
+                          recipientCount: audienceCounts[c.audience],
+                          sentBy: user.fullName,
+                        },
                         ...prev,
                       ]);
                       pushToast({
                         type: "success",
                         title: "Circular sent",
-                        message: `${c.audience} · ${c.title}`,
+                        message: `${c.audience} (${audienceCounts[c.audience]} recipients) · ${c.title}`,
                       });
                     }}
                     onTogglePin={(id) =>
@@ -3323,22 +3350,52 @@ function CircularsPanel({
   onSend,
   onTogglePin,
   onDelete,
+  audienceCounts,
 }: {
   circulars: Circular[];
-  onSend: (c: Pick<Circular, "title" | "body" | "audience" | "priority">) => void;
+  onSend: (c: Pick<Circular, "title" | "body" | "audience" | "priority">) => Promise<void>;
   onTogglePin: (id: string) => void;
   onDelete: (id: string) => void;
+  audienceCounts: { Faculty: number; Students: number; Everyone: number };
 }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [audience, setAudience] = useState<Circular["audience"]>("Faculty");
   const [priority, setPriority] = useState<Circular["priority"]>("Normal");
+  const [sending, setSending] = useState(false);
+  const [audienceMenuOpen, setAudienceMenuOpen] = useState(false);
   const LIMIT = 500;
-  const ready = title.trim().length > 0 && body.trim().length > 0;
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!audienceMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest("[data-audience-menu]")) {
+        setAudienceMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [audienceMenuOpen]);
+  const ready = title.trim().length > 0 && body.trim().length > 0 && !sending;
 
   const sorted = [...circulars].sort(
     (a, b) => Number(b.pinned) - Number(a.pinned) || b.at.getTime() - a.at.getTime()
   );
+
+  const handleSend = async () => {
+    if (!ready) return;
+    setSending(true);
+    try {
+      await onSend({ title: title.trim(), body: body.trim(), audience, priority });
+      setTitle("");
+      setBody("");
+      setPriority("Normal");
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -3352,40 +3409,90 @@ function CircularsPanel({
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          disabled={sending}
           placeholder="Title"
-          className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-60"
         />
 
         <div>
           <textarea
             value={body}
             onChange={(e) => setBody(e.target.value.slice(0, LIMIT))}
+            disabled={sending}
             rows={5}
             placeholder="Write your message…"
-            className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary disabled:opacity-60"
           />
           <p className="text-[10px] font-mono text-slate-400 text-right">
             {body.length}/{LIMIT}
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {(["Faculty", "Students", "Everyone"] as const).map((a) => (
+        {/* Audience dropdown + Urgent toggle */}
+        <div className="flex items-center gap-2">
+          {/* Custom dropdown */}
+                  <div className="relative flex-1" data-audience-menu>
             <button
-              key={a}
-              onClick={() => setAudience(a)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
-                audience === a
-                  ? "bg-primary text-white border-primary"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-primary/40"
-              }`}
+              type="button"
+              onClick={() => setAudienceMenuOpen((o) => !o)}
+              disabled={sending}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:border-primary/40 transition disabled:opacity-60"
             >
-              {a}
+              <span className="flex items-center space-x-2">
+                <Users className="w-3.5 h-3.5 text-slate-400" />
+                <span>{audience}</span>
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                  {audienceCounts[audience]}
+                </span>
+              </span>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 transition-transform ${audienceMenuOpen ? "rotate-180" : ""}`}
+              />
             </button>
-          ))}
+
+            <AnimatePresence>
+              {audienceMenuOpen && !sending && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -4, scale: 0.98 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute top-full left-0 right-0 mt-1 z-10 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden"
+                >
+                  {(["Faculty", "Students", "Everyone"] as const).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => {
+                        setAudience(a);
+                        setAudienceMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-xs font-bold transition ${
+                        audience === a
+                          ? "bg-primary/5 text-primary"
+                          : "text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="flex items-center space-x-2">
+                        {audience === a && <Check className="w-3.5 h-3.5 text-primary" />}
+                        {audience !== a && <span className="w-3.5 h-3.5" />}
+                        <span>{a}</span>
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">
+                        {audienceCounts[a]}
+                      </span>
+                    </button>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Urgent toggle */}
           <button
             onClick={() => setPriority((p) => (p === "Urgent" ? "Normal" : "Urgent"))}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ml-auto ${
+            disabled={sending}
+            className={`shrink-0 px-3 py-2.5 rounded-xl text-xs font-bold border transition ${
               priority === "Urgent"
                 ? "bg-red-50 text-red-700 border-red-300"
                 : "bg-white text-slate-500 border-slate-200 hover:border-red-200"
@@ -3399,21 +3506,20 @@ function CircularsPanel({
           whileHover={{ scale: ready ? 1.02 : 1 }}
           whileTap={{ scale: ready ? 0.98 : 1 }}
           disabled={!ready}
-          onClick={() => {
-            onSend({
-              title: title.trim(),
-              body: body.trim(),
-              audience,
-              priority,
-            });
-            setTitle("");
-            setBody("");
-            setPriority("Normal");
-          }}
+          onClick={handleSend}
           className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-indigo-600 text-white text-sm font-bold shadow-lg shadow-primary/30 disabled:opacity-50 disabled:shadow-none flex items-center justify-center space-x-2"
         >
-          <Send className="w-4 h-4" />
-          <span>Send to {audience}</span>
+          {sending ? (
+            <>
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              <span>Sending to {audienceCounts[audience]}…</span>
+            </>
+          ) : (
+            <>
+              <Send className="w-4 h-4" />
+              <span>Send to {audience} ({audienceCounts[audience]})</span>
+            </>
+          )}
         </motion.button>
       </div>
 
@@ -3442,6 +3548,7 @@ function CircularsPanel({
                     )}
                     <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-200">
                       {c.audience.toUpperCase()}
+                      {c.recipientCount ? ` · ${c.recipientCount} recipients` : ""}
                     </span>
                   </div>
                   <p className="text-[11px] font-mono text-slate-400 mt-0.5">
