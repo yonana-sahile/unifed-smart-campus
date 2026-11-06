@@ -36,6 +36,11 @@ import {
   Sunset,
   Moon,
   Clock,
+    Download,
+  Send,
+  Pin,
+  Megaphone,
+  TrendingDown,
 } from "lucide-react";
 import { motion, AnimatePresence, animate, useMotionValue, useTransform } from "motion/react";
 import confetti from "canvas-confetti";
@@ -55,6 +60,15 @@ type Insight = {
   icon: "unassigned" | "overload" | "idle" | "lowRating" | "lowPass";
   action?: InsightAction;
 };
+type Circular = {
+  id: string;
+  title: string;
+  body: string;
+  audience: "Faculty" | "Students" | "Everyone";
+  priority: "Normal" | "Urgent";
+  pinned: boolean;
+  at: Date;
+};
 export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -73,10 +87,16 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
   // ---- Drag-and-Drop Reassign Board ----
   const [isBoardOpen, setIsBoardOpen] = useState(false);
 
+  // ---- Batch 2: Faculty Drawer + Filters ----
+  const [selectedInstructor, setSelectedInstructor] = useState<User | null>(null);
+  const [courseFilter, setCourseFilter] = useState<"all" | "unassigned" | "assigned">("all");
+  const [courseSort, setCourseSort] = useState<"code" | "title" | "instructor">("code");
+
+  // ---- Batch 2: Circulars ----
+  const [circulars, setCirculars] = useState<Circular[]>([]);
+
   // ---- Toasts (confetti + feedback) ----
-  const [toasts, setToasts] = useState<
-    { id: string; type: "success" | "error"; title: string; message?: string }[]
-  >([]);
+  const [toasts, setToasts] = useState<ToastShape[]>([]);
 
   // ---- Live clock (greeting) ----
   const [now, setNow] = useState<Date>(new Date());
@@ -109,16 +129,13 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
       hour12: true,
     });
 
-  const pushToast = (toast: {
-    type: "success" | "error";
-    title: string;
-    message?: string;
-  }) => {
+  const pushToast = (toast: Omit<ToastShape, "id">) => {
     const id = `t_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    setToasts((prev) => [...prev, { ...toast, id }]);
+    const duration = toast.duration ?? (toast.action ? 7000 : 3500);
+    setToasts((prev) => [...prev, { ...toast, id, duration }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3500);
+    }, duration);
   };
 
   const dismissToast = (id: string) => {
@@ -126,15 +143,31 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
   };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // 1. Command Palette (⌘K / Ctrl+K)
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setIsPaletteOpen((prev) => !prev);
+        return;
       }
+
+      // 2. Escape closes modals & drawers
       if (e.key === "Escape") {
         setIsPaletteOpen(false);
         setIsBoardOpen(false);
+        // Note: setSelectedInstructor(null) will be added here in Step 6!
+        return;
+      }
+
+      // 3. Number keys (1-6) switch tabs
+      const tag = (e.target as HTMLElement)?.tagName;
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      
+      // Only trigger if NOT typing in a box, and NO modifiers (Ctrl/Cmd/Alt) are held
+      if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && /^[1-6]$/.test(e.key)) {
+        setActiveTab(TAB_ORDER[Number(e.key) - 1]);
       }
     };
+    
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
@@ -413,11 +446,60 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
     }
   };
 
-  const filteredCourses = courses.filter(
-    (c) =>
-      c.courseCode.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.courseTitle.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // ---------- FILTER & SORT LOGIC ----------
+  const isFree = (c: Course) => !c.instructorId && !c.instructorName;
+
+  const filteredCourses = useMemo(() => {
+    const q = searchQuery.toLowerCase();
+    const list = courses.filter(
+      (c) =>
+        (c.courseCode.toLowerCase().includes(q) ||
+          c.courseTitle.toLowerCase().includes(q) ||
+          (c.instructorName || "").toLowerCase().includes(q)) &&
+        (courseFilter === "all" || (courseFilter === "unassigned") === isFree(c))
+    );
+    const key = (c: Course) =>
+      courseSort === "code" ? c.courseCode : courseSort === "title" ? c.courseTitle : c.instructorName || "~";
+    return [...list].sort((a, b) => key(a).localeCompare(key(b)));
+  }, [courses, searchQuery, courseFilter, courseSort]);
+
+  // ---------- COURSE PERFORMANCE (for Step 7) ----------
+  const coursePerformance = useMemo(() => {
+    return courses
+      .map((c) => {
+        const cg = grades.filter((g: any) => g.courseId != null && normId(g.courseId) === normId(c.id));
+        if (cg.length === 0) return null;
+        const passed = cg.filter((g) => (g.totalGrade ?? 0) >= 50).length;
+        return {
+          course: c,
+          n: cg.length,
+          rate: (passed / cg.length) * 100,
+          avg: cg.reduce((s, g) => s + (g.totalGrade ?? 0), 0) / cg.length,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null)
+      .sort((a, b) => a.rate - b.rate)
+      .slice(0, 5);
+  }, [courses, grades]);
+
+  // ---------- EXPORT FUNCTIONS (for Step 5) ----------
+  const exportCourses = () =>
+    downloadCSV(`courses-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ["Code", "Title", "Credit Hours", "Instructor"],
+      ...filteredCourses.map((c) => [c.courseCode, c.courseTitle, c.creditHours, c.instructorName || "Unassigned"]),
+    ]);
+
+  const exportFaculty = () =>
+    downloadCSV(`faculty-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ["Name", "Specialization", "Courses", "Avg Rating", "Evaluations"],
+      ...evaluationsByInstructor.map(({ instructor, count, average }) => [
+        instructor.fullName,
+        instructor.specialization || "",
+        courses.filter((c) => normId(c.instructorId) === normId(instructor.id)).length,
+        average != null ? average.toFixed(2) : "",
+        count,
+      ]),
+    ]);
 
   const navItems: { id: Tab; label: string; shortLabel: string; Icon: typeof Layout }[] = [
     { id: "overview", label: "Department Overview", shortLabel: "Overview", Icon: Layout },
@@ -1032,7 +1114,8 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                         {courses.length} courses • {instructors.length} instructors
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+                      <ExportButton onClick={exportCourses} />
                       <motion.button
                         whileHover={{ scale: 1.02 }}
                         whileTap={{ scale: 0.98 }}
@@ -1058,6 +1141,37 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                     </div>
                   </div>
 
+                  {/* NEW: Filter Chips + Sort Dropdown */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {([
+                        ["all", "All", courses.length],
+                        ["unassigned", "Unassigned", courses.filter(isFree).length],
+                        ["assigned", "Assigned", courses.filter((c) => !isFree(c)).length],
+                      ] as const).map(([id, label, n]) => (
+                        <button
+                          key={id}
+                          onClick={() => setCourseFilter(id)}
+                          className={`px-3.5 py-1.5 rounded-full text-xs font-bold border transition ${
+                            courseFilter === id
+                              ? "bg-primary text-white border-primary shadow-sm"
+                              : "bg-white text-slate-600 border-slate-200 hover:border-primary/40"
+                          }`}
+                        >
+                          {label} <span className="opacity-70 font-mono">{n}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <select
+                      value={courseSort}
+                      onChange={(e) => setCourseSort(e.target.value as typeof courseSort)}
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 focus:outline-none"
+                    >
+                      <option value="code">Sort: Code</option>
+                      <option value="title">Sort: Title</option>
+                      <option value="instructor">Sort: Instructor</option>
+                    </select>
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {filteredCourses.map((c, i) => (
                       <motion.div
@@ -1122,11 +1236,14 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                   transition={{ duration: 0.35 }}
                   className="space-y-5"
                 >
-                  <div>
-                    <h2 className="text-2xl font-display font-bold text-slate-900">Faculty Members</h2>
-                    <p className="text-sm text-slate-500">
-                      {instructors.length} active instructors in the department
-                    </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                      <h2 className="text-2xl font-display font-bold text-slate-900">Faculty Members</h2>
+                      <p className="text-sm text-slate-500">
+                        {instructors.length} active instructors in the department
+                      </p>
+                    </div>
+                    <ExportButton onClick={exportFaculty} />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2545,6 +2662,8 @@ type ToastShape = {
   type: "success" | "error";
   title: string;
   message?: string;
+  duration?: number;
+  action?: { label: string; onClick: () => void };
 };
 
 function ToastStack({
@@ -2657,6 +2776,61 @@ function academicYearLabel(now: Date = new Date()): string {
   const month = now.getMonth(); // 0 = Jan, 8 = Sep
   const startYear = month >= 8 ? year : year - 1;
   return `${startYear}/${startYear + 1}`;
+}
+/* ==================== BATCH 2 HELPERS (Step 1) ==================== */
+
+/**
+ * Tab order used by number-key navigation (1 → overview, 6 → facilities).
+ */
+const TAB_ORDER: Tab[] = [
+  "overview",
+  "courses",
+  "faculty",
+  "evaluations",
+  "alerts",
+  "facilities",
+];
+
+/**
+ * Generates a CSV file and triggers the browser download.
+ * Adds a UTF-8 BOM (\ufeff) so Excel opens it without garbled characters.
+ * Escapes double-quotes inside values by doubling them (RFC 4180).
+ */
+function downloadCSV(
+  filename: string,
+  rows: (string | number | null | undefined)[][]
+) {
+  const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = "\ufeff" + rows.map((r) => r.map(esc).join(",")).join("\n");
+  const url = URL.createObjectURL(
+    new Blob([csv], { type: "text/csv;charset=utf-8;" })
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Reusable CSV-export button. Matches the existing slate/primary palette.
+ */
+function ExportButton({
+  onClick,
+  label = "Export CSV",
+}: {
+  onClick: () => void;
+  label?: string;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center space-x-2 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-600 hover:border-primary/40 hover:text-primary hover:shadow-sm transition"
+    >
+      <Download className="w-4 h-4" />
+      <span>{label}</span>
+    </button>
+  );
 }
 /* ==================== INSIGHTS ENGINE ==================== */
 
