@@ -1382,7 +1382,7 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                 </motion.div>
               )}
 
-              {/* ==================== ALERTS (placeholder) ==================== */}
+              {/* ==================== ALERTS: CIRCULARS COMPOSER ==================== */}
               {activeTab === "alerts" && (
                 <motion.div
                   key="alerts"
@@ -1391,19 +1391,28 @@ export function DepartmentHeadDashboard({ user, onLogout }: { user: User; onLogo
                   exit={{ opacity: 0, y: -15 }}
                   transition={{ duration: 0.35 }}
                 >
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 text-center space-y-3">
-                    <Radio className="w-12 h-12 text-red-400 mx-auto" />
-                    <h2 className="text-xl font-display font-bold text-slate-900">
-                      Broadcast Circulars
-                    </h2>
-                    <p className="text-sm text-slate-500 max-w-md mx-auto">
-                      Broadcast messages to the department. Ask your admin to enable the
-                      SmartCampusAlerts module here.
-                    </p>
-                  </div>
+                  <CircularsPanel
+                    circulars={circulars}
+                    onSend={(c) => {
+                      setCirculars((prev) => [
+                        { ...c, id: `c_${Date.now()}`, at: new Date(), pinned: false },
+                        ...prev,
+                      ]);
+                      pushToast({
+                        type: "success",
+                        title: "Circular sent",
+                        message: `${c.audience} · ${c.title}`,
+                      });
+                    }}
+                    onTogglePin={(id) =>
+                      setCirculars((p) =>
+                        p.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c))
+                      )
+                    }
+                    onDelete={(id) => setCirculars((p) => p.filter((c) => c.id !== id))}
+                  />
                 </motion.div>
               )}
-
               {/* ==================== FACILITIES (placeholder) ==================== */}
               {activeTab === "facilities" && (
                 <motion.div
@@ -3305,5 +3314,181 @@ function FacultyDrawer({
         </div>
       )}
     </AnimatePresence>
+  );
+}
+/* ==================== CIRCULARS PANEL ==================== */
+
+function CircularsPanel({
+  circulars,
+  onSend,
+  onTogglePin,
+  onDelete,
+}: {
+  circulars: Circular[];
+  onSend: (c: Pick<Circular, "title" | "body" | "audience" | "priority">) => void;
+  onTogglePin: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [audience, setAudience] = useState<Circular["audience"]>("Faculty");
+  const [priority, setPriority] = useState<Circular["priority"]>("Normal");
+  const LIMIT = 500;
+  const ready = title.trim().length > 0 && body.trim().length > 0;
+
+  const sorted = [...circulars].sort(
+    (a, b) => Number(b.pinned) - Number(a.pinned) || b.at.getTime() - a.at.getTime()
+  );
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+      {/* Composer */}
+      <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-4 self-start">
+        <div className="flex items-center space-x-2">
+          <Megaphone className="w-5 h-5 text-red-500" />
+          <h3 className="font-display font-bold text-slate-900">New circular</h3>
+        </div>
+
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Title"
+          className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+        />
+
+        <div>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value.slice(0, LIMIT))}
+            rows={5}
+            placeholder="Write your message…"
+            className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+          />
+          <p className="text-[10px] font-mono text-slate-400 text-right">
+            {body.length}/{LIMIT}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {(["Faculty", "Students", "Everyone"] as const).map((a) => (
+            <button
+              key={a}
+              onClick={() => setAudience(a)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
+                audience === a
+                  ? "bg-primary text-white border-primary"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-primary/40"
+              }`}
+            >
+              {a}
+            </button>
+          ))}
+          <button
+            onClick={() => setPriority((p) => (p === "Urgent" ? "Normal" : "Urgent"))}
+            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ml-auto ${
+              priority === "Urgent"
+                ? "bg-red-50 text-red-700 border-red-300"
+                : "bg-white text-slate-500 border-slate-200 hover:border-red-200"
+            }`}
+          >
+            {priority === "Urgent" ? "● Urgent" : "Mark urgent"}
+          </button>
+        </div>
+
+        <motion.button
+          whileHover={{ scale: ready ? 1.02 : 1 }}
+          whileTap={{ scale: ready ? 0.98 : 1 }}
+          disabled={!ready}
+          onClick={() => {
+            onSend({
+              title: title.trim(),
+              body: body.trim(),
+              audience,
+              priority,
+            });
+            setTitle("");
+            setBody("");
+            setPriority("Normal");
+          }}
+          className="w-full py-3 rounded-xl bg-gradient-to-r from-primary to-indigo-600 text-white text-sm font-bold shadow-lg shadow-primary/30 disabled:opacity-50 disabled:shadow-none flex items-center justify-center space-x-2"
+        >
+          <Send className="w-4 h-4" />
+          <span>Send to {audience}</span>
+        </motion.button>
+      </div>
+
+      {/* Sent list */}
+      <div className="lg:col-span-3 space-y-3">
+        <AnimatePresence initial={false}>
+          {sorted.map((c) => (
+            <motion.div
+              key={c.id}
+              layout
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className={`bg-white rounded-2xl border p-5 space-y-2 ${
+                c.priority === "Urgent" ? "border-red-200" : "border-slate-200"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center flex-wrap gap-2">
+                    <h4 className="font-bold text-slate-900 truncate">{c.title}</h4>
+                    {c.priority === "Urgent" && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
+                        URGENT
+                      </span>
+                    )}
+                    <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border bg-slate-50 text-slate-500 border-slate-200">
+                      {c.audience.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                    {c.at.toLocaleString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit",
+                    })}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-1 shrink-0">
+                  <button
+                    onClick={() => onTogglePin(c.id)}
+                    className={`p-1.5 rounded-lg hover:bg-slate-100 transition ${
+                      c.pinned ? "text-amber-500" : "text-slate-400"
+                    }`}
+                    aria-label="Pin"
+                    title={c.pinned ? "Unpin" : "Pin to top"}
+                  >
+                    <Pin className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onDelete(c.id)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-slate-100 transition"
+                    aria-label="Delete"
+                    title="Delete circular"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-sm text-slate-600 whitespace-pre-wrap">{c.body}</p>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+
+        {sorted.length === 0 && (
+          <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-10 text-center space-y-2">
+            <Megaphone className="w-10 h-10 text-slate-300 mx-auto" />
+            <p className="text-sm text-slate-400">Sent circulars will appear here.</p>
+            <p className="text-[11px] text-slate-400">
+              Write your first message on the left to get started.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
