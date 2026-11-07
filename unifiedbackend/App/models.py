@@ -684,8 +684,8 @@ class StudentClearance(models.Model):
         return f"{self.student_name} - {self.reason}"
 
 
-# ---------- FACILITY BOOKING ----------
-class FacilityBooking(models.Model):
+# ---------- FACILITY (NEW - Phase 2) ----------
+class Facility(models.Model):
     CAMPUS_CHOICES = (
         ('Tulu Awulia (Main)', 'Tulu Awulia (Main)'),
         ('Masha Campus', 'Masha Campus'),
@@ -694,31 +694,57 @@ class FacilityBooking(models.Model):
         ('LAB', 'Lab'),
         ('AUDITORIUM', 'Auditorium'),
         ('SEMINAR_ROOM', 'Seminar Room'),
+        ('LECTURE_HALL', 'Lecture Hall'),
         ('LIBRARY_CUBICLE', 'Library Cubicle'),
+        ('CONFERENCE_ROOM', 'Conference Room'),
+        ('MEETING_ROOM', 'Meeting Room'),
     )
-    STATUS_CHOICES = (
-        ('CONFIRMED', 'Confirmed'),
-        ('PENDING', 'Pending'),
-        ('CANCELLED', 'Cancelled'),
-    )
-
-    facility_name = models.CharField(max_length=100)
-    facility_code = models.CharField(max_length=20)
+    facility_code = models.CharField(max_length=20, unique=True)
+    name = models.CharField(max_length=100)
     campus = models.CharField(max_length=50, choices=CAMPUS_CHOICES)
-    room_type = models.CharField(max_length=20, choices=ROOM_TYPE_CHOICES)
-    booked_by = models.CharField(max_length=100)
-    booked_by_role = models.CharField(max_length=50)
-    department = models.CharField(max_length=100)
+    building = models.CharField(max_length=100, blank=True)
+    room_number = models.CharField(max_length=20, blank=True)
+    facility_type = models.CharField(max_length=20, choices=ROOM_TYPE_CHOICES)
+    capacity = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    maintenance_until = models.DateTimeField(null=True, blank=True)
+    maintenance_reason = models.CharField(max_length=255, blank=True)
+    department = models.CharField(max_length=100, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    class Meta:
+        ordering = ['facility_code']
+    def __str__(self):
+        return f'{self.facility_code} - {self.name}'
+
+
+# ---------- FACILITY BOOKING ----------
+class FacilityBooking(models.Model):
+    STATUS_CHOICES = (
+        ('PENDING', 'Pending'),
+        ('APPROVED', 'Approved'),
+        ('REJECTED', 'Rejected'),
+        ('CANCELLED', 'Cancelled'),
+        ('COMPLETED', 'Completed'),
+    )
+    facility = models.ForeignKey(Facility, on_delete=models.PROTECT, related_name='bookings', null=True, blank=True)
+    requested_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='facility_bookings_requested', null=True, blank=True)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='facility_bookings_approved')
+    department = models.CharField(max_length=100, blank=True)
     date = models.DateField()
     start_time = models.TimeField()
     end_time = models.TimeField()
     purpose = models.TextField()
+    expected_attendees = models.PositiveIntegerField(default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
-    capacity = models.IntegerField(default=0)
-    resources_equipped = models.JSONField(default=list)
-
+    rejection_reason = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    class Meta:
+        ordering = ['-created_at']
     def __str__(self):
-        return f"{self.facility_name} - {self.date}"
+        return f'{self.facility.facility_code} on {self.date} ({self.status})'
 
 
 # ---------- CAMPUS ALERT ----------

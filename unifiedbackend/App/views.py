@@ -934,10 +934,114 @@ class StudentClearanceViewSet(BaseViewSet):
     serializer_class = StudentClearanceSerializer
 
 
-# ---------- FACILITY BOOKING ----------
+# ---------- FACILITY (Phase 3) ----------
+class FacilityViewSet(BaseViewSet):
+    serializer_class = FacilitySerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.is_authenticated:
+            return Facility.objects.none()
+        if user.role in ('ADMIN', 'REGISTRAR'):
+            return Facility.objects.all()
+        dept = (getattr(user, 'department', None) or '').strip().lower()
+        if not dept:
+            return Facility.objects.filter(is_active=True)
+        return Facility.objects.filter(Q(department__iexact=dept) | Q(department=''))
+
+    def _can_manage(self):
+        return self.request.user.role in ('ADMIN', 'DEPARTMENT_HEAD', 'REGISTRAR')
+
+    def create(self, request, *args, **kwargs):
+        if not self._can_manage():
+            return Response({'error': 'Only admins and department heads can create facilities.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().create(request, *args, **kwargs)
+
+    def update(self, request, *args, **kwargs):
+        if not self._can_manage():
+            return Response({'error': 'Only admins and department heads can edit facilities.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not self._can_manage():
+            return Response({'error': 'Only admins and department heads can delete facilities.'}, status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
+
+
+# ---------- FACILITY BOOKING (Phase 3) ----------
 class FacilityBookingViewSet(BaseViewSet):
-    queryset = FacilityBooking.objects.all()
     serializer_class = FacilityBookingSerializer
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = FacilityBooking.objects.select_related('facility', 'requested_by', 'approved_by')
+        if not user.is_authenticated:
+            return qs.none()
+        if user.role == 'STUDENT':
+            return qs.filter(requested_by=user)
+        if user.role == 'INSTRUCTOR':
+            dept = (getattr(user, 'department', '') or '').strip().lower()
+            return qs.filter(Q(requested_by=user) | Q(facility__department__iexact=dept))
+        if user.role == 'DEPARTMENT_HEAD':
+            dept = (getattr(user, 'department', '') or '').strip().lower()
+            if dept:
+                return qs.filter(Q(department__iexact=dept) | Q(facility__department__iexact=dept))
+            return qs
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(
+            requested_by=self.request.user,
+            department=getattr(self.request.user, 'department', '') or '',
+            status='PENDING',
+        )
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        booking = self.get_object()
+        if request.user.role not in ('DEPARTMENT_HEAD', 'ADMIN', 'REGISTRAR'):
+            return Response({'error': 'Only department heads can approve bookings.'}, status=status.HTTP_403_FORBIDDEN)
+        if booking.status != 'PENDING':
+            return Response({'error': f'Only PENDING bookings can be approved. Current: {booking.status}.'}, status=status.HTTP_400_BAD_REQUEST)
+        booking.status = 'APPROVED'
+        booking.approved_by = request.user
+        booking.approved_at = timezone.now()
+        booking.save()
+        return Response(FacilityBookingSerializer(booking, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        booking = self.get_object()
+        if request.user.role not in ('DEPARTMENT_HEAD', 'ADMIN', 'REGISTRAR'):
+            return Response({'error': 'Only department heads can reject bookings.'}, status=status.HTTP_403_FORBIDDEN)
+        if booking.status != 'PENDING':
+            return Response({'error': f'Only PENDING bookings can be rejected. Current: {booking.status}.'}, status=status.HTTP_400_BAD_REQUEST)
+        reason = (request.data.get('reason') or '').strip()
+        if not reason:
+            return Response({'error': 'Rejection reason is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        booking.status = 'REJECTED'
+        booking.rejection_reason = reason[:255]
+        booking.approved_by = request.user
+        booking.approved_at = timezone.now()
+        booking.save()
+        return Response(FacilityBookingSerializer(booking, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'])
+    def cancel(self, request, pk=None):
+        booking = self.get_object()
+        if request.user.role not in ('ADMIN', 'REGISTRAR'):
+            if booking.requested_by_id != request.user.id:
+                is_dept_head = (
+                    request.user.role == 'DEPARTMENT_HEAD'
+                    and (booking.department or '').strip().lower() == (getattr(request.user, 'department', '') or '').strip().lower()
+                )
+                if not is_dept_head:
+                    return Response({'error': 'You can only cancel your own bookings.'}, status=status.HTTP_403_FORBIDDEN)
+        if booking.status in ('CANCELLED', 'COMPLETED'):
+            return Response({'error': f'Cannot cancel a {booking.status} booking.'}, status=status.HTTP_400_BAD_REQUEST)
+        booking.status = 'CANCELLED'
+        booking.save()
+        return Response(FacilityBookingSerializer(booking, context={'request': request}).data)
 
 
 # ---------- CAMPUS ALERT ----------

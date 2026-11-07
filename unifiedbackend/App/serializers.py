@@ -360,11 +360,91 @@ class StudentClearanceSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
-# ---------- FACILITY BOOKING ----------
+# ---------- FACILITY (Phase 3) ----------
+class FacilitySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Facility
+        fields = '__all__'
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+
+# ---------- FACILITY BOOKING (Phase 3) ----------
 class FacilityBookingSerializer(serializers.ModelSerializer):
+    facility_name = serializers.CharField(source='facility.name', read_only=True)
+    facility_code = serializers.CharField(source='facility.facility_code', read_only=True)
+    facility_campus = serializers.CharField(source='facility.campus', read_only=True)
+    requester_name = serializers.CharField(source='requested_by.full_name', read_only=True, allow_null=True)
+    approver_name = serializers.CharField(source='approved_by.full_name', read_only=True, allow_null=True)
+
     class Meta:
         model = FacilityBooking
-        fields = '__all__'
+        fields = [
+            'id', 'facility', 'facility_name', 'facility_code', 'facility_campus',
+            'requested_by', 'requester_name', 'approved_by', 'approver_name',
+            'department', 'date', 'start_time', 'end_time', 'purpose',
+            'expected_attendees', 'status', 'rejection_reason',
+            'created_at', 'updated_at', 'approved_at',
+        ]
+        read_only_fields = [
+            'id', 'requested_by', 'approved_by', 'department',
+            'status', 'rejection_reason', 'created_at', 'updated_at', 'approved_at',
+        ]
+
+    def validate_facility(self, facility):
+        if not facility.is_active:
+            raise serializers.ValidationError('This facility is inactive and cannot be booked.')
+        return facility
+
+    def validate(self, data):
+        facility = data.get('facility') or (self.instance.facility if self.instance else None)
+        date = data.get('date') or (self.instance.date if self.instance else None)
+        start_time = data.get('start_time') or (self.instance.start_time if self.instance else None)
+        end_time = data.get('end_time') or (self.instance.end_time if self.instance else None)
+        expected = data.get('expected_attendees')
+        if expected is None and self.instance:
+            expected = self.instance.expected_attendees
+
+        if not (facility and date and start_time and end_time):
+            return data
+
+        if end_time <= start_time:
+            raise serializers.ValidationError({'end_time': 'End time must be after start time.'})
+
+        from datetime import datetime, timedelta
+        from django.utils import timezone as _tz
+
+        now = _tz.now()
+        start_dt = _tz.make_aware(datetime.combine(date, start_time))
+        end_dt = _tz.make_aware(datetime.combine(date, end_time))
+
+        if start_dt < now - timedelta(minutes=1):
+            raise serializers.ValidationError({'date': 'Bookings cannot start in the past.'})
+
+        if facility.maintenance_until and facility.maintenance_until > now and start_dt < facility.maintenance_until:
+            raise serializers.ValidationError({
+                'facility': f'{facility.name} is under maintenance until {facility.maintenance_until.strftime("%Y-%m-%d %H:%M")}.',
+            })
+
+        if expected and facility.capacity and expected > facility.capacity:
+            raise serializers.ValidationError({
+                'expected_attendees': f'Exceeds facility capacity of {facility.capacity}.',
+            })
+
+        overlapping = FacilityBooking.objects.filter(
+            facility=facility,
+            date=date,
+            status__in=['PENDING', 'APPROVED'],
+        ).exclude(pk=self.instance.pk if self.instance else None)
+
+        for b in overlapping:
+            b_start = _tz.make_aware(datetime.combine(b.date, b.start_time))
+            b_end = _tz.make_aware(datetime.combine(b.date, b.end_time))
+            if start_dt < b_end and end_dt > b_start:
+                raise serializers.ValidationError({
+                    'date': f'Overlaps with existing booking: {b.purpose} ({b.start_time}-{b.end_time}).',
+                })
+
+        return data
 
 
 # ---------- CAMPUS ALERT ----------

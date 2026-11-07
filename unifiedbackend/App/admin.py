@@ -175,10 +175,22 @@ class StudentClearanceAdmin(admin.ModelAdmin):
     list_display = ['student_name', 'program', 'reason', 'overall_status']
     raw_id_fields = ['student']
 
+@admin.register(Facility)
+class FacilityAdmin(admin.ModelAdmin):
+    list_display = ['facility_code', 'name', 'campus', 'facility_type', 'department', 'capacity', 'is_active']
+    list_filter = ['campus', 'facility_type', 'department', 'is_active']
+    search_fields = ['facility_code', 'name', 'building', 'room_number']
+    ordering = ['facility_code']
+
+
 @admin.register(FacilityBooking)
 class FacilityBookingAdmin(admin.ModelAdmin):
-    list_display = ['facility_name', 'campus', 'room_type', 'booked_by', 'date', 'status']
-    list_filter = ['status', 'campus']
+    list_display = ['facility', 'requested_by', 'date', 'start_time', 'end_time', 'status', 'expected_attendees']
+    list_filter = ['status', 'facility__campus', 'facility__facility_type']
+    search_fields = ['facility__facility_code', 'facility__name', 'requested_by__username', 'requested_by__full_name', 'purpose']
+    date_hierarchy = 'date'
+    raw_id_fields = ['facility', 'requested_by', 'approved_by']
+
 
 @admin.register(CampusAlert)
 class CampusAlertAdmin(admin.ModelAdmin):
