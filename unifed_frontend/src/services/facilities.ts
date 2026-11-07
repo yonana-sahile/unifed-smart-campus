@@ -71,7 +71,7 @@ function toBooking(raw: any): Booking {
     id: String(raw.id),
     facilityId: String(raw.facility ?? ""),
     title: raw.purpose || "Untitled booking",
-    requesterName: raw.requester_name || raw.requested_by?.full_name || "Unknown",
+ requesterName: raw.requester_name || (typeof raw.requested_by === "object" ? raw.requested_by?.full_name : null) || "Unknown",
     startsAt,
     endsAt,
     createdAt: raw.created_at || new Date().toISOString(),
