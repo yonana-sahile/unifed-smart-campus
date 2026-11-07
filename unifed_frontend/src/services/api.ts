@@ -29,7 +29,7 @@ import type {
   CampusMediaPost,
 } from '../types';
 
-const API_BASE = 'https://unifed-smart-campus-2.onrender.com/api';
+const API_BASE = 'http://127.0.0.1:8000/api';
 
 // ✅ FIX: Export the axios instance so other files can use it
 export const api = axios.create({
@@ -927,6 +927,19 @@ export const updateFacilityBooking = (id: string, patch: any): Promise<FacilityB
 export const deleteFacilityBooking = (id: string): Promise<void> =>
   api.delete(`/facility-bookings/${numericId(id)}/`).then(() => undefined);
 
+// ---------- FACILITIES (Phase 3) ----------
+export const getFacilities = (): Promise<any[]> =>
+  api.get('/facilities/').then(r => unwrapList<any>(r.data));
+
+export const approveFacilityBooking = (id: string): Promise<any> =>
+  api.post(`/facility-bookings/${numericId(id)}/approve/`).then(r => r.data);
+
+export const rejectFacilityBooking = (id: string, reason: string): Promise<any> =>
+  api.post(`/facility-bookings/${numericId(id)}/reject/`, { reason }).then(r => r.data);
+
+export const cancelFacilityBooking = (id: string): Promise<any> =>
+  api.post(`/facility-bookings/${numericId(id)}/cancel/`).then(r => r.data);
+
 // ---------- CAMPUS ALERTS ----------
 export const getCampusAlerts = (): Promise<CampusAlert[]> =>
   api.get('/campus-alerts/').then(r => unwrapList<CampusAlert>(r.data));
@@ -1200,6 +1213,10 @@ export const CampusDatabase = {
   addFacilityBooking,
   updateFacilityBooking,
   deleteFacilityBooking,
+  getFacilities,
+  approveFacilityBooking,
+  rejectFacilityBooking,
+  cancelFacilityBooking,
 
   // Campus Alerts
   getCampusAlerts,
