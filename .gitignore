@@ -45,4 +45,3 @@ Thumbs.db
 credentials.json
 service-account.json
 secrets.json
-.env.*
