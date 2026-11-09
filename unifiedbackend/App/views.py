@@ -2047,406 +2047,174 @@ class DormMaintenanceRequestViewSet(BaseViewSet):
         serializer.save(reported_by=self.request.user)
 
 
-# ============================================================================
+# =====================================================================
 # MATERIAL MANAGEMENT SYSTEM (MMS) VIEWSETS
-# ----------------------------------------------------------------------------
-# The frontend `api.ts` uses these endpoints and action URLs:
-#   /inventory-items/, /requisitions/, /goods-receiving/, /fixed-assets/,
-#   /inter-store-transfers/, /property-returns/, /gate-passes/,
-#   /maintenance-orders/, /physical-audits/, /vendors/, /purchase-orders/,
-#   /asset-disposals/, /hazardous-materials/, /bin-cards/,
-#   /department-budgets/, /donation-grants/
-#
-# Ensure your router in urls.py registers these with the exact
-# basenames above (e.g. `router.register(r'inventory-items',
-# MaterialInventoryItemViewSet, basename='inventory-items')`).
-# ============================================================================
-
-def _generate_ref(prefix: str, num_digits: int = 4) -> str:
-    """Generates a year-scoped reference like REQ-2026-0042."""
-    num = secrets.randbelow(10 ** num_digits)
-    return f"{prefix}-{timezone.now().year}-{num:0{num_digits}d}"
-
+# =====================================================================
 
 class MaterialInventoryItemViewSet(BaseViewSet):
-    queryset = MaterialInventoryItem.objects.all().order_by('-lastRestocked')
+    queryset = MaterialInventoryItem.objects.all().order_by('-id')
     serializer_class = MaterialInventoryItemSerializer
-
-    def perform_create(self, serializer):
-        item = serializer.save()
-        # Re-derive totals server-side; ignore any client-supplied values.
-        item.total_value_etb = (item.quantity_in_stock or 0) * (item.unit_cost_etb or 0)
-        if item.quantity_in_stock <= 0:
-            item.status = 'OUT_OF_STOCK'
-        elif item.quantity_in_stock <= (item.min_threshold or 0):
-            item.status = 'LOW_STOCK'
-        else:
-            item.status = 'IN_STOCK'
-        item.last_restocked = timezone.localdate()
-        item.save(update_fields=['total_value_etb', 'status', 'last_restocked'])
-
-    @action(detail=True, methods=['post'], url_path='adjust-stock')
-    def adjust_stock(self, request, pk=None):
-        item = self.get_object()
-        try:
-            delta = int(request.data.get('delta', 0))
-        except (TypeError, ValueError):
-            return Response({'error': 'delta must be an integer.'}, status=status.HTTP_400_BAD_REQUEST)
-        if delta == 0:
-            return Response({'error': 'delta cannot be zero.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        reason = (request.data.get('reason') or 'Manual adjustment')[:255]
-        performed_by = request.data.get('performed_by') or request.user.full_name
-
-        new_qty = max(0, (item.quantity_in_stock or 0) + delta)
-        item.quantity_in_stock = new_qty
-        item.total_value_etb = new_qty * (item.unit_cost_etb or 0)
-        if new_qty == 0:
-            item.status = 'OUT_OF_STOCK'
-        elif new_qty <= (item.min_threshold or 0):
-            item.status = 'LOW_STOCK'
-        else:
-            item.status = 'IN_STOCK'
-        item.save()
-
-        # Append a bin-card ledger entry so the digital ledger stays accurate.
-        try:
-            prev = (
-                StockBinCardEntry.objects
-                .filter(item=item)
-                .order_by('-timestamp')
-                .first()
-            )
-            prev_balance = prev.balance_stock if prev else (new_qty - delta)
-            StockBinCardEntry.objects.create(
-                item=item,
-                item_code=item.item_code,
-                item_name=item.name,
-                voucher_type='AUDIT_ADJUSTMENT',
-                voucher_number=_generate_ref('ADJ'),
-                warehouse_location=item.warehouse_location,
-                quantity_in=max(0, delta),
-                quantity_out=max(0, -delta),
-                balance_stock=prev_balance + delta,
-                performed_by=performed_by,
-                remarks=reason,
-            )
-        except Exception as e:
-            print(f"[adjust_stock] bin-card log failed: {e}")
-
-        return Response(self.get_serializer(item).data)
 
 
 class MaterialRequisitionViewSet(BaseViewSet):
-    queryset = MaterialRequisition.objects.all().order_by('-requestedDate')
+    queryset = MaterialRequisition.objects.all().order_by('-id')
     serializer_class = MaterialRequisitionSerializer
 
-    def perform_create(self, serializer):
-        return serializer.save(
-            requisition_number=_generate_ref('REQ'),
-            requested_date=timezone.localdate(),
-        )
+    def create(self, request, *args, **kwargs):
+        # Custom create to handle nested items
+        data = request.data.copy()
+        items_data = data.pop('items', [])
 
-    @action(detail=True, methods=['post'], url_path='update-status')
-    def update_status(self, request, pk=None):
-        req = self.get_object()
-        new_status = request.data.get('status')
-        valid = ('PENDING_APPROVAL', 'APPROVED', 'DISPATCHED', 'REJECTED')
-        if new_status not in valid:
-            return Response(
-                {'error': f'status must be one of {valid}.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        remarks = request.data.get('remarks', '')
-        approved_by = request.data.get('approved_by') or request.user.full_name
-
-        req.status = new_status
-        if remarks:
-            req.remarks = remarks
-        if new_status == 'APPROVED':
-            req.approved_by = approved_by
-            req.approved_at = timezone.now()
-            if not req.dispatch_voucher_number:
-                req.dispatch_voucher_number = _generate_ref('M22')
-        elif new_status == 'REJECTED':
-            req.rejection_reason = remarks or 'No reason provided'
-        req.save()
-        return Response(self.get_serializer(req).data)
-
-
-class GoodsReceivingRecordViewSet(BaseViewSet):
-    queryset = GoodsReceivingRecord.objects.all().order_by('-receivedDate')
-    serializer_class = GoodsReceivingRecordSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(
-            grn_number=_generate_ref('GRN'),
-            received_date=timezone.localdate(),
-        )
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            requisition = serializer.save()
+            # Save nested items
+            for item_data in items_data:
+                RequisitionItem.objects.create(requisition=requisition, **item_data)
+            return Response(self.get_serializer(requisition).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class FixedAssetItemViewSet(BaseViewSet):
-    queryset = FixedAssetItem.objects.all().order_by('-purchaseDate')
+    queryset = FixedAssetItem.objects.all().order_by('-id')
     serializer_class = FixedAssetItemSerializer
 
-    def perform_create(self, serializer):
-        serializer.save(purchase_date=timezone.localdate())
 
+class GoodsReceivingRecordViewSet(BaseViewSet):
+    queryset = GoodsReceivingRecord.objects.all().order_by('-id')
+    serializer_class = GoodsReceivingRecordSerializer
 
-class InterStoreTransferRecordViewSet(BaseViewSet):
-    queryset = InterStoreTransferRecord.objects.all().order_by('-initiatedDate')
-    serializer_class = InterStoreTransferRecordSerializer
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        items_data = data.pop('items', [])
 
-    def perform_create(self, serializer):
-        serializer.save(
-            transfer_number=_generate_ref('M21'),
-            initiated_date=timezone.localdate(),
-        )
-
-    @action(detail=True, methods=['post'], url_path='update-status')
-    def update_status(self, request, pk=None):
-        transfer = self.get_object()
-        new_status = request.data.get('status')
-        if new_status not in ('IN_TRANSIT', 'COMPLETED', 'CANCELLED'):
-            return Response({'error': 'Invalid status.'}, status=status.HTTP_400_BAD_REQUEST)
-        transfer.status = new_status
-        received_by = request.data.get('received_by')
-        if new_status == 'COMPLETED' and received_by:
-            transfer.received_by = received_by
-            transfer.received_date = timezone.localdate()
-        transfer.save()
-        return Response(self.get_serializer(transfer).data)
-
-
-class PropertyReturnRecordViewSet(BaseViewSet):
-    queryset = PropertyReturnRecord.objects.all().order_by('-returnDate')
-    serializer_class = PropertyReturnRecordSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(
-            voucher_number=_generate_ref('M23'),
-            return_date=timezone.localdate(),
-        )
-
-
-class CampusGatePassRecordViewSet(BaseViewSet):
-    queryset = CampusGatePassRecord.objects.all().order_by('-authorizedDate')
-    serializer_class = CampusGatePassRecordSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(
-            gate_pass_number=_generate_ref('GP'),
-            authorized_date=timezone.now(),
-        )
-
-    @action(detail=True, methods=['post'], url_path='checkout')
-    def checkout(self, request, pk=None):
-        pass_obj = self.get_object()
-        guard_name = request.data.get('guard_name') or request.user.full_name
-        exit_ts = request.data.get('security_exit_timestamp') or timezone.now().isoformat()
-
-        pass_obj.status = 'CHECKED_OUT'
-        pass_obj.guard_name = guard_name
-        pass_obj.security_exit_timestamp = exit_ts
-        pass_obj.save()
-        return Response(self.get_serializer(pass_obj).data)
-
-
-class MaintenanceWorkOrderViewSet(BaseViewSet):
-    queryset = MaintenanceWorkOrder.objects.all().order_by('-reportedDate')
-    serializer_class = MaintenanceWorkOrderSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(
-            order_number=_generate_ref('WO'),
-            reported_date=timezone.localdate(),
-        )
-
-    @action(detail=True, methods=['post'], url_path='update-status')
-    def update_status(self, request, pk=None):
-        order = self.get_object()
-        new_status = request.data.get('status')
-        valid = ('REPORTED', 'DIAGNOSIS', 'IN_REPAIR', 'REPAIRED', 'BEYOND_ECONOMIC_REPAIR')
-        if new_status not in valid:
-            return Response({'error': f'status must be one of {valid}.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        order.status = new_status
-        notes = request.data.get('technician_notes')
-        if notes is not None:
-            order.technician_notes = notes
-        if new_status == 'REPAIRED':
-            order.completion_date = timezone.localdate()
-            cost = request.data.get('actual_cost_etb')
-            if cost is not None:
-                try:
-                    order.actual_cost_etb = float(cost)
-                except (TypeError, ValueError):
-                    pass
-        order.save()
-        return Response(self.get_serializer(order).data)
-
-
-class PhysicalAuditEntryViewSet(BaseViewSet):
-    queryset = PhysicalAuditEntry.objects.all().order_by('-auditDate')
-    serializer_class = PhysicalAuditEntrySerializer
-
-    @action(detail=False, methods=['put'], url_path=r'by-item/(?P<item_id>[^/.]+)')
-    def by_item(self, request, item_id=None):
-        try:
-            audit = PhysicalAuditEntry.objects.get(item_id=item_id)
-        except PhysicalAuditEntry.DoesNotExist:
-            return Response({'error': 'No audit entry for that item.'}, status=status.HTTP_404_NOT_FOUND)
-
-        serializer = self.get_serializer(audit, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(audit_date=timezone.localdate())
-        return Response(serializer.data)
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            record = serializer.save()
+            for item_data in items_data:
+                GoodsReceivingItem.objects.create(grn=record, **item_data)
+            return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class UniversityVendorViewSet(BaseViewSet):
-    queryset = UniversityVendor.objects.all().order_by('name')
+    queryset = UniversityVendor.objects.all().order_by('-id')
     serializer_class = UniversityVendorSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(vendor_code=_generate_ref('VND', 3))
 
 
 class PurchaseOrderViewSet(BaseViewSet):
-    queryset = PurchaseOrder.objects.all().order_by('-issueDate')
+    queryset = PurchaseOrder.objects.all().order_by('-id')
     serializer_class = PurchaseOrderSerializer
 
-    def perform_create(self, serializer):
-        serializer.save(
-            po_number=_generate_ref('PO', 4),
-            issue_date=timezone.localdate(),
-        )
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        items_data = data.pop('items', [])
 
-    @action(detail=True, methods=['post'], url_path='update-status')
-    def update_status(self, request, pk=None):
-        po = self.get_object()
-        new_status = request.data.get('status')
-        valid = (
-            'DRAFT', 'FINANCE_APPROVED', 'ISSUED_TO_VENDOR',
-            'PARTIALLY_DELIVERED', 'COMPLETED_M19', 'CANCELLED',
-        )
-        if new_status not in valid:
-            return Response({'error': f'status must be one of {valid}.'}, status=status.HTTP_400_BAD_REQUEST)
-        po.status = new_status
-        approver = request.data.get('approved_by')
-        if approver:
-            po.approved_by = approver
-        po.save()
-        return Response(self.get_serializer(po).data)
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            po = serializer.save()
+            for item_data in items_data:
+                PurchaseOrderItem.objects.create(po=po, **item_data)
+            return Response(self.get_serializer(po).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AssetDisposalRecordViewSet(BaseViewSet):
-    queryset = AssetDisposalRecord.objects.all().order_by('-committeeApprovedDate')
+    queryset = AssetDisposalRecord.objects.all().order_by('-id')
     serializer_class = AssetDisposalRecordSerializer
-
-    def perform_create(self, serializer):
-        serializer.save(
-            disposal_ref=_generate_ref('DSP'),
-            committee_approved_date=timezone.localdate(),
-        )
-
-    @action(detail=True, methods=['post'], url_path='update-status')
-    def update_status(self, request, pk=None):
-        disposal = self.get_object()
-        new_status = request.data.get('status')
-        valid = ('APPRAISAL', 'TENDER_PUBLISHED', 'AUCTIONED', 'REMITTED_TO_TREASURY')
-        if new_status not in valid:
-            return Response({'error': f'status must be one of {valid}.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        disposal.status = new_status
-        for field, key in (
-                ('winning_bid_etb', 'winning_bid_etb'),
-                ('buyer_name', 'buyer_name'),
-                ('buyer_receipt_no', 'buyer_receipt_no'),
-        ):
-            val = request.data.get(key)
-            if val is not None:
-                setattr(disposal, field, val)
-        disposal.save()
-        return Response(self.get_serializer(disposal).data)
 
 
 class HazardousMaterialRecordViewSet(BaseViewSet):
-    queryset = HazardousMaterialRecord.objects.all().order_by('chemicalName')
+    queryset = HazardousMaterialRecord.objects.all().order_by('-id')
     serializer_class = HazardousMaterialRecordSerializer
 
 
-class StockBinCardEntryViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only — entries are appended by other mutations, never edited."""
+class StockBinCardEntryViewSet(BaseViewSet):
     queryset = StockBinCardEntry.objects.all().order_by('-timestamp')
     serializer_class = StockBinCardEntrySerializer
-    permission_classes = [permissions.IsAuthenticated]
 
 
 class DepartmentStoreBudgetViewSet(BaseViewSet):
-    queryset = DepartmentStoreBudget.objects.all().order_by('departmentName')
+    queryset = DepartmentStoreBudget.objects.all().order_by('-id')
     serializer_class = DepartmentStoreBudgetSerializer
-
-    @action(detail=False, methods=['post'], url_path='upsert')
-    def upsert(self, request):
-        name = (request.data.get('department_name') or '').strip()
-        if not name:
-            return Response({'error': 'department_name is required.'}, status=status.HTTP_400_BAD_REQUEST)
-
-        try:
-            allocated = float(request.data.get('allocated_budget_etb', 0))
-        except (TypeError, ValueError):
-            return Response({'error': 'allocated_budget_etb must be numeric.'}, status=status.HTTP_400_BAD_REQUEST)
-        fiscal_year = request.data.get('fiscal_year') or f"{timezone.now().year}/{timezone.now().year + 1}"
-
-        budget, _created = DepartmentStoreBudget.objects.update_or_create(
-            department_name=name,
-            fiscal_year=fiscal_year,
-            defaults={'allocated_budget_etb': allocated},
-        )
-        return Response(self.get_serializer(budget).data, status=status.HTTP_200_OK)
 
 
 class DonationGrantAssetViewSet(BaseViewSet):
-    queryset = DonationGrantAsset.objects.all().order_by('-projectEndDate')
+    queryset = DonationGrantAsset.objects.all().order_by('-id')
     serializer_class = DonationGrantAssetSerializer
 
 
-# ============================================================================
+class InterStoreTransferRecordViewSet(BaseViewSet):
+    queryset = InterStoreTransferRecord.objects.all().order_by('-id')
+    serializer_class = InterStoreTransferRecordSerializer
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        items_data = data.pop('items', [])
+
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            transfer = serializer.save()
+            for item_data in items_data:
+                InterStoreTransferItem.objects.create(transfer=transfer, **item_data)
+            return Response(self.get_serializer(transfer).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PropertyReturnRecordViewSet(BaseViewSet):
+    queryset = PropertyReturnRecord.objects.all().order_by('-id')
+    serializer_class = PropertyReturnRecordSerializer
+
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+        items_data = data.pop('items', [])
+
+        serializer = self.get_serializer(data=data)
+        if serializer.is_valid():
+            record = serializer.save()
+            for item_data in items_data:
+                PropertyReturnItem.objects.create(return_record=record, **item_data)
+            return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class CampusGatePassRecordViewSet(BaseViewSet):
+    queryset = CampusGatePassRecord.objects.all().order_by('-id')
+    serializer_class = CampusGatePassRecordSerializer
+
+
+class MaintenanceWorkOrderViewSet(BaseViewSet):
+    queryset = MaintenanceWorkOrder.objects.all().order_by('-id')
+    serializer_class = MaintenanceWorkOrderSerializer
+
+
+class PhysicalAuditEntryViewSet(BaseViewSet):
+    queryset = PhysicalAuditEntry.objects.all().order_by('-id')
+    serializer_class = PhysicalAuditEntrySerializer
+
+
+# =====================================================================
 # HARDWARE & IOT VIEWSETS
-# ============================================================================
+# =====================================================================
 
 class SmartIoTDeviceViewSet(BaseViewSet):
-    queryset = SmartIoTDevice.objects.all()
+    queryset = SmartIoTDevice.objects.all().order_by('-id')
     serializer_class = SmartIoTDeviceSerializer
 
-    @action(detail=True, methods=['post'], url_path='toggle-relay')
+    @action(detail=True, methods=['post'])
     def toggle_relay(self, request, pk=None):
         device = self.get_object()
-        new_state = request.data.get('state')
-        valid = ('LOCKED', 'UNLOCKED', 'SIREN_ON', 'SIREN_OFF')
-        if new_state is not None and new_state not in valid:
-            return Response(
-                {'error': f'state must be one of {valid} or omitted.'},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        if new_state is None:
-            # Auto-toggle against current state.
-            current = getattr(device, 'relay_state', None)
-            next_map = {
-                'LOCKED': 'UNLOCKED', 'UNLOCKED': 'LOCKED',
-                'SIREN_ON': 'SIREN_OFF', 'SIREN_OFF': 'SIREN_ON',
-            }
-            new_state = next_map.get(current, 'UNLOCKED')
-        device.relay_state = new_state
-        device.save()
-        return Response(self.get_serializer(device).data)
+        new_state = request.data.get('relayState')
+        if new_state:
+            device.relayState = new_state
+            device.save()
+            return Response({'status': 'Relay updated', 'relayState': new_state})
+        return Response({'error': 'relayState required'}, status=status.HTTP_400_BAD_REQUEST)
 
 
-class SecurityCameraFeedViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = SecurityCameraFeed.objects.all()
+class SecurityCameraFeedViewSet(BaseViewSet):
+    queryset = SecurityCameraFeed.objects.all().order_by('-id')
     serializer_class = SecurityCameraFeedSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
 
 class BiometricAttendanceEventViewSet(BaseViewSet):
@@ -2458,10 +2226,10 @@ class IoTHardwareAlertViewSet(BaseViewSet):
     queryset = IoTHardwareAlert.objects.all().order_by('-timestamp')
     serializer_class = IoTHardwareAlertSerializer
 
-    @action(detail=True, methods=['post'], url_path='acknowledge')
+    @action(detail=True, methods=['post'])
     def acknowledge(self, request, pk=None):
         alert = self.get_object()
-        alert.is_acknowledged = True
-        alert.acknowledged_by = request.data.get('acknowledged_by') or request.user.full_name
+        alert.isAcknowledged = True
+        alert.acknowledgedBy = request.user.full_name
         alert.save()
-        return Response(self.get_serializer(alert).data)
+        return Response({'status': 'Alert acknowledged'})
