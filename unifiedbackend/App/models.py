@@ -15,16 +15,15 @@ class User(AbstractUser):
         ('AUDITOR', 'Auditor'),
         ('LIBRARY_STAFF', 'Library Staff'),
         ('FINANCE_OFFICER', 'Finance Officer'),
+        ('MATERIAL_MANAGER', 'Material Manager'),  # ✅ ADDED FOR MMS
     )
 
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='STUDENT')
     is_active = models.BooleanField(default=True)
-    
-    # ✅ UPDATED: Stores the base64 image or URL for the ID photo
-    avatar_url = models.TextField(blank=True, null=True) 
-    # ✅ NEW: Tracks when the photo was uploaded
+
+    avatar_url = models.TextField(blank=True, null=True)
     avatar_updated_at = models.DateTimeField(blank=True, null=True)
-    
+
     phone_number = models.CharField(max_length=20, blank=True, null=True)
 
     # Role-specific fields
@@ -47,25 +46,6 @@ class User(AbstractUser):
     officer_id = models.CharField(max_length=20, blank=True, null=True, unique=True)
 
     bio = models.TextField(blank=True, null=True)
-    # ✅ TEST: temporarily disabled to isolate admin 500
-    # def clean(self):
-    #     super().clean()
-    #     for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
-    #         if getattr(self, field) == '':
-    #             setattr(self, field, None)
-    #
-    #     if self.role in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'DEAN'):
-    #         if not (self.department and str(self.department).strip()):
-    #             from django.core.exceptions import ValidationError
-    #             raise ValidationError({
-    #                 'department': f'A department is required for role {self.role}.'
-    #             })
-    #
-    # def save(self, *args, **kwargs):
-    #     for field in ('student_id', 'instructor_id', 'staff_id', 'officer_id'):
-    #         if getattr(self, field) == '':
-    #             setattr(self, field, None)
-    #     super().save(*args, **kwargs)
 
     @property
     def full_name(self):
@@ -74,6 +54,7 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.full_name} ({self.role})"
+
 
 # ---------- COURSE ----------
 class Course(models.Model):
@@ -351,8 +332,6 @@ class AttendanceRecord(models.Model):
 
 # ---------- LIVE ATTENDANCE SESSION ----------
 class AttendanceSession(models.Model):
-    """A single live class meeting that students can check into with a code."""
-
     STATUS_CHOICES = (
         ('OPEN', 'Open'),
         ('CLOSED', 'Closed'),
@@ -399,8 +378,6 @@ class AttendanceSession(models.Model):
 
 # ---------- ATTENDANCE CHECK-IN ----------
 class AttendanceCheckIn(models.Model):
-    """One student's check-in against one live attendance session."""
-
     STATUS_CHOICES = (
         ('PRESENT', 'Present'),
         ('LATE', 'Late'),
@@ -684,7 +661,7 @@ class StudentClearance(models.Model):
         return f"{self.student_name} - {self.reason}"
 
 
-# ---------- FACILITY (NEW - Phase 2) ----------
+# ---------- FACILITY ----------
 class Facility(models.Model):
     CAMPUS_CHOICES = (
         ('Tulu Awulia (Main)', 'Tulu Awulia (Main)'),
@@ -712,8 +689,10 @@ class Facility(models.Model):
     department = models.CharField(max_length=100, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         ordering = ['facility_code']
+
     def __str__(self):
         return f'{self.facility_code} - {self.name}'
 
@@ -728,8 +707,10 @@ class FacilityBooking(models.Model):
         ('COMPLETED', 'Completed'),
     )
     facility = models.ForeignKey(Facility, on_delete=models.PROTECT, related_name='bookings', null=True, blank=True)
-    requested_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='facility_bookings_requested', null=True, blank=True)
-    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='facility_bookings_approved')
+    requested_by = models.ForeignKey(User, on_delete=models.PROTECT, related_name='facility_bookings_requested',
+                                     null=True, blank=True)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='facility_bookings_approved')
     department = models.CharField(max_length=100, blank=True)
     date = models.DateField()
     start_time = models.TimeField()
@@ -741,8 +722,10 @@ class FacilityBooking(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     approved_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         ordering = ['-created_at']
+
     def __str__(self):
         return f'{self.facility.facility_code} on {self.date} ({self.status})'
 
@@ -891,18 +874,18 @@ class ExamMonitoringEvent(models.Model):
     event_type = models.CharField(max_length=50, choices=EVENT_TYPES)
     timestamp = models.DateTimeField(auto_now_add=True)
     details = models.TextField(blank=True, null=True)
-    
-    # ✅ NEW: Review and Resolution fields
+
     duration_seconds = models.IntegerField(default=0)
     is_resolved = models.BooleanField(default=False)
     requires_review = models.BooleanField(default=False)
     review_status = models.CharField(
-        max_length=20, 
-        choices=(('PENDING', 'Pending'), ('APPROVED', 'Approved'), ('DISMISSED', 'Dismissed')), 
+        max_length=20,
+        choices=(('PENDING', 'Pending'), ('APPROVED', 'Approved'), ('DISMISSED', 'Dismissed')),
         default='PENDING'
     )
     instructor_notes = models.TextField(blank=True, null=True)
-    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_events')
+    reviewed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                    related_name='reviewed_events')
 
     class Meta:
         ordering = ['-timestamp']
@@ -914,21 +897,18 @@ class ExamMonitoringEvent(models.Model):
 # ---------- EXAM MONITORING SETTINGS ----------
 class ExamMonitoringSetting(models.Model):
     exam = models.OneToOneField(Exam, on_delete=models.CASCADE, related_name='monitoring_setting')
-    
-    # Feature Toggles
+
     webcam_required = models.BooleanField(default=True)
     detect_multiple_faces = models.BooleanField(default=True)
     detect_face_visibility = models.BooleanField(default=True)
     progressive_blur_enabled = models.BooleanField(default=True)
-    
-    # Thresholds (in seconds)
+
     face_missing_grace_period = models.IntegerField(default=5, help_text="Seconds before showing a warning")
     persistent_issue_threshold = models.IntegerField(default=15, help_text="Seconds before blurring the screen")
     blur_duration = models.IntegerField(default=10, help_text="How long the screen stays blurred after resolution")
-    
-    # Review Criteria
+
     require_review_for_multiple_faces = models.BooleanField(default=True)
-    
+
     def __str__(self):
         return f"Settings for {self.exam.exam_title}"
 
@@ -944,14 +924,15 @@ class FaceVerificationToken(models.Model):
 
     def __str__(self):
         return f"Token for {self.student.username} - {self.exam.exam_title}"
-    # ---------- PASSWORD RESET OTP ----------
+
+
+# ---------- PASSWORD RESET OTP ----------
 class PasswordResetOTP(models.Model):
     email = models.EmailField()
     otp_code = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
-        # Code expires after 10 minutes
         from datetime import timedelta
         return timezone.now() > self.created_at + timedelta(minutes=10)
 
@@ -996,7 +977,6 @@ class DormRoom(models.Model):
         return max(0, self.capacity - self.current_occupants_count)
 
     def sync_availability(self, save=True):
-        """Keep the availability flag aligned with real occupancy."""
         available = self.current_occupants_count < self.capacity
         if self.is_available != available:
             self.is_available = available
@@ -1039,7 +1019,6 @@ class DormAssignment(models.Model):
 
     @staticmethod
     def recount_room(room_id):
-        """Recompute a room's occupancy from active assignments."""
         if not room_id:
             return
         room = DormRoom.objects.filter(pk=room_id).first()
@@ -1074,7 +1053,6 @@ class DormAssignment(models.Model):
         return f"{self.student_name} - {self.room.room_number}"
 
 
-
 # ---------- DORM MAINTENANCE REQUEST ----------
 class DormMaintenanceRequest(models.Model):
     STATUS_CHOICES = (
@@ -1091,3 +1069,461 @@ class DormMaintenanceRequest(models.Model):
 
     def __str__(self):
         return f"{self.room.room_number} - {self.status}"
+
+
+# =====================================================================
+# MATERIAL MANAGEMENT SYSTEM (MMS) MODELS
+# =====================================================================
+
+class MaterialInventoryItem(models.Model):
+    itemCode = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    amharicName = models.CharField(max_length=255, blank=True, null=True)
+    category = models.CharField(max_length=50)
+    description = models.TextField(blank=True)
+    quantityInStock = models.IntegerField(default=0)
+    unit = models.CharField(max_length=50)
+    minThreshold = models.IntegerField(default=5)
+    unitCostETB = models.FloatField(default=0.0)
+    totalValueETB = models.FloatField(default=0.0)
+    warehouseLocation = models.CharField(max_length=255)
+    shelfBin = models.CharField(max_length=50, blank=True, null=True)
+    status = models.CharField(max_length=50, default='IN_STOCK')
+    lastRestocked = models.DateField(auto_now=True)
+    supplier = models.CharField(max_length=255, blank=True, null=True)
+    specs = models.TextField(blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        self.totalValueETB = self.quantityInStock * self.unitCostETB
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.itemCode} - {self.name}"
+
+
+class MaterialRequisition(models.Model):
+    requisitionNumber = models.CharField(max_length=50, unique=True)
+    requesterId = models.CharField(max_length=50)
+    requesterName = models.CharField(max_length=255)
+    requesterRole = models.CharField(max_length=50)
+    department = models.CharField(max_length=255)
+    requestedDate = models.DateField(auto_now_add=True)
+    urgency = models.CharField(max_length=50, default='ROUTINE')
+    purpose = models.TextField()
+    status = models.CharField(max_length=50, default='PENDING_APPROVAL')
+    remarks = models.TextField(blank=True, null=True)
+    dispatchVoucherNumber = models.CharField(max_length=50, blank=True, null=True)
+
+    def __str__(self):
+        return self.requisitionNumber
+
+
+class RequisitionItem(models.Model):
+    requisition = models.ForeignKey(MaterialRequisition, related_name='items', on_delete=models.CASCADE)
+    itemId = models.CharField(max_length=50)
+    itemCode = models.CharField(max_length=50)
+    itemName = models.CharField(max_length=255)
+    quantityRequested = models.IntegerField()
+    unit = models.CharField(max_length=50)
+
+    def __str__(self):
+        return f"{self.itemName} ({self.quantityRequested} {self.unit})"
+
+
+class FixedAssetItem(models.Model):
+    assetTag = models.CharField(max_length=50, unique=True)
+    serialNumber = models.CharField(max_length=100, blank=True)
+    name = models.CharField(max_length=255)
+    category = models.CharField(max_length=50)
+    model = models.CharField(max_length=100, blank=True)
+    purchaseDate = models.DateField(auto_now_add=True)
+    purchaseCostETB = models.FloatField()
+    currentValueETB = models.FloatField()
+    custodianName = models.CharField(max_length=255)
+    custodianDepartment = models.CharField(max_length=255)
+    location = models.CharField(max_length=255)
+    condition = models.CharField(max_length=50, default='EXCELLENT')
+    buildingBlock = models.CharField(max_length=50, blank=True, null=True)
+    roomNumber = models.CharField(max_length=50, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.assetTag} - {self.name}"
+
+
+class GoodsReceivingRecord(models.Model):
+    grnNumber = models.CharField(max_length=50, unique=True)
+    poNumber = models.CharField(max_length=50, blank=True)
+    invoiceNumber = models.CharField(max_length=50, blank=True)
+    supplierName = models.CharField(max_length=255)
+    supplierTIN = models.CharField(max_length=50, blank=True, null=True)
+    receivedDate = models.DateField(auto_now_add=True)
+    receivedBy = models.CharField(max_length=255)
+    warehouseLocation = models.CharField(max_length=255)
+    totalAmountETB = models.FloatField(default=0)
+    status = models.CharField(max_length=50, default='VERIFIED_STOCKED')
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.grnNumber
+
+
+class GoodsReceivingItem(models.Model):
+    grn = models.ForeignKey(GoodsReceivingRecord, related_name='items', on_delete=models.CASCADE)
+    itemId = models.CharField(max_length=50)
+    itemCode = models.CharField(max_length=50)
+    itemName = models.CharField(max_length=255)
+    quantityReceived = models.IntegerField()
+    unitCostETB = models.FloatField()
+    totalCostETB = models.FloatField()
+
+    def __str__(self):
+        return f"{self.itemName} ({self.quantityReceived})"
+
+
+class UniversityVendor(models.Model):
+    vendorCode = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    tradeName = models.CharField(max_length=255, blank=True, null=True)
+    tinNumber = models.CharField(max_length=50)
+    vatNumber = models.CharField(max_length=50, blank=True, null=True)
+    contactPerson = models.CharField(max_length=255)
+    email = models.EmailField()
+    phone = models.CharField(max_length=50)
+    address = models.TextField()
+    city = models.CharField(max_length=100)
+    category = models.CharField(max_length=50)
+    ratingScore = models.FloatField(default=5.0)
+    activeContractsCount = models.IntegerField(default=0)
+    totalSuppliedValueETB = models.FloatField(default=0)
+    status = models.CharField(max_length=50, default='ACTIVE')
+    bankAccountDetails = models.CharField(max_length=255, blank=True, null=True)
+
+    def __str__(self):
+        return self.name
+
+
+class PurchaseOrder(models.Model):
+    poNumber = models.CharField(max_length=50, unique=True)
+    vendorId = models.CharField(max_length=50)
+    vendorName = models.CharField(max_length=255)
+    vendorTIN = models.CharField(max_length=50)
+    department = models.CharField(max_length=255)
+    budgetCode = models.CharField(max_length=50)
+    issueDate = models.DateField(auto_now_add=True)
+    deliveryDeadline = models.DateField()
+    subtotalETB = models.FloatField(default=0)
+    vatAmountETB = models.FloatField(default=0)
+    grandTotalETB = models.FloatField(default=0)
+    status = models.CharField(max_length=50, default='DRAFT')
+    paymentTerms = models.CharField(max_length=255)
+    approvedBy = models.CharField(max_length=255, blank=True, null=True)
+    grnReference = models.CharField(max_length=50, blank=True, null=True)
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.poNumber
+
+
+class PurchaseOrderItem(models.Model):
+    po = models.ForeignKey(PurchaseOrder, related_name='items', on_delete=models.CASCADE)
+    itemId = models.CharField(max_length=50, blank=True, null=True)
+    itemCode = models.CharField(max_length=50)
+    itemName = models.CharField(max_length=255)
+    quantityOrdered = models.IntegerField()
+    unit = models.CharField(max_length=50)
+    unitPriceETB = models.FloatField()
+    lineTotalETB = models.FloatField()
+
+    def __str__(self):
+        return f"{self.itemName} ({self.quantityOrdered})"
+
+
+class AssetDisposalRecord(models.Model):
+    disposalRef = models.CharField(max_length=50, unique=True)
+    assetId = models.CharField(max_length=50, blank=True, null=True)
+    assetTag = models.CharField(max_length=50)
+    equipmentName = models.CharField(max_length=255)
+    category = models.CharField(max_length=50)
+    initialPurchaseCostETB = models.FloatField()
+    bookValueETB = models.FloatField()
+    disposalMethod = models.CharField(max_length=50)
+    committeeApprovedDate = models.DateField(auto_now_add=True)
+    committeeChairman = models.CharField(max_length=255)
+    reservePriceETB = models.FloatField()
+    winningBidETB = models.FloatField(blank=True, null=True)
+    buyerName = models.CharField(max_length=255, blank=True, null=True)
+    buyerReceiptNo = models.CharField(max_length=50, blank=True, null=True)
+    status = models.CharField(max_length=50, default='APPRAISAL')
+    technicalJustification = models.TextField()
+
+    def __str__(self):
+        return self.disposalRef
+
+
+class HazardousMaterialRecord(models.Model):
+    itemId = models.CharField(max_length=50, blank=True, null=True)
+    itemCode = models.CharField(max_length=50)
+    chemicalName = models.CharField(max_length=255)
+    amharicName = models.CharField(max_length=255, blank=True, null=True)
+    casNumber = models.CharField(max_length=50)
+    unClass = models.CharField(max_length=50)
+    storageLocation = models.CharField(max_length=255)
+    currentVolume = models.FloatField()
+    unit = models.CharField(max_length=50)
+    maxAllowableThreshold = models.FloatField()
+    storageTempCelsius = models.CharField(max_length=50)
+    msdsUrl = models.URLField(blank=True, null=True)
+    ppeRequired = models.JSONField(default=list)
+    emergencyNeutralizer = models.TextField()
+    expirationDate = models.DateField()
+    inspectionStatus = models.CharField(max_length=50, default='SAFE')
+
+    def __str__(self):
+        return self.chemicalName
+
+
+class StockBinCardEntry(models.Model):
+    itemId = models.CharField(max_length=50)
+    itemCode = models.CharField(max_length=50)
+    itemName = models.CharField(max_length=255)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    voucherType = models.CharField(max_length=50)
+    voucherNumber = models.CharField(max_length=50)
+    warehouseLocation = models.CharField(max_length=255)
+    quantityIn = models.FloatField(default=0)
+    quantityOut = models.FloatField(default=0)
+    balanceStock = models.FloatField(default=0)
+    performedBy = models.CharField(max_length=255)
+    remarks = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.voucherNumber} - {self.itemName}"
+
+
+class DepartmentStoreBudget(models.Model):
+    departmentId = models.CharField(max_length=50)
+    departmentName = models.CharField(max_length=255)
+    college = models.CharField(max_length=255)
+    fiscalYear = models.CharField(max_length=50)
+    allocatedBudgetETB = models.FloatField(default=0)
+    utilizedBudgetETB = models.FloatField(default=0)
+    reservedBudgetETB = models.FloatField(default=0)
+    remainingBudgetETB = models.FloatField(default=0)
+    hodApprover = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.departmentName} - {self.fiscalYear}"
+
+
+class DonationGrantAsset(models.Model):
+    grantCode = models.CharField(max_length=50)
+    donorOrganization = models.CharField(max_length=255)
+    projectName = models.CharField(max_length=255)
+    assetTag = models.CharField(max_length=50, unique=True)
+    itemName = models.CharField(max_length=255)
+    valueETB = models.FloatField()
+    projectPI = models.CharField(max_length=255)
+    projectEndDate = models.DateField()
+    handoverStatus = models.CharField(max_length=50, default='IN_PROJECT_USE')
+    custodianLab = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.itemName} - {self.donorOrganization}"
+
+
+class InterStoreTransferRecord(models.Model):
+    transferNumber = models.CharField(max_length=50, unique=True)
+    sourceWarehouse = models.CharField(max_length=255)
+    destinationWarehouse = models.CharField(max_length=255)
+    initiatedBy = models.CharField(max_length=255)
+    initiatedDate = models.DateField(auto_now_add=True)
+    receivedBy = models.CharField(max_length=255, blank=True, null=True)
+    receivedDate = models.DateField(blank=True, null=True)
+    reason = models.TextField()
+    status = models.CharField(max_length=50, default='IN_TRANSIT')
+    gatePassRef = models.CharField(max_length=50, blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.transferNumber
+
+
+class InterStoreTransferItem(models.Model):
+    transfer = models.ForeignKey(InterStoreTransferRecord, related_name='items', on_delete=models.CASCADE)
+    itemId = models.CharField(max_length=50)
+    itemCode = models.CharField(max_length=50)
+    itemName = models.CharField(max_length=255)
+    quantity = models.FloatField()
+    unit = models.CharField(max_length=50)
+
+    def __str__(self):
+        return f"{self.itemName} ({self.quantity})"
+
+
+class PropertyReturnRecord(models.Model):
+    voucherNumber = models.CharField(max_length=50, unique=True)
+    returnerId = models.CharField(max_length=50)
+    returnerName = models.CharField(max_length=255)
+    returnerType = models.CharField(max_length=50)
+    department = models.CharField(max_length=255)
+    returnDate = models.DateField(auto_now_add=True)
+    receivedBy = models.CharField(max_length=255)
+    warehouseLocation = models.CharField(max_length=255)
+    reason = models.CharField(max_length=50)
+    clearanceId = models.CharField(max_length=50, blank=True, null=True)
+    status = models.CharField(max_length=50, default='VERIFIED')
+    notes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.voucherNumber
+
+
+class PropertyReturnItem(models.Model):
+    return_record = models.ForeignKey(PropertyReturnRecord, related_name='items', on_delete=models.CASCADE)
+    itemId = models.CharField(max_length=50, blank=True, null=True)
+    itemCode = models.CharField(max_length=50)
+    itemName = models.CharField(max_length=255)
+    quantity = models.FloatField()
+    unit = models.CharField(max_length=50)
+    condition = models.CharField(max_length=50)
+    restockDecision = models.CharField(max_length=50)
+
+    def __str__(self):
+        return f"{self.itemName} ({self.condition})"
+
+
+class CampusGatePassRecord(models.Model):
+    gatePassNumber = models.CharField(max_length=50, unique=True)
+    bearerName = models.CharField(max_length=255)
+    bearerRole = models.CharField(max_length=255)
+    bearerIdCard = models.CharField(max_length=50)
+    vehiclePlateNumber = models.CharField(max_length=50, blank=True, null=True)
+    destination = models.CharField(max_length=255)
+    purpose = models.CharField(max_length=50)
+    authorizedBy = models.CharField(max_length=255)
+    authorizedDate = models.DateTimeField(auto_now_add=True)
+    validUntil = models.DateTimeField()
+    itemsDescription = models.TextField()
+    itemCount = models.IntegerField()
+    securityExitTimestamp = models.DateTimeField(blank=True, null=True)
+    gateName = models.CharField(max_length=50)
+    guardName = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=50, default='AUTHORIZED')
+
+    def __str__(self):
+        return self.gatePassNumber
+
+
+class MaintenanceWorkOrder(models.Model):
+    orderNumber = models.CharField(max_length=50, unique=True)
+    assetId = models.CharField(max_length=50, blank=True, null=True)
+    assetTag = models.CharField(max_length=50, blank=True, null=True)
+    equipmentName = models.CharField(max_length=255)
+    location = models.CharField(max_length=255)
+    reportedBy = models.CharField(max_length=255)
+    reportedDepartment = models.CharField(max_length=255)
+    reportedDate = models.DateField(auto_now_add=True)
+    faultDescription = models.TextField()
+    urgency = models.CharField(max_length=50, default='MEDIUM')
+    status = models.CharField(max_length=50, default='REPORTED')
+    assignedTechnician = models.CharField(max_length=255, blank=True, null=True)
+    completionDate = models.DateField(blank=True, null=True)
+    estimatedCostETB = models.FloatField(default=0)
+    actualCostETB = models.FloatField(blank=True, null=True)
+    technicianNotes = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.orderNumber
+
+
+class PhysicalAuditEntry(models.Model):
+    itemId = models.CharField(max_length=50)
+    itemCode = models.CharField(max_length=50)
+    itemName = models.CharField(max_length=255)
+    warehouse = models.CharField(max_length=255)
+    systemStock = models.FloatField()
+    physicalCount = models.FloatField()
+    variance = models.FloatField()
+    unitCostETB = models.FloatField()
+    varianceValueETB = models.FloatField()
+    auditDate = models.DateField(auto_now_add=True)
+    auditorName = models.CharField(max_length=255)
+    discrepancyReason = models.TextField(blank=True, null=True)
+    reconciliationStatus = models.CharField(max_length=50, default='PENDING_REVIEW')
+
+    def __str__(self):
+        return f"{self.itemCode} - {self.auditDate}"
+
+
+# =====================================================================
+# HARDWARE & IOT MODELS
+# =====================================================================
+
+class SmartIoTDevice(models.Model):
+    deviceCode = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=255)
+    amharicName = models.CharField(max_length=255, blank=True, null=True)
+    deviceType = models.CharField(max_length=50)
+    campus = models.CharField(max_length=50)
+    buildingBlock = models.CharField(max_length=100)
+    roomOrZone = models.CharField(max_length=100)
+    ipAddress = models.CharField(max_length=50, blank=True, null=True)
+    macAddress = models.CharField(max_length=50, blank=True, null=True)
+    protocol = models.CharField(max_length=50, default='MQTT')
+    status = models.CharField(max_length=50, default='ONLINE')
+    relayState = models.CharField(max_length=50, blank=True, null=True)
+    signalDbm = models.IntegerField(default=-50)
+    firmwareVersion = models.CharField(max_length=50, default='v1.0.0')
+    lastHeartbeat = models.DateTimeField(auto_now=True)
+    telemetry = models.JSONField(default=list)
+
+    def __str__(self):
+        return f"{self.deviceCode} - {self.name}"
+
+
+class SecurityCameraFeed(models.Model):
+    device = models.OneToOneField(SmartIoTDevice, on_delete=models.CASCADE, related_name='camera_feed')
+    streamUrl = models.URLField(max_length=500)
+    resolution = models.CharField(max_length=50, default='1080p FHD')
+    fps = models.IntegerField(default=30)
+    motionDetected = models.BooleanField(default=False)
+    aiObjectDetection = models.JSONField(default=dict)
+
+    def __str__(self):
+        return f"Camera - {self.device.deviceCode}"
+
+
+class BiometricAttendanceEvent(models.Model):
+    deviceId = models.CharField(max_length=50)
+    deviceCode = models.CharField(max_length=50)
+    userId = models.CharField(max_length=50)
+    userName = models.CharField(max_length=255)
+    userRole = models.CharField(max_length=50)
+    method = models.CharField(max_length=50)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    direction = models.CharField(max_length=50)
+    gateName = models.CharField(max_length=255)
+    matchedScorePercent = models.FloatField()
+    authStatus = models.CharField(max_length=50)
+
+    def __str__(self):
+        return f"{self.userName} - {self.gateName}"
+
+
+class IoTHardwareAlert(models.Model):
+    deviceId = models.CharField(max_length=50)
+    deviceCode = models.CharField(max_length=50)
+    deviceName = models.CharField(max_length=255)
+    deviceType = models.CharField(max_length=50)
+    campus = models.CharField(max_length=50)
+    zone = models.CharField(max_length=255)
+    severity = models.CharField(max_length=50)
+    title = models.CharField(max_length=255)
+    message = models.TextField()
+    timestamp = models.DateTimeField(auto_now_add=True)
+    isAcknowledged = models.BooleanField(default=False)
+    acknowledgedBy = models.CharField(max_length=255, blank=True, null=True)
+    autoActionTaken = models.CharField(max_length=255, blank=True, null=True)
+
+    def __str__(self):
+        return f"{self.severity} - {self.title}"
