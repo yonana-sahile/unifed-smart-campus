@@ -6,6 +6,7 @@ import { SmartClearancePortal } from "./SmartClearancePortal";
 import { SmartCampusFacilities } from "./SmartCampusFacilities";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import CampusMediaBroadcast from "./CampusMediaBroadcast";
+import { SmartCampusHardwareHub } from "./SmartCampusHardwareHub"; // 👈 ADDED
 import { DormitoryManagement } from "../pages/Dormitory";
 import {
   Users,
@@ -32,10 +33,13 @@ import {
   HardDrive,
   Wifi,
   Home,
+  Cctv, // 👈 ADDED
+  Boxes, // 👈 ADDED
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
-type Tab = "users" | "audit" | "health" | "facilities" | "dormitory" | "alerts" | "clearance" | "media";
+// 👈 ADDED "hardware" and "inventory"
+type Tab = "users" | "audit" | "health" | "facilities" | "dormitory" | "alerts" | "clearance" | "media" | "hardware" | "inventory";
 
 export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () => void }) {
   const [activeTab, setActiveTab] = useState<Tab>("users");
@@ -43,6 +47,9 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
   const [users, setUsers] = useState<User[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 👈 ADDED INVENTORY STATE
+  const [inventoryItems, setInventoryItems] = useState<any[]>([]);
 
   // New user form
   const [newUserFullName, setNewUserFullName] = useState("");
@@ -61,13 +68,15 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
   const loadData = async () => {
     setLoading(true);
     try {
-      const [usersData, logsData] = await Promise.all([
+      const [usersData, logsData, invData] = await Promise.all([
         CampusDatabase.getUsers().catch(() => []),
         CampusDatabase.getAuditLogs().catch(() => []),
+        Promise.resolve(CampusDatabase.getInventoryItems()), // 👈 ADDED INVENTORY FETCH
       ]);
 
       setUsers(Array.isArray(usersData) ? usersData : []);
       setAuditLogs(Array.isArray(logsData) ? logsData : []);
+      setInventoryItems(invData || []); // 👈 SET INVENTORY
     } catch (error) {
       console.error("Failed to load admin data:", error);
     } finally {
@@ -75,7 +84,6 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
     }
   };
 
-  // ✅ FIXED: uses POST /api/users/ instead of PUT /api/users/
   const handleAddUser = async () => {
     if (!newUserFullName || !newUserEmail) {
       alert("Please fill in all user profile details.");
@@ -144,7 +152,6 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
     }
   };
 
-  // ✅ FIXED: uses PATCH /api/users/{id}/ instead of PUT /api/users/
   const toggleUserStatus = async (userId: string) => {
     const target = users.find((u) => u.id === userId);
     if (!target) return;
@@ -202,6 +209,7 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
       log.description?.toLowerCase().includes(auditSearch.toLowerCase())
   );
 
+  // 👈 ADDED "hardware" and "inventory" to navItems
   const navItems: { id: Tab; label: string; shortLabel: string; Icon: typeof Users }[] = [
     { id: "users", label: "User Directory", shortLabel: "Users", Icon: Users },
     { id: "audit", label: "Audit Trail Ledger", shortLabel: "Audit", Icon: List },
@@ -209,6 +217,8 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
     { id: "clearance", label: "Clearance Overseer", shortLabel: "Clearance", Icon: ShieldCheck },
     { id: "facilities", label: "Campus Facilities", shortLabel: "Facilities", Icon: Cpu },
     { id: "dormitory", label: "Dormitory Management", shortLabel: "Dormitory", Icon: Home },
+    { id: "inventory", label: "Store & Inventory", shortLabel: "Inventory", Icon: Boxes }, // 👈 NEW
+    { id: "hardware", label: "IoT & Hardware Hub", shortLabel: "Hardware", Icon: Cctv }, // 👈 NEW
     { id: "alerts", label: "Broadcast Alerts", shortLabel: "Alerts", Icon: Radio },
     { id: "media", label: "Video & Media Screen", shortLabel: "Media", Icon: Video },
   ];
@@ -834,6 +844,134 @@ export function AdminDashboard({ user, onLogout }: { user: User; onLogout: () =>
                   transition={{ duration: 0.35 }}
                 >
                   <DormitoryManagement user={user} />
+                </motion.div>
+              )}
+
+              {/* ==================== INVENTORY (NEW) ==================== */}
+              {activeTab === "inventory" && (
+                <motion.div
+                  key="inventory"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.35 }}
+                  className="space-y-6"
+                >
+                  <div className="p-6 bg-white border border-slate-200 rounded-2xl shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base flex items-center space-x-2">
+                        <Boxes className="w-5 h-5 text-amber-600" />
+                        <span>Material Management & Store Oversight (የንብረትና ዕቃ ቁጥጥር)</span>
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                        Institutional oversight of campus supplies, ICT infrastructure, laboratory apparatus, chemicals, and capitalized fixed assets managed by the Property & Store Administration Directorate.
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2 shrink-0">
+                      <div className="text-right text-xs">
+                        <span className="text-slate-400 block text-[10px] font-mono">Store Controller:</span>
+                        <strong className="text-slate-800">Solomon Kassa (Store Officer)</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* High-level KPIs */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
+                      <span className="text-xs text-slate-500">Total Asset Valuation</span>
+                      <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
+                        {inventoryItems.reduce((sum, it) => sum + (it.totalValueETB || it.quantityInStock * it.unitCostETB), 0).toLocaleString()} <span className="text-xs font-normal text-slate-400">ETB</span>
+                      </div>
+                      <span className="text-[11px] text-emerald-600 font-semibold">Active Capital Inventory</span>
+                    </div>
+
+                    <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
+                      <span className="text-xs text-slate-500">Catalog SKUs</span>
+                      <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
+                        {inventoryItems.length} <span className="text-xs font-normal text-slate-400">Items</span>
+                      </div>
+                      <span className="text-[11px] text-slate-500">Central, ICT, Lab & Chemical Stores</span>
+                    </div>
+
+                    <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
+                      <span className="text-xs text-slate-500">Low Stock Warnings</span>
+                      <div className="text-2xl font-bold font-mono text-amber-600 tabular-nums">
+                        {inventoryItems.filter((i) => i.quantityInStock <= i.minThreshold).length} <span className="text-xs font-normal text-slate-400">Items</span>
+                      </div>
+                      <span className="text-[11px] text-slate-500">Requires PO replenishment</span>
+                    </div>
+                  </div>
+
+                  {/* Items Inventory Table */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                      <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider font-mono">
+                        Store Catalog Ledger & Stock Distribution
+                      </h4>
+                      <span className="text-xs text-slate-400 font-mono">
+                        {inventoryItems.length} Verified SKUs
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-50 text-slate-500 font-mono text-[11px] uppercase border-b border-slate-200">
+                          <tr>
+                            <th className="py-2.5 px-4">Item Code</th>
+                            <th className="py-2.5 px-4">Item Name</th>
+                            <th className="py-2.5 px-4">Category</th>
+                            <th className="py-2.5 px-4">Location</th>
+                            <th className="py-2.5 px-4 text-right">In Stock</th>
+                            <th className="py-2.5 px-4 text-right">Unit Price</th>
+                            <th className="py-2.5 px-4 text-right">Total (ETB)</th>
+                            <th className="py-2.5 px-4 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {inventoryItems.map((item) => (
+                            <tr key={item.id} className="hover:bg-slate-50/60">
+                              <td className="py-3 px-4 font-mono font-bold text-slate-900">{item.itemCode}</td>
+                              <td className="py-3 px-4 font-medium text-slate-800 max-w-xs truncate">{item.name}</td>
+                              <td className="py-3 px-4 font-mono text-slate-500">{item.category}</td>
+                              <td className="py-3 px-4 text-slate-600 truncate max-w-xs">{item.warehouseLocation}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold">
+                                {item.quantityInStock} <span className="text-[11px] font-normal text-slate-400">{item.unit}</span>
+                              </td>
+                              <td className="py-3 px-4 text-right font-mono">{item.unitCostETB.toLocaleString()}</td>
+                              <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                                {(item.totalValueETB || item.quantityInStock * item.unitCostETB).toLocaleString()} ETB
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                                    item.quantityInStock <= item.minThreshold
+                                      ? "bg-amber-100 text-amber-800"
+                                      : "bg-emerald-100 text-emerald-800"
+                                  }`}
+                                >
+                                  {item.quantityInStock <= item.minThreshold ? "LOW STOCK" : "IN STOCK"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* ==================== HARDWARE (NEW) ==================== */}
+              {activeTab === "hardware" && (
+                <motion.div
+                  key="hardware"
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -15 }}
+                  transition={{ duration: 0.35 }}
+                >
+                  <SmartCampusHardwareHub user={user} />
                 </motion.div>
               )}
 
