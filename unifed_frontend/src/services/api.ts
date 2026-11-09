@@ -53,7 +53,6 @@ export const clearTokens = () => {
 };
 
 const forceLogout = () => {
-  // Don't fire if we're already on the login page (no user)
   const hasUser = !!localStorage.getItem('uscms_current_user');
   if (!hasUser) {
     console.warn('[auth] forceLogout skipped — no user session');
@@ -62,24 +61,16 @@ const forceLogout = () => {
   clearTokens();
   window.dispatchEvent(new CustomEvent('uscms:auth-expired'));
 };
+
 // ---------- REQUEST INTERCEPTOR ----------
 api.interceptors.request.use((config) => {
   const token = getAccessToken();
-
-  console.log(
-    '[api→]',
-    config.method?.toUpperCase(),
-    config.url,
-    '| token:',
-    token ? token.slice(0, 20) + '…' : 'NULL'
-  );
-
+  console.log('[api→]', config.method?.toUpperCase(), config.url, '| token:', token ? token.slice(0, 20) + '…' : 'NULL');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   } else {
     console.warn('[api→] No access token in storage — request will likely 401');
   }
-
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
   }
@@ -91,17 +82,9 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-
     if (error?.response?.status === 401) {
-      console.warn(
-        '[api←] 401 on',
-        originalRequest?.method?.toUpperCase(),
-        originalRequest?.url,
-        '| had Authorization header:',
-        !!originalRequest?.headers?.Authorization
-      );
+      console.warn('[api←] 401 on', originalRequest?.method?.toUpperCase(), originalRequest?.url, '| had Authorization header:', !!originalRequest?.headers?.Authorization);
     }
-
     if (
       error?.response?.status === 401 &&
       originalRequest &&
@@ -109,10 +92,8 @@ api.interceptors.response.use(
       !originalRequest.url?.includes('/token/refresh/')
     ) {
       originalRequest._retry = true;
-
       const refresh = getRefreshToken();
       if (!refresh) {
-        // Don't force logout if there's no user session at all — we're on login page
         const hasUser = !!localStorage.getItem('uscms_current_user');
         if (hasUser) {
           console.warn('[auth] No refresh token but user was logged in — forcing logout');
@@ -128,12 +109,7 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${data.access}`;
         return api(originalRequest);
       } catch (refreshErr: any) {
-        console.warn(
-          '[auth] Refresh failed:',
-          refreshErr?.response?.status,
-          refreshErr?.response?.data || refreshErr?.message
-        );
-        // Only force logout if there's a user session — otherwise silently ignore
+        console.warn('[auth] Refresh failed:', refreshErr?.response?.status, refreshErr?.response?.data || refreshErr?.message);
         const hasUser = !!localStorage.getItem('uscms_current_user');
         if (hasUser) {
           forceLogout();
@@ -143,7 +119,6 @@ api.interceptors.response.use(
         return Promise.reject(refreshErr);
       }
     }
-
     return Promise.reject(error);
   }
 );
@@ -158,7 +133,7 @@ const numericId = (id: string | number, prefix?: string): string => {
   return prefix ? s.replace(new RegExp(`^${prefix}`), '') : s.replace(/^[A-Z]+_/, '');
 };
 
-// ✅ Helper: coerce any ID (numeric, "5", "U_5", "PAY_3", etc.) to a plain integer
+// Helper: coerce any ID to a plain integer
 const toPk = (id: string | number | null | undefined): number | null => {
   if (id == null || id === '') return null;
   if (typeof id === 'number') return Number.isFinite(id) ? id : null;
@@ -307,9 +282,7 @@ const mapGrade = (g: any): Grade => ({
   continuousAssessmentScore: g.continuous_assessment_score ?? g.continuousAssessmentScore ?? 0,
   midExamScore: g.mid_exam_score ?? g.midExamScore ?? 0,
   finalExamScore: g.final_exam_score ?? g.finalExamScore ?? 0,
-  totalGrade: Number(
-    g.total_grade ?? g.totalGrade ?? g.total_marks ?? g.totalMarks ?? g.score ?? 0
-  ),
+  totalGrade: Number(g.total_grade ?? g.totalGrade ?? g.total_marks ?? g.totalMarks ?? g.score ?? 0),
   letterGrade: g.letter_grade ?? g.letterGrade ?? '',
   gradePoint: g.grade_point ?? g.gradePoint ?? 0,
   semester: g.semester ?? '',
@@ -359,37 +332,19 @@ const mapAttendanceSession = (s: any): AttendanceSession => ({
   status: s.status ?? 'CLOSED',
   lateAfterMinutes: s.late_after_minutes ?? s.lateAfterMinutes ?? 10,
   totalsApplied: s.totals_applied ?? s.totalsApplied ?? false,
-  checkIns: Array.isArray(s.check_ins)
-    ? s.check_ins.map(mapAttendanceCheckIn)
-    : Array.isArray(s.checkIns)
-      ? s.checkIns.map(mapAttendanceCheckIn)
-      : [],
+  checkIns: Array.isArray(s.check_ins) ? s.check_ins.map(mapAttendanceCheckIn) : Array.isArray(s.checkIns) ? s.checkIns.map(mapAttendanceCheckIn) : [],
   checkedInCount: s.checked_in_count ?? s.checkedInCount ?? 0,
   secondsRemaining: s.seconds_remaining ?? s.secondsRemaining ?? 0,
   isExpired: s.is_expired ?? s.isExpired ?? false,
 } as AttendanceSession);
 
 // ---------- USERS ----------
-export const getUsers = (): Promise<User[]> =>
-  api.get('/users/').then(r =>
-    unwrapList<any>(r.data).filter(u => u && typeof u === 'object').map(mapUser)
-  );
-
-export const saveUsers = (users: User[]): Promise<User[]> =>
-  api.put('/users/', users).then(r => r.data);
-
-export const updateUser = (user: User): Promise<User> =>
-  api.put(`/users/${numericId(user.id, 'U_')}/`, user).then(r => r.data);
-
-export const addUser = (payload: any): Promise<User> =>
-  api.post('/users/', payload).then(r => mapUser(r.data));
-
-export const patchUser = (id: string, patch: any): Promise<User> =>
-  api.patch(`/users/${numericId(id, 'U_')}/`, patch).then(r => mapUser(r.data));
-
-export const deleteUser = (id: string): Promise<void> =>
-  api.delete(`/users/${numericId(id, 'U_')}/`).then(() => undefined);
-
+export const getUsers = (): Promise<User[]> => api.get('/users/').then(r => unwrapList<any>(r.data).filter(u => u && typeof u === 'object').map(mapUser));
+export const saveUsers = (users: User[]): Promise<User[]> => api.put('/users/', users).then(r => r.data);
+export const updateUser = (user: User): Promise<User> => api.put(`/users/${numericId(user.id, 'U_')}/`, user).then(r => r.data);
+export const addUser = (payload: any): Promise<User> => api.post('/users/', payload).then(r => mapUser(r.data));
+export const patchUser = (id: string, patch: any): Promise<User> => api.patch(`/users/${numericId(id, 'U_')}/`, patch).then(r => mapUser(r.data));
+export const deleteUser = (id: string): Promise<void> => api.delete(`/users/${numericId(id, 'U_')}/`).then(() => undefined);
 export const login = async (username: string, password: string) => {
   const { data } = await api.post('/token/', { username, password });
   const token = data.access ?? data.token;
@@ -397,55 +352,27 @@ export const login = async (username: string, password: string) => {
   if (data.refresh) localStorage.setItem('refresh_token', data.refresh);
   return data;
 };
-
-export const logout = () => {
-  clearTokens();
-};
-// 👇 PASTE THE NEW FUNCTIONS HERE 👇
-export const requestPasswordReset = (email: string): Promise<any> =>
-  api.post('/users/request_password_reset/', { email }).then(r => r.data);
-
-export const confirmPasswordReset = (email: string, otp: string, newPassword: string): Promise<any> =>
-  api.post('/users/confirm_password_reset/', {
-    email,
-    otp,
-    new_password: newPassword
-  }).then(r => r.data);
-// 👆 END OF NEW FUNCTIONS 👆
-
-// ---------- USER AVATAR UPLOAD ----------
-export const uploadAvatar = (userId: string, base64Image: string): Promise<any> =>
-  api.post(`/users/${numericId(userId, 'U_')}/upload_avatar/`, { image: base64Image })
-     .then(r => r.data);
+export const logout = () => { clearTokens(); };
+export const requestPasswordReset = (email: string): Promise<any> => api.post('/users/request_password_reset/', { email }).then(r => r.data);
+export const confirmPasswordReset = (email: string, otp: string, newPassword: string): Promise<any> => api.post('/users/confirm_password_reset/', { email, otp, new_password: newPassword }).then(r => r.data);
+export const uploadAvatar = (userId: string, base64Image: string): Promise<any> => api.post(`/users/${numericId(userId, 'U_')}/upload_avatar/`, { image: base64Image }).then(r => r.data);
 
 // ---------- COURSES ----------
-export const getCourses = (): Promise<Course[]> =>
-  api.get('/courses/').then(r => unwrapList<any>(r.data).map(mapCourse));
-export const saveCourses = (courses: Course[]): Promise<Course[]> =>
-  api.put('/courses/', courses).then(r => r.data);
-export const updateCourse = (id: string, course: any): Promise<Course> =>
-  api.patch(`/courses/${numericId(id)}/`, course).then(r => r.data);
-export const addCourse = (course: any): Promise<Course> =>
-  api.post('/courses/', course).then(r => mapCourse(r.data));
-export const deleteCourse = (id: string): Promise<void> =>
-  api.delete(`/courses/${numericId(id)}/`).then(() => undefined);
+export const getCourses = (): Promise<Course[]> => api.get('/courses/').then(r => unwrapList<any>(r.data).map(mapCourse));
+export const saveCourses = (courses: Course[]): Promise<Course[]> => api.put('/courses/', courses).then(r => r.data);
+export const updateCourse = (id: string, course: any): Promise<Course> => api.patch(`/courses/${numericId(id)}/`, course).then(r => r.data);
+export const addCourse = (course: any): Promise<Course> => api.post('/courses/', course).then(r => mapCourse(r.data));
+export const deleteCourse = (id: string): Promise<void> => api.delete(`/courses/${numericId(id)}/`).then(() => undefined);
 
 // ---------- MATERIALS ----------
-export const getMaterials = (): Promise<CourseMaterial[]> =>
-  api.get('/materials/').then(r => unwrapList<any>(r.data).map(mapMaterial));
-export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMaterial[]> =>
-  api.put('/materials/', materials).then(r => r.data);
-export const addMaterial = (material: any): Promise<CourseMaterial> =>
-  api.post('/materials/', material).then(r => mapMaterial(r.data));
-export const updateMaterial = (id: string, material: any): Promise<CourseMaterial> =>
-  api.patch(`/materials/${numericId(id)}/`, material).then(r => mapMaterial(r.data));
-export const deleteMaterial = (id: string): Promise<void> =>
-  api.delete(`/materials/${numericId(id)}/`).then(() => undefined);
+export const getMaterials = (): Promise<CourseMaterial[]> => api.get('/materials/').then(r => unwrapList<any>(r.data).map(mapMaterial));
+export const saveMaterials = (materials: CourseMaterial[]): Promise<CourseMaterial[]> => api.put('/materials/', materials).then(r => r.data);
+export const addMaterial = (material: any): Promise<CourseMaterial> => api.post('/materials/', material).then(r => mapMaterial(r.data));
+export const updateMaterial = (id: string, material: any): Promise<CourseMaterial> => api.patch(`/materials/${numericId(id)}/`, material).then(r => mapMaterial(r.data));
+export const deleteMaterial = (id: string): Promise<void> => api.delete(`/materials/${numericId(id)}/`).then(() => undefined);
 
 // ---------- ANNOUNCEMENTS ----------
-export const getAnnouncements = (): Promise<Announcement[]> =>
-  api.get('/announcements/').then(r => unwrapList<any>(r.data).map(mapAnnouncement));
-
+export const getAnnouncements = (): Promise<Announcement[]> => api.get('/announcements/').then(r => unwrapList<any>(r.data).map(mapAnnouncement));
 export const createAnnouncement = (announcement: any): Promise<any> => {
   const payload: any = {
     course: announcement.course ?? null,
@@ -457,7 +384,6 @@ export const createAnnouncement = (announcement: any): Promise<any> => {
   };
   return api.post('/announcements/', payload).then(r => r.data);
 };
-
 export const updateAnnouncement = (id: string, announcement: any): Promise<any> => {
   const payload: any = {
     course: announcement.course ?? null,
@@ -469,92 +395,52 @@ export const updateAnnouncement = (id: string, announcement: any): Promise<any> 
   };
   return api.put(`/announcements/${numericId(id)}/`, payload).then(r => r.data);
 };
-
-export const patchAnnouncement = (id: string, patch: any): Promise<any> =>
-  api.patch(`/announcements/${numericId(id)}/`, patch).then(r => r.data);
-
-export const deleteAnnouncement = (id: string): Promise<void> =>
-  api.delete(`/announcements/${numericId(id)}/`).then(() => undefined);
+export const patchAnnouncement = (id: string, patch: any): Promise<any> => api.patch(`/announcements/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteAnnouncement = (id: string): Promise<void> => api.delete(`/announcements/${numericId(id)}/`).then(() => undefined);
 
 // ---------- ASSIGNMENTS ----------
-export const getAssignments = (): Promise<Assignment[]> =>
-  api.get('/assignments/').then(r => unwrapList<any>(r.data).map(mapAssignment));
-export const saveAssignments = (assignments: Assignment[]): Promise<Assignment[]> =>
-  api.put('/assignments/', assignments).then(r => r.data);
-export const addAssignment = (assignment: any): Promise<Assignment> =>
-  api.post('/assignments/', assignment).then(r => mapAssignment(r.data));
-export const updateAssignment = (id: string, patch: any): Promise<Assignment> =>
-  api.patch(`/assignments/${numericId(id)}/`, patch).then(r => mapAssignment(r.data));
-export const deleteAssignment = (id: string): Promise<void> =>
-  api.delete(`/assignments/${numericId(id)}/`).then(() => undefined);
+export const getAssignments = (): Promise<Assignment[]> => api.get('/assignments/').then(r => unwrapList<any>(r.data).map(mapAssignment));
+export const saveAssignments = (assignments: Assignment[]): Promise<Assignment[]> => api.put('/assignments/', assignments).then(r => r.data);
+export const addAssignment = (assignment: any): Promise<Assignment> => api.post('/assignments/', assignment).then(r => mapAssignment(r.data));
+export const updateAssignment = (id: string, patch: any): Promise<Assignment> => api.patch(`/assignments/${numericId(id)}/`, patch).then(r => mapAssignment(r.data));
+export const deleteAssignment = (id: string): Promise<void> => api.delete(`/assignments/${numericId(id)}/`).then(() => undefined);
 
 // ---------- SUBMISSIONS ----------
-export const getSubmissions = (): Promise<Submission[]> =>
-  api.get('/submissions/').then(r => unwrapList<any>(r.data).map(mapSubmission));
-export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]> =>
-  api.put('/submissions/', submissions).then(r => r.data);
-export const addSubmission = (submission: any): Promise<Submission> =>
-  api.post('/submissions/', submission).then(r => mapSubmission(r.data));
-export const updateSubmission = (id: string, submission: any): Promise<Submission> =>
-  api.patch(`/submissions/${numericId(id)}/`, submission).then(r => mapSubmission(r.data));
-export const deleteSubmission = (id: string): Promise<void> =>
-  api.delete(`/submissions/${numericId(id)}/`).then(() => undefined);
+export const getSubmissions = (): Promise<Submission[]> => api.get('/submissions/').then(r => unwrapList<any>(r.data).map(mapSubmission));
+export const saveSubmissions = (submissions: Submission[]): Promise<Submission[]> => api.put('/submissions/', submissions).then(r => r.data);
+export const addSubmission = (submission: any): Promise<Submission> => api.post('/submissions/', submission).then(r => mapSubmission(r.data));
+export const updateSubmission = (id: string, submission: any): Promise<Submission> => api.patch(`/submissions/${numericId(id)}/`, submission).then(r => mapSubmission(r.data));
+export const deleteSubmission = (id: string): Promise<void> => api.delete(`/submissions/${numericId(id)}/`).then(() => undefined);
 
 // ---------- EXAMS ----------
-export const getExams = (): Promise<Exam[]> =>
-  api.get('/exams/').then(r => unwrapList<any>(r.data).map(mapExam));
-export const addQuestion = (question: any): Promise<any> =>
-  api.post('/questions/', question).then(r => r.data);
-export const createExam = (exam: any): Promise<Exam> =>
-  api.post('/exams/', exam).then(r => mapExam(r.data));
-export const updateExam = (id: string, exam: any): Promise<Exam> =>
-  api.patch(`/exams/${numericId(id)}/`, exam).then(r => mapExam(r.data));
-export const pushExam = (examId: string, isPushed: boolean): Promise<Exam> =>
-  api.post(`/exams/${numericId(examId)}/push/`, { is_pushed: isPushed }).then(r => mapExam(r.data));
-export const deleteExam = (id: string): Promise<void> =>
-  api.delete(`/exams/${numericId(id)}/`).then(() => undefined);
-export const saveExams = (exams: Exam[]): Promise<Exam[]> =>
-  api.put('/exams/', exams).then(r => r.data);
+export const getExams = (): Promise<Exam[]> => api.get('/exams/').then(r => unwrapList<any>(r.data).map(mapExam));
+export const addQuestion = (question: any): Promise<any> => api.post('/questions/', question).then(r => r.data);
+export const createExam = (exam: any): Promise<Exam> => api.post('/exams/', exam).then(r => mapExam(r.data));
+export const updateExam = (id: string, exam: any): Promise<Exam> => api.patch(`/exams/${numericId(id)}/`, exam).then(r => mapExam(r.data));
+export const pushExam = (examId: string, isPushed: boolean): Promise<Exam> => api.post(`/exams/${numericId(examId)}/push/`, { is_pushed: isPushed }).then(r => mapExam(r.data));
+export const deleteExam = (id: string): Promise<void> => api.delete(`/exams/${numericId(id)}/`).then(() => undefined);
+export const saveExams = (exams: Exam[]): Promise<Exam[]> => api.put('/exams/', exams).then(r => r.data);
 
 // ---------- EXAM ATTEMPTS ----------
-export const getExamAttempts = (): Promise<ExamAttempt[]> =>
-  api.get('/exam-attempts/').then(r => unwrapList<any>(r.data).map(mapExamAttempt));
-
-export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> =>
-  api.put('/exam-attempts/', attempts).then(r => r.data);
-
+export const getExamAttempts = (): Promise<ExamAttempt[]> => api.get('/exam-attempts/').then(r => unwrapList<any>(r.data).map(mapExamAttempt));
+export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> => api.put('/exam-attempts/', attempts).then(r => r.data);
 export const createExamAttempt = (attempt: any): Promise<ExamAttempt> => {
   const examPk = toPk(attempt.exam);
   const studentPk = toPk(attempt.student);
-
   if (examPk == null || studentPk == null) {
     const msg = `createExamAttempt: invalid IDs — exam=${JSON.stringify(attempt.exam)} student=${JSON.stringify(attempt.student)}`;
     console.error(msg);
     return Promise.reject(new Error(msg));
   }
-
-  const payload = {
-    ...attempt,
-    exam: examPk,
-    student: studentPk,
-  };
-
-  console.log('[createExamAttempt] sending:', payload);
-  return api.post('/exam-attempts/', payload).then(r => mapExamAttempt(r.data));
+  return api.post('/exam-attempts/', { ...attempt, exam: examPk, student: studentPk }).then(r => mapExamAttempt(r.data));
 };
 export const updateExamAttempt = async (id: string, patch: any): Promise<ExamAttempt> => {
   const attemptPk = numericId(id);
-
   try {
     const res = await api.patch(`/exam-attempts/${attemptPk}/`, patch);
     return mapExamAttempt(res.data);
   } catch (patchErr: any) {
-    if (patchErr?.response?.status !== 404) {
-      throw patchErr;
-    }
-
-    console.warn(`⚠️ Attempt #${attemptPk} not found. Creating fresh attempt.`);
-
+    if (patchErr?.response?.status !== 404) throw patchErr;
     const fallbackPayload: any = {
       exam: toPk(patch.exam),
       student: toPk(patch.student),
@@ -565,166 +451,82 @@ export const updateExamAttempt = async (id: string, patch: any): Promise<ExamAtt
       status: patch.status ?? 'SUBMITTED',
       submitted_at: patch.submitted_at ?? new Date().toISOString(),
     };
-
     if (fallbackPayload.exam == null || fallbackPayload.student == null) {
-      throw new Error(
-        `Cannot recreate attempt — exam/student IDs missing. ` +
-        `exam=${patch.exam}, student=${patch.student}`
-      );
+      throw new Error(`Cannot recreate attempt — exam/student IDs missing. exam=${patch.exam}, student=${patch.student}`);
     }
-
-    console.log('[updateExamAttempt] fallback POST payload:', fallbackPayload);
     const created = await api.post('/exam-attempts/', fallbackPayload);
     return mapExamAttempt(created.data);
   }
 };
-export const deleteExamAttempt = (id: string): Promise<void> =>
-  api.delete(`/exam-attempts/${numericId(id)}/`).then(() => undefined);
+export const deleteExamAttempt = (id: string): Promise<void> => api.delete(`/exam-attempts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- MONITORING EVENTS ----------
-export const logMonitoringEvent = (data: {
-  attempt: number | string;
-  event_type: string;
-  details: string;
-}): Promise<any> => {
+export const logMonitoringEvent = (data: { attempt: number | string; event_type: string; details: string }): Promise<any> => {
   const attemptPk = toPk(data.attempt);
   if (attemptPk == null) {
     console.warn('[logMonitoringEvent] invalid attempt id:', data.attempt);
     return Promise.resolve(null);
   }
-  return api
-    .post('/monitoring-events/', { ...data, attempt: attemptPk })
-    .then(r => r.data);
+  return api.post('/monitoring-events/', { ...data, attempt: attemptPk }).then(r => r.data);
 };
-
-export const getMonitoringEvents = (): Promise<any[]> =>
-  api.get('/monitoring-events/').then(r => unwrapList<any>(r.data));
+export const getMonitoringEvents = (): Promise<any[]> => api.get('/monitoring-events/').then(r => unwrapList<any>(r.data));
 
 // ---------- GRADES ----------
-export const getGrades = (): Promise<Grade[]> =>
-  api.get('/grades/').then(r => unwrapList<any>(r.data).map(mapGrade));
-export const saveGrades = (grades: Grade[]): Promise<Grade[]> =>
-  api.put('/grades/', grades).then(r => r.data);
-export const addGrade = (payload: any): Promise<Grade> =>
-  api.post('/grades/', payload).then(r => mapGrade(r.data));
-export const updateGrade = (id: string, grade: any): Promise<Grade> =>
-  api.patch(`/grades/${numericId(id)}/`, grade).then(r => mapGrade(r.data));
-export const deleteGrade = (id: string): Promise<void> =>
-  api.delete(`/grades/${numericId(id)}/`).then(() => undefined);
+export const getGrades = (): Promise<Grade[]> => api.get('/grades/').then(r => unwrapList<any>(r.data).map(mapGrade));
+export const saveGrades = (grades: Grade[]): Promise<Grade[]> => api.put('/grades/', grades).then(r => r.data);
+export const addGrade = (payload: any): Promise<Grade> => api.post('/grades/', payload).then(r => mapGrade(r.data));
+export const updateGrade = (id: string, grade: any): Promise<Grade> => api.patch(`/grades/${numericId(id)}/`, grade).then(r => mapGrade(r.data));
+export const deleteGrade = (id: string): Promise<void> => api.delete(`/grades/${numericId(id)}/`).then(() => undefined);
 
 // ---------- TRANSCRIPTS ----------
-export const getTranscripts = (): Promise<Transcript[]> =>
-  api.get('/transcripts/').then(r => unwrapList<Transcript>(r.data));
-export const saveTranscripts = (transcripts: Transcript[]): Promise<Transcript[]> =>
-  api.put('/transcripts/', transcripts).then(r => r.data);
-export const addTranscript = (payload: any): Promise<Transcript> =>
-  api.post('/transcripts/', payload).then(r => r.data);
-export const updateTranscript = (id: string, patch: any): Promise<Transcript> =>
-  api.patch(`/transcripts/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteTranscript = (id: string): Promise<void> =>
-  api.delete(`/transcripts/${numericId(id)}/`).then(() => undefined);
+export const getTranscripts = (): Promise<Transcript[]> => api.get('/transcripts/').then(r => unwrapList<Transcript>(r.data));
+export const saveTranscripts = (transcripts: Transcript[]): Promise<Transcript[]> => api.put('/transcripts/', transcripts).then(r => r.data);
+export const addTranscript = (payload: any): Promise<Transcript> => api.post('/transcripts/', payload).then(r => r.data);
+export const updateTranscript = (id: string, patch: any): Promise<Transcript> => api.patch(`/transcripts/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteTranscript = (id: string): Promise<void> => api.delete(`/transcripts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- ATTENDANCE ----------
-export const getAttendance = (): Promise<AttendanceRecord[]> =>
-  api.get('/attendance/').then(r => unwrapList<any>(r.data).map(mapAttendance));
-export const saveAttendance = (records: AttendanceRecord[]): Promise<AttendanceRecord[]> =>
-  api.put('/attendance/', records).then(r => r.data);
-export const addAttendance = (payload: any): Promise<AttendanceRecord> =>
-  api.post('/attendance/', payload).then(r => mapAttendance(r.data));
-export const updateAttendance = (id: string, data: any): Promise<any> =>
-  api.patch(`/attendance/${numericId(id)}/`, data).then(r => r.data);
-export const deleteAttendance = (id: string): Promise<void> =>
-  api.delete(`/attendance/${numericId(id)}/`).then(() => undefined);
+export const getAttendance = (): Promise<AttendanceRecord[]> => api.get('/attendance/').then(r => unwrapList<any>(r.data).map(mapAttendance));
+export const saveAttendance = (records: AttendanceRecord[]): Promise<AttendanceRecord[]> => api.put('/attendance/', records).then(r => r.data);
+export const addAttendance = (payload: any): Promise<AttendanceRecord> => api.post('/attendance/', payload).then(r => mapAttendance(r.data));
+export const updateAttendance = (id: string, data: any): Promise<any> => api.patch(`/attendance/${numericId(id)}/`, data).then(r => r.data);
+export const deleteAttendance = (id: string): Promise<void> => api.delete(`/attendance/${numericId(id)}/`).then(() => undefined);
 
 // ---------- LIVE ATTENDANCE SESSIONS ----------
-export const getAttendanceSessions = (): Promise<AttendanceSession[]> =>
-  api.get('/attendance-sessions/').then(r =>
-    unwrapList<any>(r.data).map(mapAttendanceSession)
-  );
-
-export const getAttendanceSession = (id: string): Promise<AttendanceSession> =>
-  api.get(`/attendance-sessions/${numericId(id)}/live/`).then(r => mapAttendanceSession(r.data));
-
-export const getActiveAttendanceSessions = (): Promise<AttendanceSession[]> =>
-  api.get('/attendance-sessions/active/').then(r =>
-    unwrapList<any>(r.data).map(mapAttendanceSession)
-  );
-
-export const openAttendanceSession = (payload: {
-  course: string | number;
-  title?: string;
-  topic?: string;
-  location?: string;
-  duration_minutes?: number;
-  late_after_minutes?: number;
-}): Promise<AttendanceSession> =>
-  api.post('/attendance-sessions/open/', {
-    ...payload,
-    course: toPk(payload.course),
-  }).then(r => mapAttendanceSession(r.data));
-
-export const closeAttendanceSession = (id: string): Promise<AttendanceSession> =>
-  api.post(`/attendance-sessions/${numericId(id)}/close/`).then(r => mapAttendanceSession(r.data));
-
-export const checkInAttendance = (code: string): Promise<{
-  message: string;
-  check_in: AttendanceCheckIn;
-  session: any;
-  attendance: AttendanceRecord;
-}> =>
-  api.post('/attendance-sessions/check-in/', { code: code.trim().toUpperCase() }).then(r => ({
-    ...r.data,
-    check_in: mapAttendanceCheckIn(r.data?.check_in ?? {}),
-    attendance: mapAttendance(r.data?.attendance ?? {}),
-  }));
+export const getAttendanceSessions = (): Promise<AttendanceSession[]> => api.get('/attendance-sessions/').then(r => unwrapList<any>(r.data).map(mapAttendanceSession));
+export const getAttendanceSession = (id: string): Promise<AttendanceSession> => api.get(`/attendance-sessions/${numericId(id)}/live/`).then(r => mapAttendanceSession(r.data));
+export const getActiveAttendanceSessions = (): Promise<AttendanceSession[]> => api.get('/attendance-sessions/active/').then(r => unwrapList<any>(r.data).map(mapAttendanceSession));
+export const openAttendanceSession = (payload: { course: string | number; title?: string; topic?: string; location?: string; duration_minutes?: number; late_after_minutes?: number; }): Promise<AttendanceSession> => api.post('/attendance-sessions/open/', { ...payload, course: toPk(payload.course) }).then(r => mapAttendanceSession(r.data));
+export const closeAttendanceSession = (id: string): Promise<AttendanceSession> => api.post(`/attendance-sessions/${numericId(id)}/close/`).then(r => mapAttendanceSession(r.data));
+export const checkInAttendance = (code: string): Promise<{ message: string; check_in: AttendanceCheckIn; session: any; attendance: AttendanceRecord; }> => api.post('/attendance-sessions/check-in/', { code: code.trim().toUpperCase() }).then(r => ({ ...r.data, check_in: mapAttendanceCheckIn(r.data?.check_in ?? {}), attendance: mapAttendance(r.data?.attendance ?? {}) }));
 
 // ---------- LIBRARY RESOURCES ----------
-export const getLibraryResources = (): Promise<LibraryResource[]> =>
-  api.get('/library-resources/').then(r => unwrapList<LibraryResource>(r.data));
-export const saveLibraryResources = (resources: LibraryResource[]): Promise<LibraryResource[]> =>
-  api.put('/library-resources/', resources).then(r => r.data);
-export const addLibraryResource = (payload: any): Promise<LibraryResource> =>
-  api.post('/library-resources/', payload).then(r => r.data);
-export const updateLibraryResource = (id: string, patch: any): Promise<LibraryResource> =>
-  api.patch(`/library-resources/${numericId(id, 'LIB_')}/`, patch).then(r => r.data);
-export const deleteLibraryResource = (id: string): Promise<void> =>
-  api.delete(`/library-resources/${numericId(id, 'LIB_')}/`).then(() => undefined);
+export const getLibraryResources = (): Promise<LibraryResource[]> => api.get('/library-resources/').then(r => unwrapList<LibraryResource>(r.data));
+export const saveLibraryResources = (resources: LibraryResource[]): Promise<LibraryResource[]> => api.put('/library-resources/', resources).then(r => r.data);
+export const addLibraryResource = (payload: any): Promise<LibraryResource> => api.post('/library-resources/', payload).then(r => r.data);
+export const updateLibraryResource = (id: string, patch: any): Promise<LibraryResource> => api.patch(`/library-resources/${numericId(id, 'LIB_')}/`, patch).then(r => r.data);
+export const deleteLibraryResource = (id: string): Promise<void> => api.delete(`/library-resources/${numericId(id, 'LIB_')}/`).then(() => undefined);
 
 // ---------- PAYMENTS ----------
-export const getPayments = (): Promise<PaymentTransaction[]> =>
-  api.get('/payments/').then(r => unwrapList<PaymentTransaction>(r.data));
-export const savePayments = (payments: PaymentTransaction[]): Promise<PaymentTransaction[]> =>
-  api.put('/payments/', payments).then(r => r.data);
-export const addPayment = (payload: any): Promise<PaymentTransaction> =>
-  api.post('/payments/', payload).then(r => r.data);
-export const updatePayment = (id: string, patch: any): Promise<PaymentTransaction> =>
-  api.patch(`/payments/${numericId(id, 'PAY_')}/`, patch).then(r => r.data);
-export const deletePayment = (id: string): Promise<void> =>
-  api.delete(`/payments/${numericId(id, 'PAY_')}/`).then(() => undefined);
+export const getPayments = (): Promise<PaymentTransaction[]> => api.get('/payments/').then(r => unwrapList<PaymentTransaction>(r.data));
+export const savePayments = (payments: PaymentTransaction[]): Promise<PaymentTransaction[]> => api.put('/payments/', payments).then(r => r.data);
+export const addPayment = (payload: any): Promise<PaymentTransaction> => api.post('/payments/', payload).then(r => r.data);
+export const updatePayment = (id: string, patch: any): Promise<PaymentTransaction> => api.patch(`/payments/${numericId(id, 'PAY_')}/`, patch).then(r => r.data);
+export const deletePayment = (id: string): Promise<void> => api.delete(`/payments/${numericId(id, 'PAY_')}/`).then(() => undefined);
 
 // ---------- SCHOLARSHIPS ----------
-export const getScholarships = (): Promise<Scholarship[]> =>
-  api.get('/scholarships/').then(r => unwrapList<Scholarship>(r.data));
-export const saveScholarships = (scholarships: Scholarship[]): Promise<Scholarship[]> =>
-  api.put('/scholarships/', scholarships).then(r => r.data);
-export const addScholarship = (payload: any): Promise<Scholarship> =>
-  api.post('/scholarships/', payload).then(r => r.data);
-export const updateScholarship = (id: string, patch: any): Promise<Scholarship> =>
-  api.patch(`/scholarships/${numericId(id, 'SCH_')}/`, patch).then(r => r.data);
-export const deleteScholarship = (id: string): Promise<void> =>
-  api.delete(`/scholarships/${numericId(id, 'SCH_')}/`).then(() => undefined);
+export const getScholarships = (): Promise<Scholarship[]> => api.get('/scholarships/').then(r => unwrapList<Scholarship>(r.data));
+export const saveScholarships = (scholarships: Scholarship[]): Promise<Scholarship[]> => api.put('/scholarships/', scholarships).then(r => r.data);
+export const addScholarship = (payload: any): Promise<Scholarship> => api.post('/scholarships/', payload).then(r => r.data);
+export const updateScholarship = (id: string, patch: any): Promise<Scholarship> => api.patch(`/scholarships/${numericId(id, 'SCH_')}/`, patch).then(r => r.data);
+export const deleteScholarship = (id: string): Promise<void> => api.delete(`/scholarships/${numericId(id, 'SCH_')}/`).then(() => undefined);
 
 // ---------- COURSE OUTLINES ----------
-export const getCourseOutlines = (): Promise<CourseOutlineForm[]> =>
-  api.get('/course-outlines/').then(r => unwrapList<CourseOutlineForm>(r.data));
-export const saveCourseOutlines = (outlines: CourseOutlineForm[]): Promise<CourseOutlineForm[]> =>
-  api.put('/course-outlines/', outlines).then(r => r.data);
-export const addCourseOutline = (payload: any): Promise<CourseOutlineForm> =>
-  api.post('/course-outlines/', payload).then(r => r.data);
-export const updateCourseOutline = (id: string, patch: any): Promise<CourseOutlineForm> =>
-  api.patch(`/course-outlines/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteCourseOutline = (id: string): Promise<void> =>
-  api.delete(`/course-outlines/${numericId(id)}/`).then(() => undefined);
+export const getCourseOutlines = (): Promise<CourseOutlineForm[]> => api.get('/course-outlines/').then(r => unwrapList<CourseOutlineForm>(r.data));
+export const saveCourseOutlines = (outlines: CourseOutlineForm[]): Promise<CourseOutlineForm[]> => api.put('/course-outlines/', outlines).then(r => r.data);
+export const addCourseOutline = (payload: any): Promise<CourseOutlineForm> => api.post('/course-outlines/', payload).then(r => r.data);
+export const updateCourseOutline = (id: string, patch: any): Promise<CourseOutlineForm> => api.patch(`/course-outlines/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteCourseOutline = (id: string): Promise<void> => api.delete(`/course-outlines/${numericId(id)}/`).then(() => undefined);
 
 // ---------- EVALUATIONS ----------
 const mapEvaluation = (e: any): InstructorEvaluation => {
@@ -740,26 +542,16 @@ const mapEvaluation = (e: any): InstructorEvaluation => {
       clarity: Number(rawRatings.clarity ?? e.clarity ?? 0),
       punctuality: Number(rawRatings.punctuality ?? e.punctuality ?? 0),
       helpfulness: Number(rawRatings.helpfulness ?? e.helpfulness ?? 0),
-      assessmentFairness: Number(
-        rawRatings.assessmentFairness ?? rawRatings.assessment_fairness ?? e.assessment_fairness ?? 0
-      ),
-      overallRating: Number(
-        rawRatings.overallRating ?? rawRatings.overall_rating ?? e.overall_rating ?? e.overallRating ?? 0
-      ),
+      assessmentFairness: Number(rawRatings.assessmentFairness ?? rawRatings.assessment_fairness ?? e.assessment_fairness ?? 0),
+      overallRating: Number(rawRatings.overallRating ?? rawRatings.overall_rating ?? e.overall_rating ?? e.overallRating ?? 0),
     } as any,
     comments: e.comments ?? '',
     semester: e.semester ?? '',
     submittedAt: e.submitted_at ?? e.submittedAt ?? new Date().toISOString(),
   };
 };
-
-export const getEvaluations = (): Promise<InstructorEvaluation[]> =>
-  api.get('/evaluations/').then(r =>
-    unwrapList<any>(r.data).filter(e => e && typeof e === 'object').map(mapEvaluation)
-  );
-export const saveEvaluations = (evaluations: InstructorEvaluation[]): Promise<InstructorEvaluation[]> =>
-  api.put('/evaluations/', evaluations).then(r => r.data);
-
+export const getEvaluations = (): Promise<InstructorEvaluation[]> => api.get('/evaluations/').then(r => unwrapList<any>(r.data).filter(e => e && typeof e === 'object').map(mapEvaluation));
+export const saveEvaluations = (evaluations: InstructorEvaluation[]): Promise<InstructorEvaluation[]> => api.put('/evaluations/', evaluations).then(r => r.data);
 export const addEvaluation = (evaluation: any): Promise<any> => {
   const payload: any = {
     student: toPk(evaluation.studentId),
@@ -778,54 +570,35 @@ export const addEvaluation = (evaluation: any): Promise<any> => {
   };
   return api.post('/evaluations/', payload).then(r => r.data);
 };
-
-export const updateEvaluation = (id: string, patch: any): Promise<any> =>
-  api.patch(`/evaluations/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteEvaluation = (id: string): Promise<void> =>
-  api.delete(`/evaluations/${numericId(id)}/`).then(() => undefined);
+export const updateEvaluation = (id: string, patch: any): Promise<any> => api.patch(`/evaluations/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteEvaluation = (id: string): Promise<void> => api.delete(`/evaluations/${numericId(id)}/`).then(() => undefined);
 
 // ---------- MOE ADMISSIONS ----------
-export const getMoEAdmissions = (): Promise<MoEAdmissionRecord[]> =>
-  api.get('/moe-admissions/').then(r => unwrapList<MoEAdmissionRecord>(r.data));
-export const saveMoEAdmissions = (admissions: MoEAdmissionRecord[]): Promise<MoEAdmissionRecord[]> =>
-  api.put('/moe-admissions/', admissions).then(r => r.data);
-export const addMoEAdmission = (payload: any): Promise<MoEAdmissionRecord> =>
-  api.post('/moe-admissions/', payload).then(r => r.data);
-export const updateMoEAdmission = (id: string, patch: any): Promise<MoEAdmissionRecord> =>
-  api.patch(`/moe-admissions/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteMoEAdmission = (id: string): Promise<void> =>
-  api.delete(`/moe-admissions/${numericId(id)}/`).then(() => undefined);
+export const getMoEAdmissions = (): Promise<MoEAdmissionRecord[]> => api.get('/moe-admissions/').then(r => unwrapList<MoEAdmissionRecord>(r.data));
+export const saveMoEAdmissions = (admissions: MoEAdmissionRecord[]): Promise<MoEAdmissionRecord[]> => api.put('/moe-admissions/', admissions).then(r => r.data);
+export const addMoEAdmission = (payload: any): Promise<MoEAdmissionRecord> => api.post('/moe-admissions/', payload).then(r => r.data);
+export const updateMoEAdmission = (id: string, patch: any): Promise<MoEAdmissionRecord> => api.patch(`/moe-admissions/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteMoEAdmission = (id: string): Promise<void> => api.delete(`/moe-admissions/${numericId(id)}/`).then(() => undefined);
 
 // ---------- CERTIFICATES ----------
-export const getCertificates = (): Promise<CertificateRecord[]> =>
-  api.get('/certificates/').then(r => unwrapList<CertificateRecord>(r.data));
-export const saveCertificates = (certificates: CertificateRecord[]): Promise<CertificateRecord[]> =>
-  api.put('/certificates/', certificates).then(r => r.data);
-export const addCertificate = (payload: any): Promise<CertificateRecord> =>
-  api.post('/certificates/', payload).then(r => r.data);
-export const updateCertificate = (id: string, patch: any): Promise<CertificateRecord> =>
-  api.patch(`/certificates/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteCertificate = (id: string): Promise<void> =>
-  api.delete(`/certificates/${numericId(id)}/`).then(() => undefined);
+export const getCertificates = (): Promise<CertificateRecord[]> => api.get('/certificates/').then(r => unwrapList<CertificateRecord>(r.data));
+export const saveCertificates = (certificates: CertificateRecord[]): Promise<CertificateRecord[]> => api.put('/certificates/', certificates).then(r => r.data);
+export const addCertificate = (payload: any): Promise<CertificateRecord> => api.post('/certificates/', payload).then(r => r.data);
+export const updateCertificate = (id: string, patch: any): Promise<CertificateRecord> => api.patch(`/certificates/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteCertificate = (id: string): Promise<void> => api.delete(`/certificates/${numericId(id)}/`).then(() => undefined);
 
 // ---------- AUDIT LOGS ----------
-export const getAuditLogs = (): Promise<AuditLog[]> =>
-  api.get('/audit-logs/').then(r => unwrapList<AuditLog>(r.data));
-export const saveAuditLogs = (logs: AuditLog[]): Promise<AuditLog[]> =>
-  api.put('/audit-logs/', logs).then(r => r.data);
+export const getAuditLogs = (): Promise<AuditLog[]> => api.get('/audit-logs/').then(r => unwrapList<AuditLog>(r.data));
+export const saveAuditLogs = (logs: AuditLog[]): Promise<AuditLog[]> => api.put('/audit-logs/', logs).then(r => r.data);
 
 // ---------- SETTINGS ----------
-export const getSettings = (): Promise<SystemSettings> =>
-  api.get('/settings/').then(r => {
-    const raw = r.data;
-    if (raw && Array.isArray(raw.results)) return raw.results[0] ?? raw;
-    return raw;
-  });
-export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> =>
-  api.put('/settings/', settings).then(r => r.data);
-
-export const updateSettings = (id: string, patch: any): Promise<SystemSettings> =>
-  api.patch(`/settings/${numericId(id)}/`, patch).then(r => r.data);
+export const getSettings = (): Promise<SystemSettings> => api.get('/settings/').then(r => {
+  const raw = r.data;
+  if (raw && Array.isArray(raw.results)) return raw.results[0] ?? raw;
+  return raw;
+});
+export const saveSettings = (settings: SystemSettings): Promise<SystemSettings> => api.put('/settings/', settings).then(r => r.data);
+export const updateSettings = (id: string, patch: any): Promise<SystemSettings> => api.patch(`/settings/${numericId(id)}/`, patch).then(r => r.data);
 
 // ---------- AI ----------
 export const predictStudentRisk = async (studentId: string): Promise<AIRiskPrediction> => {
@@ -840,156 +613,67 @@ export const predictStudentRisk = async (studentId: string): Promise<AIRiskPredi
     recommendedAction: raw.recommended_action ?? raw.recommendedAction ?? '',
   } as any;
 };
-
-export const generateExamQuestions = (params: {
-  courseId: string;
-  topic: string;
-  numberOfQuestions: number;
-  difficulty: string;
-}): Promise<{ success: boolean; questions: any[]; error?: string }> =>
-  api.post('/ai/generate-exam/', params).then(r => r.data);
-
-export const getCourseAdvisor = (data: {
-  studentId?: string;
-  interests: string;
-  program: string;
-  currentSemester?: string;
-  completedCourses?: string[];
-}): Promise<{ summary: string; recommendations: any[] }> =>
-  api.post('/ai/course-advisor/', data).then(r => r.data);
-
-export const sendChatMessage = (payload: {
-  message: string;
-  history?: { role: 'user' | 'assistant'; content: string }[];
-}): Promise<{ reply: string }> =>
-  api.post('/ai/chat/', payload).then(r => r.data);
+export const generateExamQuestions = (params: { courseId: string; topic: string; numberOfQuestions: number; difficulty: string; }): Promise<{ success: boolean; questions: any[]; error?: string; }> => api.post('/ai/generate-exam/', params).then(r => r.data);
+export const getCourseAdvisor = (data: { studentId?: string; interests: string; program: string; currentSemester?: string; completedCourses?: string[]; }): Promise<{ summary: string; recommendations: any[]; }> => api.post('/ai/course-advisor/', data).then(r => r.data);
+export const sendChatMessage = (payload: { message: string; history?: { role: 'user' | 'assistant'; content: string; }[]; }): Promise<{ reply: string; }> => api.post('/ai/chat/', payload).then(r => r.data);
 
 // ---------- AUDIT LOG HELPER (non-fatal) ----------
-export const addAuditLog = async (
-  userId: string,
-  userName: string,
-  userRole: string,
-  action: string,
-  entityType: string,
-  entityId: string,
-  description: string
-): Promise<AuditLog | null> => {
+export const addAuditLog = async (userId: string, userName: string, userRole: string, action: string, entityType: string, entityId: string, description: string): Promise<AuditLog | null> => {
   const token = getAccessToken();
-  if (!token) {
-    return null;
-  }
-
+  if (!token) return null;
   try {
-    const res = await axios.post(
-      `${API_BASE}/audit-logs/`,
-      {
-        user: numericId(userId, 'U_'),
-        user_id: numericId(userId, 'U_'),
-        user_name: userName,
-        user_role: userRole,
-        action,
-        entity_type: entityType,
-        entity_id: entityId,
-        description,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    const res = await axios.post(`${API_BASE}/audit-logs/`, {
+      user: numericId(userId, 'U_'),
+      user_id: numericId(userId, 'U_'),
+      user_name: userName,
+      user_role: userRole,
+      action,
+      entity_type: entityType,
+      entity_id: entityId,
+      description,
+    }, { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } });
     return res.data;
   } catch (err: any) {
-    console.warn(
-      '[audit-log] write failed (non-fatal):',
-      err?.response?.status,
-      err?.response?.data || err?.message
-    );
+    console.warn('[audit-log] write failed (non-fatal):', err?.response?.status, err?.response?.data || err?.message);
     return null;
   }
 };
 
 // ---------- CLEARANCES ----------
-export const getClearances = (): Promise<StudentClearance[]> =>
-  api.get('/clearances/').then(r => unwrapList<StudentClearance>(r.data));
-export const saveClearances = (clearances: StudentClearance[]): Promise<StudentClearance[]> =>
-  api.put('/clearances/', clearances).then(r => r.data);
-export const addClearance = (payload: any): Promise<StudentClearance> =>
-  api.post('/clearances/', payload).then(r => r.data);
-export const updateClearance = (id: string, patch: any): Promise<StudentClearance> =>
-  api.patch(`/clearances/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteClearance = (id: string): Promise<void> =>
-  api.delete(`/clearances/${numericId(id)}/`).then(() => undefined);
-
-export const updateClearanceStage = (
-  clearanceId: string,
-  dept: 'LIBRARY' | 'FINANCE' | 'DORMITORY' | 'DEPARTMENT_LAB' | 'REGISTRAR',
-  status: 'CLEARED' | 'REJECTED' | 'PENDING',
-  officerName: string,
-  remarks?: string
-): Promise<StudentClearance> =>
-  api.patch(`/clearances/${numericId(clearanceId)}/stage/`, {
-    department: dept,
-    status,
-    officerName,
-    remarks,
-  }).then(r => r.data);
+export const getClearances = (): Promise<StudentClearance[]> => api.get('/clearances/').then(r => unwrapList<StudentClearance>(r.data));
+export const saveClearances = (clearances: StudentClearance[]): Promise<StudentClearance[]> => api.put('/clearances/', clearances).then(r => r.data);
+export const addClearance = (payload: any): Promise<StudentClearance> => api.post('/clearances/', payload).then(r => r.data);
+export const updateClearance = (id: string, patch: any): Promise<StudentClearance> => api.patch(`/clearances/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteClearance = (id: string): Promise<void> => api.delete(`/clearances/${numericId(id)}/`).then(() => undefined);
+export const updateClearanceStage = (clearanceId: string, dept: 'LIBRARY' | 'FINANCE' | 'DORMITORY' | 'DEPARTMENT_LAB' | 'REGISTRAR', status: 'CLEARED' | 'REJECTED' | 'PENDING', officerName: string, remarks?: string): Promise<StudentClearance> => api.patch(`/clearances/${numericId(clearanceId)}/stage/`, { department: dept, status, officerName, remarks }).then(r => r.data);
 
 // ---------- FACILITY BOOKINGS ----------
-export const getFacilityBookings = (): Promise<FacilityBooking[]> =>
-  api.get('/facility-bookings/').then(r => unwrapList<FacilityBooking>(r.data));
-export const saveFacilityBookings = (bookings: FacilityBooking[]): Promise<FacilityBooking[]> =>
-  api.put('/facility-bookings/', bookings).then(r => r.data);
-export const addFacilityBooking = (booking: Omit<FacilityBooking, 'id'>): Promise<FacilityBooking> =>
-  api.post('/facility-bookings/', booking).then(r => r.data);
-export const updateFacilityBooking = (id: string, patch: any): Promise<FacilityBooking> =>
-  api.patch(`/facility-bookings/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteFacilityBooking = (id: string): Promise<void> =>
-  api.delete(`/facility-bookings/${numericId(id)}/`).then(() => undefined);
-
-export const getFacilities = (): Promise<any[]> =>
-  api.get('/facilities/').then(r => unwrapList<any>(r.data));
-
-export const approveFacilityBooking = (id: string): Promise<any> =>
-  api.post(`/facility-bookings/${numericId(id)}/approve/`).then(r => r.data);
-
-export const rejectFacilityBooking = (id: string, reason: string): Promise<any> =>
-  api.post(`/facility-bookings/${numericId(id)}/reject/`, { reason }).then(r => r.data);
-
-export const cancelFacilityBooking = (id: string): Promise<any> =>
-  api.post(`/facility-bookings/${numericId(id)}/cancel/`).then(r => r.data);
+export const getFacilityBookings = (): Promise<FacilityBooking[]> => api.get('/facility-bookings/').then(r => unwrapList<FacilityBooking>(r.data));
+export const saveFacilityBookings = (bookings: FacilityBooking[]): Promise<FacilityBooking[]> => api.put('/facility-bookings/', bookings).then(r => r.data);
+export const addFacilityBooking = (booking: Omit<FacilityBooking, 'id'>): Promise<FacilityBooking> => api.post('/facility-bookings/', booking).then(r => r.data);
+export const updateFacilityBooking = (id: string, patch: any): Promise<FacilityBooking> => api.patch(`/facility-bookings/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteFacilityBooking = (id: string): Promise<void> => api.delete(`/facility-bookings/${numericId(id)}/`).then(() => undefined);
+export const getFacilities = (): Promise<any[]> => api.get('/facilities/').then(r => unwrapList<any>(r.data));
+export const approveFacilityBooking = (id: string): Promise<any> => api.post(`/facility-bookings/${numericId(id)}/approve/`).then(r => r.data);
+export const rejectFacilityBooking = (id: string, reason: string): Promise<any> => api.post(`/facility-bookings/${numericId(id)}/reject/`, { reason }).then(r => r.data);
+export const cancelFacilityBooking = (id: string): Promise<any> => api.post(`/facility-bookings/${numericId(id)}/cancel/`).then(r => r.data);
 
 // ---------- CAMPUS ALERTS ----------
-export const getCampusAlerts = (): Promise<CampusAlert[]> =>
-  api.get('/campus-alerts/').then(r => unwrapList<CampusAlert>(r.data));
-export const saveCampusAlerts = (alerts: CampusAlert[]): Promise<CampusAlert[]> =>
-  api.put('/campus-alerts/', alerts).then(r => r.data);
-export const addCampusAlert = (alert: Omit<CampusAlert, 'id' | 'timestamp'>): Promise<CampusAlert> =>
-  api.post('/campus-alerts/', alert).then(r => r.data);
-export const updateCampusAlert = (id: string, patch: any): Promise<CampusAlert> =>
-  api.patch(`/campus-alerts/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteCampusAlert = (id: string): Promise<void> =>
-  api.delete(`/campus-alerts/${numericId(id)}/`).then(() => undefined);
+export const getCampusAlerts = (): Promise<CampusAlert[]> => api.get('/campus-alerts/').then(r => unwrapList<CampusAlert>(r.data));
+export const saveCampusAlerts = (alerts: CampusAlert[]): Promise<CampusAlert[]> => api.put('/campus-alerts/', alerts).then(r => r.data);
+export const addCampusAlert = (alert: Omit<CampusAlert, 'id' | 'timestamp'>): Promise<CampusAlert> => api.post('/campus-alerts/', alert).then(r => r.data);
+export const updateCampusAlert = (id: string, patch: any): Promise<CampusAlert> => api.patch(`/campus-alerts/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteCampusAlert = (id: string): Promise<void> => api.delete(`/campus-alerts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- CAMPUS MEDIA POSTS ----------
-export const getMediaPosts = (): Promise<CampusMediaPost[]> =>
-  api.get('/media-posts/').then(r => unwrapList<CampusMediaPost>(r.data));
-export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPost[]> =>
-  api.put('/media-posts/', posts).then(r => r.data);
-export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'viewsCount' | 'likesCount'>): Promise<CampusMediaPost> =>
-  api.post('/media-posts/', post).then(r => r.data);
-export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => {
-  return api.post('/media-posts/', formData).then(r => r.data);
-};
-export const updateMediaPost = (id: string, patch: any): Promise<CampusMediaPost> =>
-  api.patch(`/media-posts/${numericId(id)}/`, patch).then(r => r.data);
-export const deleteMediaPost = (id: string): Promise<{ success: boolean }> =>
-  api.delete(`/media-posts/${numericId(id)}/`).then(r => r.data);
-export const incrementMediaViews = (id: string): Promise<void> =>
-  api.post(`/media-posts/${numericId(id)}/view/`).then(r => r.data);
-export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> =>
-  api.post(`/media-posts/${numericId(id)}/like/`).then(r => r.data);
+export const getMediaPosts = (): Promise<CampusMediaPost[]> => api.get('/media-posts/').then(r => unwrapList<CampusMediaPost>(r.data));
+export const saveMediaPosts = (posts: CampusMediaPost[]): Promise<CampusMediaPost[]> => api.put('/media-posts/', posts).then(r => r.data);
+export const addMediaPost = (post: Omit<CampusMediaPost, 'id' | 'postedAt' | 'viewsCount' | 'likesCount'>): Promise<CampusMediaPost> => api.post('/media-posts/', post).then(r => r.data);
+export const uploadMediaPost = (formData: FormData): Promise<CampusMediaPost> => api.post('/media-posts/', formData).then(r => r.data);
+export const updateMediaPost = (id: string, patch: any): Promise<CampusMediaPost> => api.patch(`/media-posts/${numericId(id)}/`, patch).then(r => r.data);
+export const deleteMediaPost = (id: string): Promise<{ success: boolean }> => api.delete(`/media-posts/${numericId(id)}/`).then(r => r.data);
+export const incrementMediaViews = (id: string): Promise<void> => api.post(`/media-posts/${numericId(id)}/view/`).then(r => r.data);
+export const toggleMediaLike = (id: string): Promise<{ likesCount: number }> => api.post(`/media-posts/${numericId(id)}/like/`).then(r => r.data);
 
 // ---------- ZOOM CLASS SESSIONS ----------
 const toZoomSnakeCase = (data: any): any => {
@@ -1021,7 +705,6 @@ const toZoomSnakeCase = (data: any): any => {
   }
   return result;
 };
-
 const fromZoomSnakeCase = (raw: any) => ({
   id: String(raw?.id ?? ''),
   courseId: raw?.course ?? raw?.courseId ?? null,
@@ -1044,128 +727,69 @@ const fromZoomSnakeCase = (raw: any) => ({
   activeAttendees: raw?.active_attendees ?? raw?.activeAttendees ?? [],
   chatMessages: raw?.chat_messages ?? raw?.chatMessages ?? [],
 });
-
-export const getZoomSessions = (): Promise<any[]> =>
-  api.get('/zoom-sessions/').then(r => unwrapList<any>(r.data).map(fromZoomSnakeCase));
-export const addZoomSession = (data: any): Promise<any> =>
-  api.post('/zoom-sessions/', toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
-export const updateZoomSession = (id: string, data: any): Promise<any> =>
-  api.patch(`/zoom-sessions/${numericId(id)}/`, toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
-export const deleteZoomSession = (id: string): Promise<void> =>
-  api.delete(`/zoom-sessions/${numericId(id)}/`).then(() => undefined);
+export const getZoomSessions = (): Promise<any[]> => api.get('/zoom-sessions/').then(r => unwrapList<any>(r.data).map(fromZoomSnakeCase));
+export const addZoomSession = (data: any): Promise<any> => api.post('/zoom-sessions/', toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
+export const updateZoomSession = (id: string, data: any): Promise<any> => api.patch(`/zoom-sessions/${numericId(id)}/`, toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
+export const deleteZoomSession = (id: string): Promise<void> => api.delete(`/zoom-sessions/${numericId(id)}/`).then(() => undefined);
 
 
 // =====================================================================
-// --- TEMPORARY MMS MOCKS ---
+// ✅ REAL API CALLS FOR MMS (Material Management System)
 // =====================================================================
-
-const mockInventory: any[] = [
-  {
-    id: "MMS-1", itemCode: "MMS-ICT-001", name: "Dell OptiPlex Desktop", category: "ICT_ELECTRONICS",
-    description: "Core i7, 16GB RAM, 512GB SSD", quantityInStock: 15, unit: "units", minThreshold: 5,
-    unitCostETB: 45000, totalValueETB: 675000, warehouseLocation: "ICT & Electronics Store (Main)",
-    shelfBin: "Rack A-1", status: "IN_STOCK", lastRestocked: "2026-01-15"
-  },
-  {
-    id: "MMS-2", itemCode: "MMS-LAB-002", name: "Digital Oscilloscope", category: "LAB_APPARATUS",
-    description: "100MHz, 2 Channel", quantityInStock: 3, unit: "units", minThreshold: 4,
-    unitCostETB: 85000, totalValueETB: 255000, warehouseLocation: "Science & Engineering Lab Store",
-    shelfBin: "Rack C-2", status: "LOW_STOCK", lastRestocked: "2025-11-20"
-  }
-];
-
-const mockFixedAssets: any[] = [
-  {
-    id: "FA-1", assetTag: "MAU-FA-2026-0042", serialNumber: "SN-892104", name: "Dell OptiPlex 7090 Workstation",
-    category: "ICT_ELECTRONICS", model: "7090 SFF", purchaseDate: "2024-01-01", purchaseCostETB: 55000,
-    currentValueETB: 45000, custodianName: "Dr. Chalachew", custodianDepartment: "Software Engineering",
-    location: "Block B, Lab 1", condition: "EXCELLENT"
-  }
-];
-
-export const getInventoryItems = (): any[] => mockInventory;
-export const addInventoryItem = (item: any): any[] => { mockInventory.push(item); return mockInventory; };
-export const adjustStock = (id: string, delta: number, reason: string, by: string): any => {
-  const item = mockInventory.find(i => i.id === id);
-  if (item) {
-    item.quantityInStock += delta;
-    item.totalValueETB = item.quantityInStock * item.unitCostETB;
-  }
-  return item;
+export const getInventoryItems = (): Promise<any[]> => api.get('/mms/inventory/').then(r => unwrapList(r.data));
+export const addInventoryItem = (item: any): Promise<any> => api.post('/mms/inventory/', item).then(r => r.data);
+export const adjustStock = async (id: string, delta: number, reason: string, by: string): Promise<any> => {
+  const item = await api.get(`/mms/inventory/${id}/`).then(r => r.data);
+  const newQty = item.quantityInStock + delta;
+  const newTotal = newQty * item.unitCostETB;
+  return api.patch(`/mms/inventory/${id}/`, { quantityInStock: newQty, totalValueETB: newTotal }).then(r => r.data);
 };
-export const getMaterialRequisitions = (): any[] => [];
-export const addMaterialRequisition = (req: any): any => { return req; }; // ✅ Added for Instructor
-export const updateMaterialRequisitionStatus = (id: string, status: string, note: string, by: string): any => ({ requisitionNumber: "REQ-001", department: "SE", status });
-export const getGoodsReceivingRecords = (): any[] => [];
-export const addGoodsReceivingRecord = (grn: any) => {};
-export const getFixedAssets = (): any[] => mockFixedAssets;
-export const addFixedAsset = (asset: any): any[] => { mockFixedAssets.push(asset); return mockFixedAssets; };
-export const getInterStoreTransfers = (): any[] => [];
-export const addInterStoreTransfer = (t: any) => {};
-export const updateInterStoreTransferStatus = (id: string, status: string, by: string) => {};
-export const getPropertyReturns = (): any[] => [];
-export const addPropertyReturn = (r: any) => {};
-export const getCampusGatePasses = (): any[] => [];
-export const addCampusGatePass = (g: any) => {};
-export const updateGatePassStatus = (id: string, status: string, guard: string) => {};
-export const getMaintenanceOrders = (): any[] => [];
-export const addMaintenanceOrder = (w: any) => {};
-export const updateMaintenanceOrderStatus = (id: string, s: string, n: string, c?: number) => {};
-export const getPhysicalAudits = (): any[] => [];
-export const updatePhysicalAuditEntry = (e: any) => {};
-export const getPurchaseOrders = (): any[] => [];
-export const addPurchaseOrder = (p: any) => {};
-export const updatePurchaseOrderStatus = (id: string, s: string, b: string) => {};
-export const getVendors = (): any[] => [];
-export const addVendor = (v: any) => {};
-export const getAssetDisposals = (): any[] => [];
-export const addAssetDisposal = (d: any) => {};
-export const updateDisposalStatus = (id: string, s: string, data?: any) => {};
-export const getHazardousMaterials = (): any[] => [];
-export const addHazardousMaterial = (h: any) => {};
-export const getStockBinCards = (): any[] => [];
-export const getDepartmentBudgets = (): any[] => [];
-export const updateDepartmentBudget = (dept: string, b: number, y: string) => {};
-export const getDonationGrantAssets = (): any[] => [];
-export const addDonationGrantAsset = (a: any) => {};
+export const getMaterialRequisitions = (): Promise<any[]> => api.get('/mms/requisitions/').then(r => unwrapList(r.data));
+export const addMaterialRequisition = (req: any): Promise<any> => api.post('/mms/requisitions/', req).then(r => r.data);
+export const updateMaterialRequisitionStatus = (id: string, status: string, note: string, by: string): Promise<any> => api.patch(`/mms/requisitions/${id}/`, { status, approvedBy: by, remarks: note }).then(r => r.data);
+export const getGoodsReceivingRecords = (): Promise<any[]> => api.get('/mms/receiving/').then(r => unwrapList(r.data));
+export const addGoodsReceivingRecord = (grn: any): Promise<any> => api.post('/mms/receiving/', grn).then(r => r.data);
+export const getFixedAssets = (): Promise<any[]> => api.get('/mms/assets/').then(r => unwrapList(r.data));
+export const addFixedAsset = (asset: any): Promise<any> => api.post('/mms/assets/', asset).then(r => r.data);
+export const getInterStoreTransfers = (): Promise<any[]> => api.get('/mms/transfers/').then(r => unwrapList(r.data));
+export const addInterStoreTransfer = (t: any): Promise<any> => api.post('/mms/transfers/', t).then(r => r.data);
+export const updateInterStoreTransferStatus = (id: string, status: string, by: string): Promise<any> => api.patch(`/mms/transfers/${id}/`, { status, receivedBy: by }).then(r => r.data);
+export const getPropertyReturns = (): Promise<any[]> => api.get('/mms/returns/').then(r => unwrapList(r.data));
+export const addPropertyReturn = (r: any): Promise<any> => api.post('/mms/returns/', r).then(r => r.data);
+export const getCampusGatePasses = (): Promise<any[]> => api.get('/mms/gate-passes/').then(r => unwrapList(r.data));
+export const addCampusGatePass = (g: any): Promise<any> => api.post('/mms/gate-passes/', g).then(r => r.data);
+export const updateGatePassStatus = (id: string, status: string, guard: string): Promise<any> => api.patch(`/mms/gate-passes/${id}/`, { status, guardName: guard }).then(r => r.data);
+export const getMaintenanceOrders = (): Promise<any[]> => api.get('/mms/maintenance/').then(r => unwrapList(r.data));
+export const addMaintenanceOrder = (w: any): Promise<any> => api.post('/mms/maintenance/', w).then(r => r.data);
+export const updateMaintenanceOrderStatus = (id: string, s: string, n: string, c?: number): Promise<any> => api.patch(`/mms/maintenance/${id}/`, { status: s, technicianNotes: n, actualCostETB: c }).then(r => r.data);
+export const getPhysicalAudits = (): Promise<any[]> => api.get('/mms/audits/').then(r => unwrapList(r.data));
+export const updatePhysicalAuditEntry = (e: any): Promise<any> => api.patch(`/mms/audits/${e.itemId}/`, e).then(r => r.data);
+export const getPurchaseOrders = (): Promise<any[]> => api.get('/mms/purchase-orders/').then(r => unwrapList(r.data));
+export const addPurchaseOrder = (p: any): Promise<any> => api.post('/mms/purchase-orders/', p).then(r => r.data);
+export const updatePurchaseOrderStatus = (id: string, s: string, b: string): Promise<any> => api.patch(`/mms/purchase-orders/${id}/`, { status: s, approvedBy: b }).then(r => r.data);
+export const getVendors = (): Promise<any[]> => api.get('/mms/vendors/').then(r => unwrapList(r.data));
+export const addVendor = (v: any): Promise<any> => api.post('/mms/vendors/', v).then(r => r.data);
+export const getAssetDisposals = (): Promise<any[]> => api.get('/mms/disposals/').then(r => unwrapList(r.data));
+export const addAssetDisposal = (d: any): Promise<any> => api.post('/mms/disposals/', d).then(r => r.data);
+export const updateDisposalStatus = (id: string, s: string, data?: any): Promise<any> => api.patch(`/mms/disposals/${id}/`, { status: s, ...data }).then(r => r.data);
+export const getHazardousMaterials = (): Promise<any[]> => api.get('/mms/hazardous-materials/').then(r => unwrapList(r.data));
+export const addHazardousMaterial = (h: any): Promise<any> => api.post('/mms/hazardous-materials/', h).then(r => r.data);
+export const getStockBinCards = (): Promise<any[]> => api.get('/mms/bin-cards/').then(r => unwrapList(r.data));
+export const getDepartmentBudgets = (): Promise<any[]> => api.get('/mms/budgets/').then(r => unwrapList(r.data));
+export const updateDepartmentBudget = (dept: string, b: number, y: string): Promise<any> => api.post('/mms/budgets/', { departmentName: dept, allocatedBudgetETB: b, fiscalYear: y }).then(r => r.data);
+export const getDonationGrantAssets = (): Promise<any[]> => api.get('/mms/donations/').then(r => unwrapList(r.data));
+export const addDonationGrantAsset = (a: any): Promise<any> => api.post('/mms/donations/', a).then(r => r.data);
 
 // =====================================================================
-// --- TEMPORARY HARDWARE & IOT MOCKS ---
+// ✅ REAL API CALLS FOR HARDWARE & IOT
 // =====================================================================
-
-const mockCameras: any[] = [
-  {
-    id: "CAM-01", deviceCode: "CAM-MAIN-GATE-01", name: "Main Gate Entrance Camera", amharicName: "ዋና በር ካሜራ",
-    campus: "Tulu Awulia (Main)", buildingBlock: "Perimeter", roomOrZone: "Main Gate 1", status: "ONLINE",
-    fps: 30, resolution: "4K UHD", nightVision: true, motionDetected: false, ipAddress: "10.140.10.101",
-    macAddress: "00:1A:2B:3C:4D:5E", protocol: "RTSP_STREAM",
-    streamUrl: "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800",
-    aiObjectDetection: { peopleCount: 12, vehiclesCount: 3, suspiciousLoitering: false, unauthorizedPerimeterBreach: false }
-  }
-];
-
-const mockIoTDevices: any[] = [
-  {
-    id: "IOT-01", deviceCode: "ENV-LAB-01", name: "Lab Temperature Sensor", amharicName: "የላብራቶሪ ሙቀት መለኪያ",
-    deviceType: "ENVIRONMENTAL_SENSOR", campus: "Tulu Awulia (Main)", buildingBlock: "Block B", roomOrZone: "Lab 1",
-    status: "ONLINE", protocol: "MQTT", relayState: undefined,
-    telemetry: [{ metric: "Temperature", value: 24, unit: "°C" }, { metric: "Humidity", value: 45, unit: "%" }]
-  }
-];
-
-const mockBiometrics: any[] = [];
-const mockAlerts: any[] = [];
-
-export const getCameraFeeds = (): any[] => mockCameras;
-export const getIoTDevices = (): any[] => mockIoTDevices;
-export const getBiometricEvents = (): any[] => mockBiometrics;
-export const getHardwareAlerts = (): any[] => mockAlerts;
-export const updateDeviceRelay = (id: string, state: string) => {
-  const dev = mockIoTDevices.find(d => d.id === id);
-  if (dev) dev.relayState = state;
-};
-export const acknowledgeHardwareAlert = (id: string, name: string) => {};
-export const addBiometricEvent = (ev: any) => { mockBiometrics.push(ev); };
+export const getCameraFeeds = (): Promise<any[]> => api.get('/iot/cameras/').then(r => unwrapList(r.data));
+export const getIoTDevices = (): Promise<any[]> => api.get('/iot/devices/').then(r => unwrapList(r.data));
+export const getBiometricEvents = (): Promise<any[]> => api.get('/iot/biometrics/').then(r => unwrapList(r.data));
+export const getHardwareAlerts = (): Promise<any[]> => api.get('/iot/alerts/').then(r => unwrapList(r.data));
+export const updateDeviceRelay = (id: string, state: string): Promise<any> => api.post(`/iot/devices/${id}/toggle_relay/`, { relayState: state }).then(r => r.data);
+export const acknowledgeHardwareAlert = (id: string, name: string): Promise<any> => api.post(`/iot/alerts/${id}/acknowledge/`, { acknowledgedBy: name }).then(r => r.data);
+export const addBiometricEvent = (ev: any): Promise<any> => api.post('/iot/biometrics/', ev).then(r => r.data);
 
 // =====================================================================
 
@@ -1173,259 +797,97 @@ export const addBiometricEvent = (ev: any) => { mockBiometrics.push(ev); };
 // ---------- EXPORT ----------
 export const CampusDatabase = {
   // Users
-  getUsers,
-  saveUsers,
-  updateUser,
-  addUser,
-  patchUser,
-  deleteUser,
-  login,
-  logout,
-  uploadAvatar,
-  requestPasswordReset,
-  confirmPasswordReset,
+  getUsers, saveUsers, updateUser, addUser, patchUser, deleteUser, login, logout, uploadAvatar, requestPasswordReset, confirmPasswordReset,
 
   // Courses
-  getCourses,
-  saveCourses,
-  updateCourse,
-  addCourse,
-  deleteCourse,
+  getCourses, saveCourses, updateCourse, addCourse, deleteCourse,
 
   // Materials
-  getMaterials,
-  saveMaterials,
-  addMaterial,
-  updateMaterial,
-  deleteMaterial,
+  getMaterials, saveMaterials, addMaterial, updateMaterial, deleteMaterial,
 
   // Announcements
-  getAnnouncements,
-  createAnnouncement,
-  updateAnnouncement,
-  patchAnnouncement,
-  deleteAnnouncement,
+  getAnnouncements, createAnnouncement, updateAnnouncement, patchAnnouncement, deleteAnnouncement,
 
   // Assignments
-  getAssignments,
-  saveAssignments,
-  addAssignment,
-  updateAssignment,
-  deleteAssignment,
+  getAssignments, saveAssignments, addAssignment, updateAssignment, deleteAssignment,
 
   // Submissions
-  getSubmissions,
-  saveSubmissions,
-  addSubmission,
-  updateSubmission,
-  deleteSubmission,
+  getSubmissions, saveSubmissions, addSubmission, updateSubmission, deleteSubmission,
 
   // Exams
-  getExams,
-  addQuestion,
-  createExam,
-  updateExam,
-  pushExam,
-  deleteExam,
-  saveExams,
+  getExams, addQuestion, createExam, updateExam, pushExam, deleteExam, saveExams,
 
   // Exam Attempts
-  getExamAttempts,
-  saveExamAttempts,
-  createExamAttempt,
-  updateExamAttempt,
-  deleteExamAttempt,
+  getExamAttempts, saveExamAttempts, createExamAttempt, updateExamAttempt, deleteExamAttempt,
 
   // Monitoring
-  logMonitoringEvent,
-  getMonitoringEvents,
+  logMonitoringEvent, getMonitoringEvents,
 
   // Grades
-  getGrades,
-  saveGrades,
-  addGrade,
-  updateGrade,
-  deleteGrade,
+  getGrades, saveGrades, addGrade, updateGrade, deleteGrade,
 
   // Transcripts
-  getTranscripts,
-  saveTranscripts,
-  addTranscript,
-  updateTranscript,
-  deleteTranscript,
+  getTranscripts, saveTranscripts, addTranscript, updateTranscript, deleteTranscript,
 
   // Attendance
-  getAttendance,
-  saveAttendance,
-  addAttendance,
-  updateAttendance,
-  deleteAttendance,
+  getAttendance, saveAttendance, addAttendance, updateAttendance, deleteAttendance,
 
   // Live Attendance Sessions
-  getAttendanceSessions,
-  getAttendanceSession,
-  getActiveAttendanceSessions,
-  openAttendanceSession,
-  closeAttendanceSession,
-  checkInAttendance,
+  getAttendanceSessions, getAttendanceSession, getActiveAttendanceSessions, openAttendanceSession, closeAttendanceSession, checkInAttendance,
 
   // Library Resources
-  getLibraryResources,
-  saveLibraryResources,
-  addLibraryResource,
-  updateLibraryResource,
-  deleteLibraryResource,
+  getLibraryResources, saveLibraryResources, addLibraryResource, updateLibraryResource, deleteLibraryResource,
 
   // Payments
-  getPayments,
-  savePayments,
-  addPayment,
-  updatePayment,
-  deletePayment,
+  getPayments, savePayments, addPayment, updatePayment, deletePayment,
 
   // Scholarships
-  getScholarships,
-  saveScholarships,
-  addScholarship,
-  updateScholarship,
-  deleteScholarship,
+  getScholarships, saveScholarships, addScholarship, updateScholarship, deleteScholarship,
 
   // Course Outlines
-  getCourseOutlines,
-  saveCourseOutlines,
-  addCourseOutline,
-  updateCourseOutline,
-  deleteCourseOutline,
+  getCourseOutlines, saveCourseOutlines, addCourseOutline, updateCourseOutline, deleteCourseOutline,
 
   // Evaluations
-  getEvaluations,
-  saveEvaluations,
-  addEvaluation,
-  updateEvaluation,
-  deleteEvaluation,
+  getEvaluations, saveEvaluations, addEvaluation, updateEvaluation, deleteEvaluation,
 
   // MoE Admissions
-  getMoEAdmissions,
-  saveMoEAdmissions,
-  addMoEAdmission,
-  updateMoEAdmission,
-  deleteMoEAdmission,
+  getMoEAdmissions, saveMoEAdmissions, addMoEAdmission, updateMoEAdmission, deleteMoEAdmission,
 
   // Certificates
-  getCertificates,
-  saveCertificates,
-  addCertificate,
-  updateCertificate,
-  deleteCertificate,
+  getCertificates, saveCertificates, addCertificate, updateCertificate, deleteCertificate,
 
   // Audit Logs
-  getAuditLogs,
-  saveAuditLogs,
+  getAuditLogs, saveAuditLogs,
 
   // Settings
-  getSettings,
-  saveSettings,
-  updateSettings,
+  getSettings, saveSettings, updateSettings,
 
   // AI
-  predictStudentRisk,
-  generateExamQuestions,
-  getCourseAdvisor,
-  sendChatMessage,
+  predictStudentRisk, generateExamQuestions, getCourseAdvisor, sendChatMessage,
 
   // Audit helper
   addAuditLog,
 
   // Clearances
-  getClearances,
-  saveClearances,
-  addClearance,
-  updateClearance,
-  deleteClearance,
-  updateClearanceStage,
+  getClearances, saveClearances, addClearance, updateClearance, deleteClearance, updateClearanceStage,
 
   // Facility Bookings
-  getFacilityBookings,
-  saveFacilityBookings,
-  addFacilityBooking,
-  updateFacilityBooking,
-  deleteFacilityBooking,
-  getFacilities,
-  approveFacilityBooking,
-  rejectFacilityBooking,
-  cancelFacilityBooking,
+  getFacilityBookings, saveFacilityBookings, addFacilityBooking, updateFacilityBooking, deleteFacilityBooking, getFacilities, approveFacilityBooking, rejectFacilityBooking, cancelFacilityBooking,
 
   // Campus Alerts
-  getCampusAlerts,
-  saveCampusAlerts,
-  addCampusAlert,
-  updateCampusAlert,
-  deleteCampusAlert,
+  getCampusAlerts, saveCampusAlerts, addCampusAlert, updateCampusAlert, deleteCampusAlert,
 
   // Media Posts
-  getMediaPosts,
-  saveMediaPosts,
-  addMediaPost,
-  updateMediaPost,
-  uploadMediaPost,
-  deleteMediaPost,
-  incrementMediaViews,
-  toggleMediaLike,
+  getMediaPosts, saveMediaPosts, addMediaPost, updateMediaPost, uploadMediaPost, deleteMediaPost, incrementMediaViews, toggleMediaLike,
 
   // Zoom
-  getZoomSessions,
-  addZoomSession,
-  updateZoomSession,
-  deleteZoomSession,
+  getZoomSessions, addZoomSession, updateZoomSession, deleteZoomSession,
 
-  // 👇 MMS (Mocks connected for now) 👇
-  getInventoryItems,
-  addInventoryItem,
-  adjustStock,
-  getMaterialRequisitions,
-  addMaterialRequisition,
-  updateMaterialRequisitionStatus,
-  getGoodsReceivingRecords,
-  addGoodsReceivingRecord,
-  getFixedAssets,
-  addFixedAsset,
-  getInterStoreTransfers,
-  addInterStoreTransfer,
-  updateInterStoreTransferStatus,
-  getPropertyReturns,
-  addPropertyReturn,
-  getCampusGatePasses,
-  addCampusGatePass,
-  updateGatePassStatus,
-  getMaintenanceOrders,
-  addMaintenanceOrder,
-  updateMaintenanceOrderStatus,
-  getPhysicalAudits,
-  updatePhysicalAuditEntry,
-  getPurchaseOrders,
-  addPurchaseOrder,
-  updatePurchaseOrderStatus,
-  getVendors,
-  addVendor,
-  getAssetDisposals,
-  addAssetDisposal,
-  updateDisposalStatus,
-  getHazardousMaterials,
-  addHazardousMaterial,
-  getStockBinCards,
-  getDepartmentBudgets,
-  updateDepartmentBudget,
-  getDonationGrantAssets,
-  addDonationGrantAsset,
+  // 👇 MMS (Now using real Django API) 👇
+  getInventoryItems, addInventoryItem, adjustStock, getMaterialRequisitions, addMaterialRequisition, updateMaterialRequisitionStatus, getGoodsReceivingRecords, addGoodsReceivingRecord, getFixedAssets, addFixedAsset, getInterStoreTransfers, addInterStoreTransfer, updateInterStoreTransferStatus, getPropertyReturns, addPropertyReturn, getCampusGatePasses, addCampusGatePass, updateGatePassStatus, getMaintenanceOrders, addMaintenanceOrder, updateMaintenanceOrderStatus, getPhysicalAudits, updatePhysicalAuditEntry, getPurchaseOrders, addPurchaseOrder, updatePurchaseOrderStatus, getVendors, addVendor, getAssetDisposals, addAssetDisposal, updateDisposalStatus, getHazardousMaterials, addHazardousMaterial, getStockBinCards, getDepartmentBudgets, updateDepartmentBudget, getDonationGrantAssets, addDonationGrantAsset,
 
-  // 👇 HARDWARE & IOT (Mocks connected for now) 👇
-  getCameraFeeds,
-  getIoTDevices,
-  getBiometricEvents,
-  getHardwareAlerts,
-  updateDeviceRelay,
-  acknowledgeHardwareAlert,
-  addBiometricEvent,
+  // 👇 HARDWARE & IOT (Now using real Django API) 👇
+  getCameraFeeds, getIoTDevices, getBiometricEvents, getHardwareAlerts, updateDeviceRelay, acknowledgeHardwareAlert, addBiometricEvent,
 };
 
 const UCS_API_KEY = "ucs_18840f9b7c82.rtGk8SzsghvmSkZFCbHmi0P8l7HU5dXcCPmPse6Kmk8";
