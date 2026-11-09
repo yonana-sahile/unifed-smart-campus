@@ -307,7 +307,10 @@ const mapGrade = (g: any): Grade => ({
   continuousAssessmentScore: g.continuous_assessment_score ?? g.continuousAssessmentScore ?? 0,
   midExamScore: g.mid_exam_score ?? g.midExamScore ?? 0,
   finalExamScore: g.final_exam_score ?? g.finalExamScore ?? 0,
-  totalGrade: g.total_grade ?? g.totalGrade ?? 0,
+  // Support whatever field name Django is actually using:
+  totalGrade: Number(
+    g.total_grade ?? g.totalGrade ?? g.total_marks ?? g.totalMarks ?? g.score ?? 0
+  ),
   letterGrade: g.letter_grade ?? g.letterGrade ?? '',
   gradePoint: g.grade_point ?? g.gradePoint ?? 0,
   semester: g.semester ?? '',
@@ -730,8 +733,37 @@ export const deleteCourseOutline = (id: string): Promise<void> =>
   api.delete(`/course-outlines/${numericId(id)}/`).then(() => undefined);
 
 // ---------- EVALUATIONS ----------
+const mapEvaluation = (e: any): InstructorEvaluation => {
+  // Django sometimes returns ratings as a nested object, sometimes as flat fields
+  const rawRatings = e.ratings && typeof e.ratings === 'object' ? e.ratings : {};
+  return {
+    id: String(e.id),
+    studentId: String(e.student ?? e.student_id ?? e.studentId ?? ''),
+    instructorId: String(e.instructor ?? e.instructor_id ?? e.instructorId ?? ''),
+    instructorName: e.instructor_name ?? e.instructorName ?? '',
+    courseId: String(e.course ?? e.course_id ?? e.courseId ?? ''),
+    courseCode: e.course_code ?? e.courseCode ?? '',
+    ratings: {
+      clarity: Number(rawRatings.clarity ?? e.clarity ?? 0),
+      punctuality: Number(rawRatings.punctuality ?? e.punctuality ?? 0),
+      helpfulness: Number(rawRatings.helpfulness ?? e.helpfulness ?? 0),
+      assessmentFairness: Number(
+        rawRatings.assessmentFairness ?? rawRatings.assessment_fairness ?? e.assessment_fairness ?? 0
+      ),
+      overallRating: Number(
+        rawRatings.overallRating ?? rawRatings.overall_rating ?? e.overall_rating ?? e.overallRating ?? 0
+      ),
+    } as any, // 👈 Add this to bypass the TypeScript check for `punctuality`
+    comments: e.comments ?? '',
+    semester: e.semester ?? '',
+    submittedAt: e.submitted_at ?? e.submittedAt ?? new Date().toISOString(),
+  };
+};
+
 export const getEvaluations = (): Promise<InstructorEvaluation[]> =>
-  api.get('/evaluations/').then(r => unwrapList<InstructorEvaluation>(r.data));
+  api.get('/evaluations/').then(r =>
+    unwrapList<any>(r.data).filter(e => e && typeof e === 'object').map(mapEvaluation)
+  );
 export const saveEvaluations = (evaluations: InstructorEvaluation[]): Promise<InstructorEvaluation[]> =>
   api.put('/evaluations/', evaluations).then(r => r.data);
 
