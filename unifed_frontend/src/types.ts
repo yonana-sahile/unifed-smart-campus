@@ -952,3 +952,97 @@ export interface DonationGrantAsset {
   handoverStatus: "IN_PROJECT_USE" | "UNIVERSITY_TRANSFERRED" | "SCHEDULED_HANDOVER";
   custodianLab: string;
 }
+
+// -------------------------------------------------------------
+// UNIFIED SMART CAMPUS HARDWARE & IoT INTEGRATION SYSTEM
+// -------------------------------------------------------------
+
+export type IoTDeviceType =
+  | "SECURITY_CAMERA"
+  | "RFID_GATE_TURNSTILE"
+  | "BIOMETRIC_ATTENDANCE"
+  | "ENVIRONMENTAL_SENSOR"
+  | "FIRE_SMOKE_DETECTOR"
+  | "SMART_POWER_METER"
+  | "RFID_STORE_SCANNER"
+  | "AUDIO_PA_SPEAKER";
+
+export type DeviceConnectivity = "MQTT" | "RTSP_STREAM" | "WIFI" | "ETHERNET" | "LORA_WAN" | "ZIGBEE";
+
+export interface IoTTelemetryReading {
+  timestamp: string;
+  metric: string;
+  value: number;
+  unit: string;
+  status: "NORMAL" | "WARNING" | "CRITICAL";
+}
+
+export interface SmartIoTDevice {
+  id: string;
+  deviceCode: string;
+  name: string;
+  amharicName?: string;
+  deviceType: IoTDeviceType;
+  campus: "Tulu Awulia (Main)" | "Masha Campus";
+  buildingBlock: string;
+  roomOrZone: string;
+  ipAddress: string;
+  macAddress: string;
+  protocol: DeviceConnectivity;
+  mqttTopic?: string;
+  streamUrl?: string;
+  status: "ONLINE" | "OFFLINE" | "MAINTENANCE" | "TRIGGERED_ALARM";
+  batteryLevel?: number;
+  signalDbm?: number;
+  firmwareVersion: string;
+  lastHeartbeat: string;
+  telemetry: IoTTelemetryReading[];
+  relayState?: "OPEN" | "CLOSED" | "LOCKED" | "UNLOCKED" | "SIREN_ON" | "SIREN_OFF";
+}
+
+export interface SecurityCameraFeed extends SmartIoTDevice {
+  deviceType: "SECURITY_CAMERA";
+  fps: number;
+  resolution: "1080p FHD" | "4K UHD" | "720p HD";
+  nightVision: boolean;
+  motionDetected: boolean;
+  aiObjectDetection?: {
+    vehiclesCount: number;
+    peopleCount: number;
+    suspiciousLoitering: boolean;
+    unauthorizedPerimeterBreach: boolean;
+  };
+  ptzCapable: boolean;
+}
+
+export interface BiometricAttendanceEvent {
+  id: string;
+  deviceId: string;
+  deviceCode: string;
+  userId: string;
+  userName: string;
+  userRole: UserRole;
+  method: "FACIAL_RECOGNITION" | "FINGERPRINT" | "RFID_SMART_CARD";
+  timestamp: string;
+  direction: "ENTRY" | "EXIT";
+  gateName: string;
+  matchedScorePercent: number;
+  authStatus: "GRANTED" | "DENIED_UNREGISTERED" | "DENIED_BLACKLISTED" | "DENIED_CURFEW";
+}
+
+export interface IoTHardwareAlert {
+  id: string;
+  deviceId: string;
+  deviceCode: string;
+  deviceName: string;
+  deviceType: IoTDeviceType;
+  campus: "Tulu Awulia (Main)" | "Masha Campus";
+  zone: string;
+  severity: "INFO" | "WARNING" | "CRITICAL" | "EMERGENCY";
+  title: string;
+  message: string;
+  timestamp: string;
+  isAcknowledged: boolean;
+  acknowledgedBy?: string;
+  autoActionTaken?: string;
+}
