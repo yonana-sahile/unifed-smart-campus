@@ -1,5 +1,8 @@
-import { useState, useEffect, ChangeEvent } from "react";
-import { User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, Question } from "../types";
+import { useState, useEffect, ChangeEvent, FormEvent } from "react";
+import {
+  User, Course, CourseMaterial, Announcement, Assignment, Submission, Exam, ExamAttempt, Grade, Question,
+  MaterialInventoryItem, MaterialRequisition
+} from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, UniversitySeal } from "./UniversityHeader";
 import { SmartCampusFacilities } from "./SmartCampusFacilities";
@@ -15,7 +18,8 @@ import {
   BookOpen, FileText, PlusCircle, Award, AlertTriangle, Users, Volume2, Calendar, CheckCircle2,
   ChevronRight, Activity, BrainCircuit, Sparkles, Send, Trash, Layout, Check, Shield, Cpu,
   Radio, Video, Clock, Upload, Eye, Download, Play, Pause, HelpCircle, CheckCircle, FileUp,
-  FilePlus, Copy, Rocket, CheckSquare, Layers, Search, Filter, Plus, ListChecks, X
+  FilePlus, Copy, Rocket, CheckSquare, Layers, Search, Filter, Plus, ListChecks, X,
+  Package, Boxes, Printer
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { InstructorZoomManager } from "./InstructorZoomManager";
@@ -34,7 +38,7 @@ type ConfirmAction =
   | null;
 
 export default function InstructorDashboard({ user, onLogout }: InstructorDashboardProps) {
-  const [activeTab, setActiveTab] = useState<"dashboard" | "materials" | "assignments" | "exams" | "grades" | "attendance" | "analytics" | "facilities" | "alerts" | "zoom">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "materials" | "assignments" | "exams" | "grades" | "attendance" | "analytics" | "facilities" | "alerts" | "zoom" | "store_requisitions">("dashboard");
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
   const [materials, setMaterials] = useState<CourseMaterial[]>([]);
@@ -151,6 +155,19 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
   >([]);
   const [loadingStudents, setLoadingStudents] = useState(false);
 
+  // ✅ NEW: Store Requisitions State
+  const [storeCatalog, setStoreCatalog] = useState<MaterialInventoryItem[]>([]);
+  const [myStoreRequisitions, setMyStoreRequisitions] = useState<MaterialRequisition[]>([]);
+  const [showNewRequisitionModal, setShowNewRequisitionModal] = useState(false);
+  const [activeRequisitionVoucher, setActiveRequisitionVoucher] = useState<MaterialRequisition | null>(null);
+
+  // New Requisition Form State
+  const [reqPurpose, setReqPurpose] = useState("Course Lab Practical Sessions & Hardware Prototyping");
+  const [reqUrgency, setReqUrgency] = useState<"ROUTINE" | "URGENT" | "CRITICAL">("ROUTINE");
+  const [reqSelectedItemId, setReqSelectedItemId] = useState("");
+  const [reqItemQty, setReqItemQty] = useState<number>(5);
+  const [reqRemarks, setReqRemarks] = useState("");
+
   // ✅ NEW: unified confirm dialog state
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -164,6 +181,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     examAttempts,
     attendanceRecords,
   });
+
   useEffect(() => {
     loadData();
 
@@ -179,17 +197,31 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       const data = await CampusDatabase.getExamAttempts();
       setExamAttempts(Array.isArray(data) ? data : []);
     };
+    // ✅ NEW: Listen for requisition and inventory changes
+    const handleRequisitionsChange = async () => {
+      const data = await CampusDatabase.getMaterialRequisitions();
+      setMyStoreRequisitions(
+        data.filter(
+          (r) => r.requesterId === user.id || r.department.toLowerCase().includes(user.department?.toLowerCase() || "software")
+        )
+      );
+      setStoreCatalog(CampusDatabase.getInventoryItems());
+    };
 
     window.addEventListener("uscms_materials_changed", handleMaterialsChange);
     window.addEventListener("uscms_exams_changed", handleExamsChange);
     window.addEventListener("uscms_exam_attempts_changed", handleAttemptsChange);
+    window.addEventListener("uscms_requisitions_changed", handleRequisitionsChange);
+    window.addEventListener("uscms_inventory_changed", handleRequisitionsChange);
 
     return () => {
       window.removeEventListener("uscms_materials_changed", handleMaterialsChange);
       window.removeEventListener("uscms_exams_changed", handleExamsChange);
       window.removeEventListener("uscms_exam_attempts_changed", handleAttemptsChange);
+      window.removeEventListener("uscms_requisitions_changed", handleRequisitionsChange);
+      window.removeEventListener("uscms_inventory_changed", handleRequisitionsChange);
     };
-  }, []);
+  }, [user.id, user.department]);
 
   useEffect(() => {
     if (activeTab !== "analytics") return;
@@ -220,7 +252,6 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const loadData = async () => {
@@ -245,6 +276,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       const [
         materialsData, announcementsData, assignmentsData,
         submissionsData, examsData, gradesData, attemptsData, attendanceData,
+        reqData, catalogData
       ] = await Promise.all([
         CampusDatabase.getMaterials().catch(() => []),
         CampusDatabase.getAnnouncements().catch(() => []),
@@ -254,6 +286,8 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
         CampusDatabase.getGrades().catch(() => []),
         CampusDatabase.getExamAttempts().catch(() => []),
         CampusDatabase.getAttendance().catch(() => []),
+        CampusDatabase.getMaterialRequisitions().catch(() => []),
+        Promise.resolve(CampusDatabase.getInventoryItems())
       ]);
 
       setMaterials(Array.isArray(materialsData) ? materialsData : []);
@@ -264,6 +298,14 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
       setGrades(Array.isArray(gradesData) ? gradesData : []);
       setExamAttempts(Array.isArray(attemptsData) ? attemptsData : []);
       setAttendanceRecords(Array.isArray(attendanceData) ? attendanceData : []);
+
+      // ✅ NEW: Set Requisitions Data
+      setMyStoreRequisitions(
+        reqData.filter(
+          (r: any) => r.requesterId === user.id || r.department.toLowerCase().includes(user.department?.toLowerCase() || "software")
+        )
+      );
+      setStoreCatalog(catalogData);
     } catch (err) {
       console.error("❌ [loadData] Failed to load secondary data:", err);
     }
@@ -1061,10 +1103,64 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
     }
   };
 
+  // ✅ NEW: Submit Material Requisition
+  const handleSubmitStoreRequisition = (e: FormEvent) => {
+    e.preventDefault();
+    if (!reqSelectedItemId) {
+      alert("Please choose an item from the university store catalog.");
+      return;
+    }
+    const itemObj = storeCatalog.find((i) => i.id === reqSelectedItemId);
+    if (!itemObj) return;
+
+    const newReq: MaterialRequisition = {
+      id: "REQ_" + Date.now(),
+      requisitionNumber: `REQ-2026-${Math.floor(Math.random() * 9000 + 1000)}`,
+      requesterId: user.id,
+      requesterName: user.fullName,
+      requesterRole: user.role,
+      department: user.department || "Software Engineering",
+      requestedDate: new Date().toISOString().split("T")[0],
+      urgency: reqUrgency,
+      purpose: reqPurpose.trim() || `Course Materials for ${getActiveCourse()?.courseCode || "Department"}`,
+      items: [
+        {
+          itemId: itemObj.id,
+          itemCode: itemObj.itemCode,
+          itemName: itemObj.name,
+          quantityRequested: Number(reqItemQty),
+          unit: itemObj.unit
+        }
+      ],
+      status: "PENDING_APPROVAL",
+      remarks: reqRemarks.trim() || undefined
+    };
+
+    // Using Mock function from API
+    CampusDatabase.addMaterialRequisition(newReq);
+
+    setMyStoreRequisitions([newReq, ...myStoreRequisitions]);
+    setShowNewRequisitionModal(false);
+    setReqRemarks("");
+
+    CampusDatabase.addAuditLog(
+      user.id,
+      user.fullName,
+      "INSTRUCTOR",
+      "Submit Store Requisition",
+      "MaterialRequisition",
+      newReq.id,
+      `Submitted Model 20 Requisition ${newReq.requisitionNumber} for ${itemObj.name} (${reqItemQty} ${itemObj.unit}) to Property & Store Administration.`
+    );
+
+    alert(`Model 20 Requisition ${newReq.requisitionNumber} submitted to Store Manager! Status: PENDING_APPROVAL`);
+  };
+
   const navItems = [
     { id: "dashboard", label: "Bulletin & Syllabus", shortLabel: "Bulletin", Icon: Layout },
     { id: "zoom", label: "Zoom Live Teaching", shortLabel: "Zoom Live", Icon: Video, isZoom: true },
     { id: "materials", label: "Course Materials", shortLabel: "Materials", Icon: FileText },
+    { id: "store_requisitions", label: "Store Requisitions", shortLabel: "Store Reqs", Icon: Boxes }, // ✅ NEW
     { id: "assignments", label: "Grade Submissions", shortLabel: "Grading", Icon: PlusCircle },
     { id: "exams", label: "Exams & Push Portal", shortLabel: "Push Exams", Icon: CheckSquare, isExams: true },
     { id: "grades", label: "Submit Final Grades", shortLabel: "Final Grades", Icon: Award },
@@ -1375,7 +1471,7 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                 </div>
               </>
             )}
-                  
+
 
             {activeTab === "materials" && (
               <motion.div
@@ -1635,6 +1731,174 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
                         </div>
                       )}
                     </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* ✅ NEW: STORE REQUISITIONS TAB */}
+            {activeTab === "store_requisitions" && (
+              <motion.div
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+                key="instructor-store-requisitions-tab"
+                className="space-y-6"
+              >
+                {/* Header Banner */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base flex items-center space-x-2">
+                      <Boxes className="w-5 h-5 text-amber-600" />
+                      <span>Laboratory & Course Material Requisitions (የዕቃ መጠየቂያ)</span>
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                      Submit Model 20 requisitions for laboratory microcontrollers, sensors, cables, exam printing paper, and classroom teaching aids directly to Property & Store Administration.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() => setShowNewRequisitionModal(true)}
+                    className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center space-x-1.5 shadow-xs cursor-pointer whitespace-nowrap"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Submit New Requisition (M20)</span>
+                  </button>
+                </div>
+
+                {/* KPI Metrics */}
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                  <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
+                    <span className="text-[11px] text-slate-500">My Total Requisitions</span>
+                    <div className="text-xl font-bold font-mono text-slate-900 tabular-nums">
+                      {myStoreRequisitions.length}
+                    </div>
+                    <span className="text-[10px] text-slate-400">Software Engineering</span>
+                  </div>
+
+                  <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
+                    <span className="text-[11px] text-slate-500">Pending Review</span>
+                    <div className="text-xl font-bold font-mono text-amber-600 tabular-nums">
+                      {myStoreRequisitions.filter((r) => r.status === "PENDING_APPROVAL").length}
+                    </div>
+                    <span className="text-[10px] text-slate-400">At Store Directorate</span>
+                  </div>
+
+                  <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
+                    <span className="text-[11px] text-slate-500">Approved & Dispatched</span>
+                    <div className="text-xl font-bold font-mono text-emerald-600 tabular-nums">
+                      {myStoreRequisitions.filter((r) => r.status === "APPROVED" || r.status === "DISPATCHED").length}
+                    </div>
+                    <span className="text-[10px] text-slate-400">With Model 22 Vouchers</span>
+                  </div>
+
+                  <div className="p-4 bg-white border border-slate-200 rounded-2xl shadow-xs space-y-1">
+                    <span className="text-[11px] text-slate-500">Store Catalog Items</span>
+                    <div className="text-xl font-bold font-mono text-blue-600 tabular-nums">
+                      {storeCatalog.length}
+                    </div>
+                    <span className="text-[10px] text-slate-400">Available to Request</span>
+                  </div>
+                </div>
+
+                {/* Requisitions List */}
+                <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+                    <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider font-mono">
+                      Department Requisition History & Status
+                    </h4>
+                    <span className="text-xs text-slate-400 font-mono">
+                      Store Officer: Solomon Kassa
+                    </span>
+                  </div>
+
+                  {myStoreRequisitions.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-xs">
+                      No requisitions submitted yet. Click "Submit New Requisition" to request lab kits or teaching supplies.
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {myStoreRequisitions.map((req) => (
+                        <div key={req.id} className="p-4 hover:bg-slate-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center space-x-2">
+                              <span className="font-mono font-bold text-slate-900">{req.requisitionNumber}</span>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-100 text-slate-700">
+                                {req.urgency}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                                  req.status === "PENDING_APPROVAL"
+                                    ? "bg-amber-100 text-amber-800"
+                                    : req.status === "APPROVED"
+                                    ? "bg-blue-100 text-blue-800"
+                                    : req.status === "DISPATCHED"
+                                    ? "bg-emerald-100 text-emerald-800"
+                                    : "bg-red-100 text-red-800"
+                                }`}
+                              >
+                                {req.status}
+                              </span>
+                            </div>
+                            <div className="font-semibold text-slate-800">{req.purpose}</div>
+                            <div className="text-[11px] text-slate-500 flex items-center space-x-2">
+                              <span>Items: {req.items.map((i) => `${i.itemName} (${i.quantityRequested} ${i.unit})`).join(", ")}</span>
+                              <span>·</span>
+                              <span className="font-mono">{req.requestedDate}</span>
+                              {req.dispatchVoucherNumber && (
+                                <>
+                                  <span>·</span>
+                                  <span className="font-mono text-emerald-700 font-bold">Issue Note: {req.dispatchVoucherNumber}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => setActiveRequisitionVoucher(req)}
+                            className="px-3 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold flex items-center space-x-1 shrink-0"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>Official Voucher</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Available Store Items Quick Picker */}
+                <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-3">
+                  <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wider font-mono flex items-center space-x-1.5">
+                    <Package className="w-4 h-4 text-primary" />
+                    <span>Available Store Catalog Items (የሚገኙ እቃዎች)</span>
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {storeCatalog.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5 flex flex-col justify-between"
+                      >
+                        <div>
+                          <div className="flex items-center justify-between text-[11px] font-mono">
+                            <span className="font-bold text-slate-900">{item.itemCode}</span>
+                            <span className="text-emerald-700 font-bold">{item.quantityInStock} {item.unit} in stock</span>
+                          </div>
+                          <h5 className="font-semibold text-xs text-slate-800 mt-1 truncate">{item.name}</h5>
+                          <p className="text-[11px] text-slate-400 truncate">{item.warehouseLocation}</p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setReqSelectedItemId(item.id);
+                            setShowNewRequisitionModal(true);
+                          }}
+                          className="w-full py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1 mt-2"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Request This Item</span>
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </motion.div>
@@ -2974,6 +3238,220 @@ export default function InstructorDashboard({ user, onLogout }: InstructorDashbo
           }
         }}
       />
+
+      {/* ✅ NEW: NEW REQUISITION MODAL FOR INSTRUCTOR */}
+      <AnimatePresence>
+        {showNewRequisitionModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white text-slate-900 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden font-sans border border-slate-200"
+            >
+              <div className="university-gradient p-5 text-white flex items-center justify-between border-b border-amber-500/20">
+                <div className="flex items-center space-x-2.5">
+                  <Package className="w-5 h-5 text-amber-400" />
+                  <div>
+                    <h3 className="font-bold text-sm">Submit Material Requisition (Model 20)</h3>
+                    <p className="text-[11px] text-amber-300 font-mono">የዕቃ መጠየቂያ እና ማዘዣ</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowNewRequisitionModal(false)}
+                  className="p-1 rounded-lg text-slate-300 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitStoreRequisition} className="p-6 space-y-4 text-xs">
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-800">Select Item From University Store *</label>
+                  <select
+                    required
+                    value={reqSelectedItemId}
+                    onChange={(e) => setReqSelectedItemId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-900 focus:outline-none"
+                  >
+                    <option value="">-- Choose item --</option>
+                    {storeCatalog.map((it) => (
+                      <option key={it.id} value={it.id}>
+                        {it.itemCode} - {it.name} (Stock: {it.quantityInStock} {it.unit})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-800">Quantity Required *</label>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      value={reqItemQty}
+                      onChange={(e) => setReqItemQty(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 font-mono text-slate-900"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="font-bold text-slate-800">Urgency Level *</label>
+                    <select
+                      value={reqUrgency}
+                      onChange={(e) => setReqUrgency(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-900"
+                    >
+                      <option value="ROUTINE">Routine Academic</option>
+                      <option value="URGENT">Urgent (Lab Session)</option>
+                      <option value="CRITICAL">Critical (Final Exam/Accreditation)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-800">Purpose / Course / Lab Justification *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Course SOFT401 Embedded Hardware Lab"
+                    value={reqPurpose}
+                    onChange={(e) => setReqPurpose(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-900"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-800">Additional Remarks / Delivery Instructions</label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Please deliver to Block B, Lab 1 before Monday 9:00 AM..."
+                    value={reqRemarks}
+                    onChange={(e) => setReqRemarks(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-900"
+                  />
+                </div>
+
+                <div className="flex justify-end space-x-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setShowNewRequisitionModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold transition shadow-xs"
+                  >
+                    Send to Store Manager
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ✅ NEW: PRINTABLE VOUCHER MODAL FOR INSTRUCTOR */}
+      <AnimatePresence>
+        {activeRequisitionVoucher && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white text-slate-900 rounded-3xl max-w-2xl w-full shadow-2xl overflow-hidden font-sans border border-slate-200"
+            >
+              <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Printer className="w-5 h-5 text-amber-400" />
+                  <span className="font-bold text-sm">Official Model 20 / 22 Material Voucher</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => window.print()}
+                    className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+                  >
+                    <Printer className="w-3.5 h-3.5" />
+                    <span>Print Voucher</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveRequisitionVoucher(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-8 space-y-6 max-h-[75vh] overflow-y-auto text-xs font-serif">
+                <div className="text-center space-y-1 border-b-2 border-slate-900 pb-4">
+                  <div className="flex items-center justify-center space-x-3 mb-2">
+                    <UniversitySeal className="w-12 h-12" />
+                  </div>
+                  <h2 className="font-bold text-sm tracking-wide uppercase">Federal Democratic Republic of Ethiopia</h2>
+                  <h3 className="font-bold text-base text-slate-900">MEKDELA AMBA UNIVERSITY</h3>
+                  <p className="text-xs text-slate-700 italic">Property Administration & Store Directorate</p>
+                  <div className="inline-block border border-slate-900 px-3 py-1 rounded mt-2 font-mono font-bold text-xs bg-slate-50">
+                    MODEL 20: MATERIAL REQUISITION & ISSUE VOUCHER
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-xs font-sans">
+                  <div>
+                    <div><strong>Requisition No:</strong> <span className="font-mono">{activeRequisitionVoucher.requisitionNumber}</span></div>
+                    <div><strong>Issue Note:</strong> <span className="font-mono text-emerald-700 font-bold">{activeRequisitionVoucher.dispatchVoucherNumber || "M22-PENDING"}</span></div>
+                    <div><strong>Department:</strong> {activeRequisitionVoucher.department}</div>
+                  </div>
+                  <div className="text-right">
+                    <div><strong>Date:</strong> <span className="font-mono">{activeRequisitionVoucher.requestedDate}</span></div>
+                    <div><strong>Requester:</strong> {activeRequisitionVoucher.requesterName}</div>
+                    <div><strong>Status:</strong> <span className="font-mono font-bold uppercase">{activeRequisitionVoucher.status}</span></div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-sans">
+                  <strong>Purpose:</strong> {activeRequisitionVoucher.purpose}
+                </div>
+
+                <table className="w-full text-left text-xs border border-slate-300 font-sans">
+                  <thead className="bg-slate-100 font-mono text-[11px] uppercase border-b border-slate-300">
+                    <tr>
+                      <th className="py-2 px-3 border-r border-slate-300">Item Code</th>
+                      <th className="py-2 px-3 border-r border-slate-300">Description</th>
+                      <th className="py-2 px-3 border-r border-slate-300 text-right">Qty Requested</th>
+                      <th className="py-2 px-3 text-right">Qty Issued</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {activeRequisitionVoucher.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="py-2 px-3 border-r border-slate-300 font-mono font-bold">{item.itemCode}</td>
+                        <td className="py-2 px-3 border-r border-slate-300">{item.itemName}</td>
+                        <td className="py-2 px-3 border-r border-slate-300 text-right font-mono">{item.quantityRequested} {item.unit}</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700">
+                          {activeRequisitionVoucher.status === "APPROVED" || activeRequisitionVoucher.status === "DISPATCHED" ? item.quantityRequested : 0} {item.unit}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end">
+                <button
+                  onClick={() => setActiveRequisitionVoucher(null)}
+                  className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold"
+                >
+                  Close Document
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <AcademicFooter />
     </div>
