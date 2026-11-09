@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import type { User, Course, Grade } from "../types";
+import type { User, Course, Grade, InstructorEvaluation } from "../types";
 import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter } from "./UniversityHeader";
 import {
@@ -30,7 +30,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
   const [courses, setCourses] = useState<Course[]>([]);
   const [grades, setGrades] = useState<Grade[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [evaluations, setEvaluations] = useState<any[]>([]);
+  const [evaluations, setEvaluations] = useState<InstructorEvaluation[]>([]);
   const [loading, setLoading] = useState(true);
   const [generatingReport, setGeneratingReport] = useState(false);
   // ✅ FIX #5: explicit error state — no more silent failures.
@@ -86,6 +86,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
   const [recentDownloads, setRecentDownloads] = useState<
     { id: string; label: string; timestamp: string }[]
   >([]);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // ✅ STEP 10: initialise tab from URL hash, sync back on change.
   useEffect(() => {
@@ -162,7 +163,11 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
       }
 
       if (gradesRes.status === "fulfilled") {
-        setGrades(Array.isArray(gradesRes.value) ? gradesRes.value : []);
+        const g = gradesRes.value;
+        if (Array.isArray(g) && g.length > 0 && !g[0].studentId) {
+          console.warn("Warning: grades exist but missing studentId field.");
+        }
+        setGrades(Array.isArray(g) ? g : []);
       } else {
         setGrades([]);
         failures.push("grades");
@@ -247,7 +252,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
       }
     };
     load();
-  }, [user.id]);
+  }, [user.id, refreshTrigger]);
 
   // ---------- DERIVED DATA ----------
   const stats = useMemo(() => {
@@ -283,7 +288,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
     // ✅ FIX #3: only average VALID ratings (> 0). Missing/zero ratings are
     // skipped, not coerced to 0 (which would drag the mean down).
     const validRatings = evaluations
-      .map((e: any) => {
+      .map((e) => {
         const raw =
           e?.ratings?.overallRating ?? e?.overall_rating ?? e?.overallRating ?? null;
         if (raw == null) return null;
@@ -309,6 +314,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
       atRiskStudents,
       passedStudents,
       studentPassRate,
+      totalStudentsGraded,
     };
   }, [grades, allUsers, evaluations]);
 
@@ -417,7 +423,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
         );
         // ✅ FIX #3: same valid-only averaging for each instructor.
         const validInstRatings = instEvals
-          .map((e: any) => {
+         .map((e) => {
             const raw =
               e?.ratings?.overallRating ?? e?.overall_rating ?? e?.overallRating ?? null;
             if (raw == null) return null;
@@ -703,6 +709,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
       } catch {
         // Audit failure shouldn't block the download.
       }
+      setRefreshTrigger(t => t + 1);
       setToast({ kind: "success", message: `${kind === "departments" ? "Departments" : "Faculty"} CSV downloaded.` });
     } catch (err) {
       console.error(err);
@@ -958,7 +965,7 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
         </aside>
 
         {/* MAIN */}
-        <main className="flex-1 overflow-y-auto min-w-0">
+       <main className="flex-1 overflow-y-auto min-w-0 pb-32">
           {/* HERO */}
           <div className="relative overflow-hidden bg-gradient-to-br from-[#071526] via-[#0b2136] to-[#0d2942]">
             <div className="absolute -top-40 -left-40 w-[500px] h-[500px] bg-rose-500/20 rounded-full blur-3xl pointer-events-none" />
@@ -1099,9 +1106,9 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
                         color="bg-gradient-to-r from-blue-400 to-indigo-500"
                       />
                       <DistributionBar
-                        label="At Risk (< 50%)"
-                        value={stats.failed}
-                        total={stats.totalGrades}
+                        label="At Risk Students (< 50%)"
+                        value={stats.atRiskStudents}
+                        total={stats.totalStudentsGraded}
                         color="bg-gradient-to-r from-amber-400 to-orange-500"
                       />
                     </div>
@@ -2342,6 +2349,18 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
                   type="text"
                   value={commandQuery}
                   onChange={(e) => setCommandQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      const firstMatch = [...navItems, ...smartItems].find(item =>
+                        item.label.toLowerCase().includes(commandQuery.trim().toLowerCase())
+                      );
+                      if (firstMatch) {
+                        setActiveTab(firstMatch.id);
+                        setCommandOpen(false);
+                        setCommandQuery("");
+                      }
+                    }
+                  }}
                   placeholder="Jump to a section…"
                   aria-label="Search sections"
                   className="w-full px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
