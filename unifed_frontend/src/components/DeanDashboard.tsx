@@ -71,6 +71,8 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
       audience: string;
       priority: string;
       sentAt: string;
+      // ✅ STEP 1: distinguish real broadcasts from local drafts
+      status: "SENT" | "DRAFT";
     }[]
   >([]);
 
@@ -114,21 +116,26 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
     }
   }, [activeTab]);
 
-  // ✅ STEP 10: Cmd/Ctrl+K to open command palette.
+  // ✅ STEP 10 + 11.5: Cmd/Ctrl+K opens palette, Escape closes all overlays.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setCommandOpen((v) => !v);
       }
-      if (e.key === "Escape" && commandOpen) {
-        setCommandOpen(false);
-        setCommandQuery("");
+      if (e.key === "Escape") {
+        if (commandOpen) {
+          setCommandOpen(false);
+          setCommandQuery("");
+        }
+        if (selectedDept) setSelectedDept(null);
+        if (selectedInstructor) setSelectedInstructor(null);
+        if (isMobileNavOpen) setIsMobileNavOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [commandOpen]);
+  }, [commandOpen, selectedDept, selectedInstructor, isMobileNavOpen]);
 
   // ✅ FIX: define loadData BEFORE the effects that reference it.
   const loadData = async () => {
@@ -206,6 +213,13 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ✅ STEP 11.5: toast auto-dismiss after 4 seconds.
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   // ✅ STEP 8: load recent downloads from audit log, if the API exists.
   useEffect(() => {
     const load = async () => {
@@ -247,20 +261,21 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
         ? grades.reduce((s, g) => s + (g.totalGrade ?? 0), 0) / totalGrades
         : 0;
 
-    // ✅ FIX #1: count DISTINCT students with at least one failing grade (< 50).
-    const atRiskStudentIds = new Set<string>();
-    const passedStudentIds = new Set<string>();
+    // ✅ STEP 1: one flag per student. A student with any fail is at-risk.
+    // No double-counting — each student appears exactly once.
+    const hasFail = new Map<string, boolean>();
     grades.forEach((g) => {
       const sid = String(g.studentId ?? "").replace(/^U_/, "").trim();
       if (!sid) return;
-      if ((g.totalGrade ?? 0) >= 50) passedStudentIds.add(sid);
-      else atRiskStudentIds.add(sid);
+      hasFail.set(sid, (hasFail.get(sid) ?? false) || (g.totalGrade ?? 0) < 50);
     });
-    const atRiskStudents = atRiskStudentIds.size;
-    const passedStudents = passedStudentIds.size;
-    const totalStudentsGraded = atRiskStudentIds.size + passedStudentIds.size;
+    const totalStudentsGraded = hasFail.size;
+    const atRiskStudents = [...hasFail.values()].filter(Boolean).length;
+    const passedStudents = totalStudentsGraded - atRiskStudents;
     const studentPassRate =
-      totalStudentsGraded > 0 ? (passedStudents / totalStudentsGraded) * 100 : 0;
+      totalStudentsGraded > 0
+        ? (passedStudents / totalStudentsGraded) * 100
+        : 0;
 
     const instructors = allUsers.filter((u) => u.role === "INSTRUCTOR").length;
     const students = allUsers.filter((u) => u.role === "STUDENT").length;
@@ -2090,9 +2105,10 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
                             return;
                           setAlertSending(true);
                           try {
-                            // ✅ STEP 9: optional backend call — graceful if missing.
-                            // ASSUMPTION: CampusDatabase.sendAlert may not exist.
+                            // ✅ STEP 1 (Fix C): be honest about what actually happened.
+                            // Only claim "broadcast" if the backend method exists AND succeeded.
                             const db = CampusDatabase as any;
+                            let wasSent = false;
                             if (typeof db.sendAlert === "function") {
                               await db.sendAlert({
                                 title: alertTitle.trim(),
@@ -2101,8 +2117,9 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
                                 severity: alertPriority,
                                 senderName: user.fullName,
                               });
+                              wasSent = true;
                             } else {
-                              // TODO: replace with real notification service.
+                              // Backend not connected — record as DRAFT, not SENT.
                               await new Promise((r) => setTimeout(r, 300));
                             }
                             setSentAlerts((prev) => [
@@ -2113,12 +2130,15 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
                                 audience: alertAudience,
                                 priority: alertPriority,
                                 sentAt: new Date().toISOString(),
+                                status: wasSent ? "SENT" : "DRAFT",
                               },
                               ...prev,
                             ]);
                             setToast({
-                              kind: "success",
-                              message: "Announcement broadcast.",
+                              kind: wasSent ? "success" : "info",
+                              message: wasSent
+                                ? "Announcement broadcast."
+                                : "Saved as draft only. Broadcast service is not connected.",
                             });
                             setAlertTitle("");
                             setAlertMessage("");
@@ -2204,7 +2224,8 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
                         Sent History
                       </h3>
                       <span className="text-[11px] font-mono text-slate-400">
-                        {sentAlerts.length} sent this session
+                        {sentAlerts.filter((a) => a.status === "SENT").length} sent •{" "}
+                        {sentAlerts.filter((a) => a.status === "DRAFT").length} draft
                       </span>
                     </div>
                     {sentAlerts.length === 0 ? (
@@ -2224,6 +2245,15 @@ export function DeanDashboard({ user, onLogout }: { user: User; onLogout: () => 
                               </span>
                             </div>
                             <div className="flex items-center space-x-2 text-[11px] font-mono">
+                              <span
+                                className={`px-1.5 py-0.5 rounded font-bold ${
+                                  a.status === "SENT"
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : "bg-amber-100 text-amber-700"
+                                }`}
+                              >
+                                {a.status}
+                              </span>
                               <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
                                 {a.audience}
                               </span>
