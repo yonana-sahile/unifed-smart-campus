@@ -6,19 +6,21 @@ import InstructorDashboard from "./components/InstructorDashboard";
 import { RegistrarDashboard, DepartmentHeadDashboard, DeanDashboard, AdminDashboard, AuditorDashboard } from "./components/OtherDashboards";
 import { LibraryStaffDashboard } from "./components/LibraryStaffDashboard";
 import { FinanceOfficerDashboard } from "./components/FinanceOfficerDashboard";
+import { MaterialManagerDashboard } from "./components/MaterialManagerDashboard"; // 👈 ADDED
 import { UniversitySeal, EthiopianFlag, ThemeToggle, DigitalClock } from "./components/UniversityHeader";
 import { UniversityLandingFooter } from "./components/UniversityLandingFooter";
 import CampusMediaBroadcast from "./components/CampusMediaBroadcast";
 import CampusNewsTopBar from "./components/CampusNewsTopBar";
 import FloatingAIAssistant from "./components/FloatingAIAssistant";
-import FloatingVoiceAssistant from "./components/FloatingVoiceAssistant"; // 👈 ADD
+import FloatingVoiceAssistant from "./components/FloatingVoiceAssistant";
 import StarryFlag from "./components/StarryFlag";
 import { ForgotPasswordModal } from "./components/ForgotPasswordModal";
-import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound, Eye, EyeOff } from "lucide-react";
+import { LogIn, HelpCircle, Shield, ShieldCheck, GraduationCap, Users, ShieldAlert, AlertCircle, Award, BookOpen, Calendar, CheckCircle2, Lock, Building, CreditCard, Radio, Sparkles, X, Check, Globe, FileCheck, KeyRound, Eye, EyeOff, Package } from "lucide-react"; // 👈 ADDED Package
 import { motion, AnimatePresence } from "motion/react";
 import { Toaster } from "sonner";
 import { notify } from "./utils/notify";
 import "./styles/zoom-glass.css";
+
 // ✅ LOCAL DEMO USERS – used for 1‑Click Login fallback
 const DEMO_USERS: User[] = [
   {
@@ -38,7 +40,7 @@ const DEMO_USERS: User[] = [
   },
   {
     id: "U_IN01",
-username: "teach1",
+    username: "teach1",
     fullName: "Dr. Chalachew",
     email: "chalachew@mau.edu.et",
     role: "INSTRUCTOR",
@@ -109,6 +111,17 @@ username: "teach1",
     isActive: true,
     officerId: "FIN001",
     avatarUrl: "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150"
+  },
+  // 👈 ADDED: Material Manager Demo User
+  {
+    id: "U_MM01",
+    username: "material",
+    fullName: "Solomon Kassa",
+    email: "material@mau.edu.et",
+    role: "MATERIAL_MANAGER",
+    isActive: true,
+    staffId: "MMS001",
+    avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150"
   },
   {
     id: "U_AUD01",
@@ -195,7 +208,7 @@ export default function App() {
 
       // Save user + ensure tokens are settled before render
       localStorage.setItem("uscms_current_user", JSON.stringify(me));
-      
+
       // Small delay so token is fully in localStorage before dashboard fires background calls
       setTimeout(() => setCurrentUser(me), 100);
       return;
@@ -268,11 +281,12 @@ export default function App() {
     setErrorMessage("");
 
     const localUser = DEMO_USERS.find((u) => u.email === email);
-if (!localUser) {
-  // Should never happen — but keep a safety net
-  notify.error("Unknown demo profile", "Contact IT if this persists.");
-  return;
-}
+    if (!localUser) {
+      // Should never happen — but keep a safety net
+      notify.error("Unknown demo profile", "Contact IT if this persists.");
+      return;
+    }
+
     // ── 1️⃣ Try REAL backend auth using the demo user's username + "password" ──
     try {
       await CampusDatabase.login(localUser.username, "password");
@@ -366,6 +380,8 @@ if (!localUser) {
           return <LibraryStaffDashboard user={currentUser} onLogout={handleLogout} />;
         case "FINANCE_OFFICER":
           return <FinanceOfficerDashboard user={currentUser} onLogout={handleLogout} />;
+        case "MATERIAL_MANAGER": // 👈 ADDED
+          return <MaterialManagerDashboard user={currentUser} onLogout={handleLogout} />;
         default:
           return (
             <div className="min-h-screen flex items-center justify-center bg-slate-100 font-sans p-6 text-center">
@@ -740,6 +756,21 @@ if (!localUser) {
                       <span className="block text-[9px] text-slate-500 dark:text-slate-400 font-mono truncate">Finance Officer</span>
                     </div>
                   </button>
+
+                  {/* 👈 ADDED: Material Manager Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleQuickLogin("material@mau.edu.et")}
+                    className="flex items-center space-x-2 p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary hover:bg-slate-50 dark:hover:bg-slate-750 rounded-xl text-slate-800 dark:text-slate-200 font-medium text-left transition shadow-xs group cursor-pointer"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-orange-50 dark:bg-orange-950/60 border border-orange-100 dark:border-orange-800 flex items-center justify-center text-orange-700 dark:text-orange-400 group-hover:bg-orange-700 group-hover:text-white transition">
+                      <Package className="w-4 h-4" />
+                    </div>
+                    <div className="overflow-hidden">
+                      <span className="block truncate font-bold text-slate-900 dark:text-slate-100 text-[11px]">Solomon Kassa</span>
+                      <span className="block text-[9px] text-slate-500 dark:text-slate-400 font-mono truncate">Material Manager</span>
+                    </div>
+                  </button>
                 </div>
 
                 <button
@@ -792,7 +823,7 @@ if (!localUser) {
           setPasswordInput("password");
         }}
       />
-<FloatingVoiceAssistant currentUser={currentUser} /> 
+      <FloatingVoiceAssistant currentUser={currentUser} />
       <FloatingAIAssistant currentUser={currentUser} />
     </div>
   );
