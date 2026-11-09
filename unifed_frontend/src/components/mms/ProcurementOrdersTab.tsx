@@ -7,7 +7,7 @@ import {
   PurchaseOrderItem,
   MaterialCategory
 } from "../../types";
-import { CampusDatabase } from "../../mockData";
+import { CampusDatabase } from "../../services/api"; // 👈 UPDATED THIS LINE
 import { EthiopianFlag, UniversitySeal } from "../UniversityHeader";
 import {
   ShoppingCart,
@@ -687,7 +687,7 @@ export function ProcurementOrdersTab({
                           <input
                             type="number"
                             min="1"
-                            value={item.quantity}
+                            value={item.quantityOrdered} // 👈 FIXED
                             onChange={(e) => handleQtyChange(idx, parseInt(e.target.value) || 1)}
                             className="w-full px-2 py-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-transparent text-slate-900 dark:text-white font-mono"
                             placeholder="Qty"
@@ -708,7 +708,7 @@ export function ProcurementOrdersTab({
                         </div>
 
                         <div className="col-span-2 font-mono font-medium text-right tabular-nums text-slate-900 dark:text-white">
-                          {item.totalPriceETB.toLocaleString()} ETB
+                          {item.lineTotalETB.toLocaleString()} ETB {/* 👈 FIXED */}
                         </div>
 
                         <div className="col-span-1 text-right">
