@@ -7,7 +7,8 @@ export type UserRole =
   | "DEAN"
   | "AUDITOR"
   | "LIBRARY_STAFF"
-  | "FINANCE_OFFICER";
+  | "FINANCE_OFFICER"
+  | "MATERIAL_MANAGER";
 
 export interface User {
   id: string;
@@ -52,10 +53,6 @@ export interface Course {
   prerequisites: string[];
 }
 
-// ✅ UPDATED: added optional file attachment metadata for PDF/DOCX uploads
-// (file_name, file_size, file_data, chapter_week, instructor_name) so the
-// instructor's material upload form and the student's preview modal can
-// display and download the attached file.
 export interface CourseMaterial {
   id: string;
   courseId: string;
@@ -113,8 +110,6 @@ export interface Question {
   marks: number;
 }
 
-// ✅ UPDATED: added isPushed, pushedAt, createdBy, category fields so the
-// instructor's push portal and student's live exam portal work end-to-end.
 export interface Exam {
   id: string;
   courseId: string;
@@ -215,7 +210,6 @@ export interface AttendanceSession {
   startedAt: string;
   expiresAt: string;
   endedAt?: string;
-  /** Hidden from students by the API; only instructors and staff receive it. */
   checkInCode: string | null;
   status: "OPEN" | "CLOSED" | "CANCELLED";
   lateAfterMinutes: number;
@@ -436,7 +430,7 @@ export interface CampusMediaPost {
   title: string;
   description: string;
   category: "CAMPUS_NEWS" | "RESEARCH_INNOVATION" | "GRADUATION_CEREMONY" | "TECH_EXPO" | "PRESIDENTIAL_ADDRESS" | "STUDENT_LIFE";
-  videoUrl: string; // YouTube / MP4 / Vimeo embed URL
+  videoUrl: string;
   thumbnailUrl: string;
   postedBy: string;
   authorRole: string;
@@ -518,7 +512,7 @@ export interface DormBlock {
 
 export interface DormRoom {
   id: string;
-  block: string; // DormBlock id
+  block: string;
   blockName?: string;
   genderType?: DormGenderType;
   roomNumber: string;
@@ -530,9 +524,9 @@ export interface DormRoom {
 
 export interface DormAssignment {
   id: string;
-  student: string; // User id
+  student: string;
   studentName: string;
-  room: string; // DormRoom id
+  room: string;
   roomNumber: string;
   blockName: string;
   genderType?: DormGenderType;
@@ -545,10 +539,10 @@ export type DormMaintenanceStatus = "PENDING" | "IN_PROGRESS" | "RESOLVED";
 
 export interface DormMaintenanceRequest {
   id: string;
-  room: string; // DormRoom id
+  room: string;
   roomNumber: string;
   blockName: string;
-  reportedBy: string; // User id
+  reportedBy: string;
   reportedByName: string;
   issueDescription: string;
   status: DormMaintenanceStatus;
@@ -584,64 +578,377 @@ export interface DormStats {
 // READING LIST (Feature 14)
 // ============================================================
 
-/** Lifecycle of a resource in a student's reading list. */
 export type ReadingStatus = "SAVED" | "READING" | "FINISHED";
 
-/**
- * A single library resource saved by a student.
- * One record per (student, resource) pair.
- */
 export interface ReadingListItem {
-  /** Unique per user+resource, e.g. "RL_1730000000000" */
   id: string;
-
-  /** The student who owns this item ("U_5" or "5") */
   userId: string;
-
-  /** Points to LibraryResource.id */
   resourceId: string;
-
-  /** SAVED → READING → FINISHED (auto-advances with progress) */
   status: ReadingStatus;
-
-  /** Which shelf/folder this sits on. "Default" if none chosen. */
   shelf: string;
-
-  /** 0–100. Updated as the student scrolls/watches. */
   progressPercent: number;
-
-  /**
-   * Where they stopped, encoded as a string:
-   *   "scroll:0.62"   → 62% down the page
-   *   "page:42"       → PDF page 42
-   *   "time:183.5"    → video at 3:03
-   */
   lastLocation?: string;
-
-  /** Optional private note */
   note?: string;
-
-  /** 1–5, only set when FINISHED */
   rating?: number;
-
-  /** ISO timestamp when saved */
   savedAt: string;
-
-  /** ISO timestamp of last open */
   lastOpenedAt?: string;
-
-  /** ISO timestamp when marked finished */
   finishedAt?: string;
 }
 
-/** A user-created shelf/folder for organizing reading list items. */
 export interface ReadingShelf {
   id: string;
   userId: string;
   name: string;
-  /** Lucide icon name or emoji, e.g. "📚", "🎯", "🔬" */
   icon?: string;
-  /** Hex color for the shelf chip, e.g. "#6366f1" */
   color?: string;
   createdAt: string;
+}
+
+// -------------------------------------------------------------
+// MATERIAL MANAGEMENT SYSTEM (MMS) TYPES
+// -------------------------------------------------------------
+
+export type MaterialCategory =
+  | "ICT_ELECTRONICS"
+  | "LAB_APPARATUS"
+  | "CHEMICALS_REAGENTS"
+  | "OFFICE_STATIONERY"
+  | "FURNITURE"
+  | "ENGINEERING_TOOLS"
+  | "DORMITORY_SUPPLIES"
+  | "CLINICAL_MEDICAL";
+
+export interface MaterialInventoryItem {
+  id: string;
+  itemCode: string;
+  name: string;
+  amharicName?: string;
+  category: MaterialCategory;
+  description: string;
+  quantityInStock: number;
+  unit: string;
+  minThreshold: number;
+  unitCostETB: number;
+  totalValueETB: number;
+  warehouseLocation: string;
+  shelfBin: string;
+  status: "IN_STOCK" | "LOW_STOCK" | "OUT_OF_STOCK";
+  lastRestocked: string;
+  supplier?: string;
+  specs?: string;
+}
+
+export interface RequisitionItem {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  quantityRequested: number;
+  quantityApproved?: number;
+  unit: string;
+}
+
+export interface MaterialRequisition {
+  id: string;
+  requisitionNumber: string;
+  requesterId: string;
+  requesterName: string;
+  requesterRole: string;
+  department: string;
+  requestedDate: string;
+  urgency: "ROUTINE" | "URGENT" | "CRITICAL";
+  purpose: string;
+  items: RequisitionItem[];
+  status: "PENDING_APPROVAL" | "APPROVED" | "DISPATCHED" | "REJECTED";
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  dispatchVoucherNumber?: string;
+  remarks?: string;
+}
+
+export interface GoodsReceivingItem {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  quantityReceived: number;
+  unitCostETB: number;
+  totalCostETB: number;
+}
+
+export interface GoodsReceivingRecord {
+  id: string;
+  grnNumber: string;
+  poNumber: string;
+  invoiceNumber: string;
+  supplierName: string;
+  supplierTIN?: string;
+  receivedDate: string;
+  receivedBy: string;
+  warehouseLocation: string;
+  items: GoodsReceivingItem[];
+  totalAmountETB: number;
+  status: "VERIFIED_STOCKED" | "INSPECTED";
+  notes?: string;
+}
+
+export interface FixedAssetItem {
+  id: string;
+  assetTag: string;
+  serialNumber: string;
+  name: string;
+  category: MaterialCategory;
+  model: string;
+  purchaseDate: string;
+  purchaseCostETB: number;
+  currentValueETB: number;
+  custodianName: string;
+  custodianDepartment: string;
+  location: string;
+  buildingBlock?: string;
+  roomNumber?: string;
+  condition: "EXCELLENT" | "GOOD" | "NEEDS_REPAIR" | "DAMAGED" | "DISPOSED";
+  depreciationMethod?: "STRAIGHT_LINE";
+  usefulLifeYears?: number;
+  salvageValueETB?: number;
+  accumulatedDepreciationETB?: number;
+}
+
+export interface InterStoreTransferItem {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+}
+
+export interface InterStoreTransferRecord {
+  id: string;
+  transferNumber: string;
+  sourceWarehouse: string;
+  destinationWarehouse: string;
+  initiatedBy: string;
+  initiatedDate: string;
+  receivedBy?: string;
+  receivedDate?: string;
+  reason: string;
+  items: InterStoreTransferItem[];
+  status: "IN_TRANSIT" | "COMPLETED" | "CANCELLED";
+  gatePassRef?: string;
+  remarks?: string;
+}
+
+export interface PropertyReturnItem {
+  itemId?: string;
+  itemCode: string;
+  itemName: string;
+  quantity: number;
+  unit: string;
+  condition: "REUSABLE_GOOD" | "MINOR_REPAIR_NEEDED" | "SCRAP_UNUSABLE";
+  restockDecision: "RESTOCK_TO_STORE" | "SEND_TO_MAINTENANCE" | "SCRAP_DISPOSAL";
+}
+
+export interface PropertyReturnRecord {
+  id: string;
+  voucherNumber: string;
+  returnerId: string;
+  returnerName: string;
+  returnerType: "FACULTY" | "STUDENT" | "DEPARTMENT" | "CONTRACTOR";
+  department: string;
+  returnDate: string;
+  receivedBy: string;
+  warehouseLocation: string;
+  reason: "SEMESTER_COMPLETION" | "GRADUATION_CLEARANCE" | "PROJECT_CONCLUDED" | "DEFECTIVE_EXCHANGE";
+  clearanceId?: string;
+  items: PropertyReturnItem[];
+  status: "VERIFIED" | "PENDING_ASSESSMENT";
+  notes?: string;
+}
+
+export interface CampusGatePassRecord {
+  id: string;
+  gatePassNumber: string;
+  bearerName: string;
+  bearerRole: string;
+  bearerIdCard: string;
+  vehiclePlateNumber?: string;
+  destination: string;
+  purpose: "INTER_CAMPUS_TRANSFER" | "EXTERNAL_REPAIR_CALIBRATION" | "FIELD_RESEARCH" | "DISPOSAL_WRITE_OFF";
+  authorizedBy: string;
+  authorizedDate: string;
+  validUntil: string;
+  itemsDescription: string;
+  itemCount: number;
+  securityExitTimestamp?: string;
+  gateName: "MAIN_GATE_1" | "EAST_GATE_COMMERCIAL" | "SCIENCE_GATE_3";
+  guardName?: string;
+  status: "AUTHORIZED" | "CHECKED_OUT" | "EXPIRED" | "REVOKED";
+}
+
+export interface MaintenanceWorkOrder {
+  id: string;
+  orderNumber: string;
+  assetId?: string;
+  assetTag?: string;
+  equipmentName: string;
+  location: string;
+  reportedBy: string;
+  reportedDepartment: string;
+  reportedDate: string;
+  faultDescription: string;
+  urgency: "LOW" | "MEDIUM" | "HIGH" | "CAMPUS_HALTING";
+  status: "REPORTED" | "DIAGNOSIS" | "IN_REPAIR" | "REPAIRED" | "BEYOND_ECONOMIC_REPAIR";
+  assignedTechnician?: string;
+  completionDate?: string;
+  estimatedCostETB: number;
+  actualCostETB?: number;
+  technicianNotes?: string;
+}
+
+export interface PhysicalAuditEntry {
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  warehouse: string;
+  systemStock: number;
+  physicalCount: number;
+  variance: number;
+  unitCostETB: number;
+  varianceValueETB: number;
+  auditDate: string;
+  auditorName: string;
+  discrepancyReason?: string;
+  reconciliationStatus: "PENDING_REVIEW" | "RECONCILED" | "WRITE_OFF_APPROVED";
+}
+
+export interface UniversityVendor {
+  id: string;
+  vendorCode: string;
+  name: string;
+  tradeName?: string;
+  tinNumber: string;
+  vatNumber?: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  address: string;
+  city: string;
+  category: MaterialCategory;
+  ratingScore: number;
+  activeContractsCount: number;
+  totalSuppliedValueETB: number;
+  status: "ACTIVE" | "UNDER_REVIEW" | "SUSPENDED";
+  bankAccountDetails?: string;
+}
+
+export interface PurchaseOrderItem {
+  itemId?: string;
+  itemCode: string;
+  itemName: string;
+  quantityOrdered: number;
+  unit: string;
+  unitPriceETB: number;
+  lineTotalETB: number;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  poNumber: string;
+  vendorId: string;
+  vendorName: string;
+  vendorTIN: string;
+  department: string;
+  budgetCode: string;
+  issueDate: string;
+  deliveryDeadline: string;
+  items: PurchaseOrderItem[];
+  subtotalETB: number;
+  vatAmountETB: number;
+  grandTotalETB: number;
+  status: "DRAFT" | "FINANCE_APPROVED" | "ISSUED_TO_VENDOR" | "PARTIALLY_DELIVERED" | "COMPLETED_M19" | "CANCELLED";
+  paymentTerms: string;
+  approvedBy?: string;
+  grnReference?: string;
+  notes?: string;
+}
+
+export interface AssetDisposalRecord {
+  id: string;
+  disposalRef: string;
+  assetId?: string;
+  assetTag: string;
+  equipmentName: string;
+  category: MaterialCategory;
+  initialPurchaseCostETB: number;
+  bookValueETB: number;
+  disposalMethod: "PUBLIC_AUCTION" | "COMMUNITY_DONATION" | "HAZARDOUS_DESTRUCTION" | "SCRAP_METAL" | "TRADE_IN";
+  committeeApprovedDate: string;
+  committeeChairman: string;
+  reservePriceETB: number;
+  winningBidETB?: number;
+  buyerName?: string;
+  buyerReceiptNo?: string;
+  status: "APPRAISAL" | "TENDER_PUBLISHED" | "AUCTIONED" | "REMITTED_TO_TREASURY";
+  technicalJustification: string;
+}
+
+export interface HazardousMaterialRecord {
+  id: string;
+  itemId?: string;
+  itemCode: string;
+  chemicalName: string;
+  amharicName?: string;
+  casNumber: string;
+  unClass: "FLAMMABLE_LIQUID_3" | "CORROSIVE_8" | "TOXIC_6_1" | "OXIDIZER_5_1" | "HAZARDOUS_COMPOUND";
+  storageLocation: string;
+  currentVolume: number;
+  unit: string;
+  maxAllowableThreshold: number;
+  storageTempCelsius: string;
+  msdsUrl?: string;
+  ppeRequired: string[];
+  emergencyNeutralizer: string;
+  expirationDate: string;
+  inspectionStatus: "SAFE" | "EXPIRING_SOON" | "CRITICAL_ACTION_REQUIRED";
+}
+
+export interface StockBinCardEntry {
+  id: string;
+  itemId: string;
+  itemCode: string;
+  itemName: string;
+  timestamp: string;
+  voucherType: "MODEL_19_RECEIPT" | "MODEL_20_ISSUE" | "MODEL_21_TRANSFER_IN" | "MODEL_21_TRANSFER_OUT" | "MODEL_23_RETURN" | "AUDIT_ADJUSTMENT";
+  voucherNumber: string;
+  warehouseLocation: string;
+  quantityIn: number;
+  quantityOut: number;
+  balanceStock: number;
+  performedBy: string;
+  remarks: string;
+}
+
+export interface DepartmentStoreBudget {
+  departmentId: string;
+  departmentName: string;
+  college: string;
+  fiscalYear: string;
+  allocatedBudgetETB: number;
+  utilizedBudgetETB: number;
+  reservedBudgetETB: number;
+  remainingBudgetETB: number;
+  hodApprover: string;
+}
+
+export interface DonationGrantAsset {
+  id: string;
+  grantCode: string;
+  donorOrganization: string;
+  projectName: string;
+  assetTag: string;
+  itemName: string;
+  valueETB: number;
+  projectPI: string;
+  projectEndDate: string;
+  handoverStatus: "IN_PROJECT_USE" | "UNIVERSITY_TRANSFERRED" | "SCHEDULED_HANDOVER";
+  custodianLab: string;
 }
