@@ -19,10 +19,11 @@ import {
   DepartmentStoreBudget,
   DonationGrantAsset
 } from "../types";
-import { CampusDatabase } from "../mockData";
+import { CampusDatabase } from "../services/api"; // 👈 UPDATED THIS LINE
 import { UniversityTopBar, AcademicFooter, EthiopianFlag, UniversitySeal } from "./UniversityHeader";
-import { SmartCampusAlerts } from "./SmartCampusAlerts";
-import { SmartCampusHardwareHub } from "./SmartCampusHardwareHub";
+// 👇 COMMENTED OUT THESE TWO MISSING COMPONENTS
+// import { SmartCampusAlerts } from "./SmartCampusAlerts";
+// import { SmartCampusHardwareHub } from "./SmartCampusHardwareHub";
 import { InterStoreTransfersTab } from "./mms/InterStoreTransfersTab";
 import { PropertyReturnsTab } from "./mms/PropertyReturnsTab";
 import { CampusGatePassTab } from "./mms/CampusGatePassTab";
@@ -1890,7 +1891,12 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
         {/* ------------------------------------------------------------- */}
         {activeTab === "alerts" && (
           <div className="space-y-4">
-            <SmartCampusAlerts user={user} />
+            {/* <SmartCampusAlerts user={user} /> */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center shadow-xs">
+              <Radio className="w-10 h-10 text-amber-500 mx-auto mb-3 opacity-50" />
+              <h3 className="font-bold text-slate-900 dark:text-slate-100">Campus Alerts Module</h3>
+              <p className="text-xs text-slate-500 mt-1">This module is currently being integrated.</p>
+            </div>
           </div>
         )}
 
@@ -1918,7 +1924,12 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
               </div>
             </div>
 
-            <SmartCampusHardwareHub user={user} />
+            {/* <SmartCampusHardwareHub user={user} /> */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center shadow-xs">
+              <Cctv className="w-12 h-12 text-slate-400 mx-auto mb-3 opacity-50" />
+              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg">IoT & Hardware Hub</h3>
+              <p className="text-sm text-slate-500 mt-1">This advanced IoT telemetry dashboard is currently being integrated into the MMS.</p>
+            </div>
           </div>
         )}
       </div>
