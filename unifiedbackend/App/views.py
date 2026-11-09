@@ -18,10 +18,12 @@ import string
 import uuid
 from datetime import timedelta
 
+
 # ---------- AUTH ----------
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
     serializer_class = UserSerializer  # ← add this
+
     @action(detail=False, methods=['post'])
     def login(self, request):
         username = request.data.get('username')
@@ -49,6 +51,7 @@ class AuthViewSet(viewsets.GenericViewSet):
                 'user': UserSerializer(user).data
             })
         return Response({'error': 'Invalid credentials'}, status=status.HTTP_401_UNAUTHORIZED)
+
     @action(detail=False, methods=['post'])
     def register(self, request):
         serializer = UserCreateSerializer(data=request.data)
@@ -66,6 +69,7 @@ class AuthViewSet(viewsets.GenericViewSet):
 # ---------- GENERIC BASE VIEWSET ----------
 class BaseViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
+
     def perform_create(self, serializer):
         serializer.save()
 
@@ -129,7 +133,7 @@ class UserViewSet(BaseViewSet):
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def request_password_reset(self, request):
         email = request.data.get('email', '').strip()
-        
+
         if not email:
             return Response({"error": "Please provide an email address."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -138,7 +142,8 @@ class UserViewSet(BaseViewSet):
             user = User.objects.filter(student_id__iexact=email).first()
 
         if not user:
-            return Response({"error": "User with this email or Student ID not found."}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"error": "User with this email or Student ID not found."},
+                            status=status.HTTP_404_NOT_FOUND)
 
         PasswordResetOTP.objects.filter(email=user.email).delete()
         otp = str(random.randint(100000, 999999))
@@ -148,13 +153,14 @@ class UserViewSet(BaseViewSet):
             send_mail(
                 'Unified Smart Campus - Password Reset',
                 f'Hello {user.full_name or user.username},\n\nYour password reset code is: {otp}\n\nThis code expires in 10 minutes.',
-settings.EMAIL_HOST_USER,  # 👈 FROM address (Your Gmail)
-                [user.email],              # 👈 TO address (The student)
+                settings.EMAIL_HOST_USER,  # 👈 FROM address (Your Gmail)
+                [user.email],  # 👈 TO address (The student)
                 fail_silently=False,
             )
         except Exception as e:
             print(f"Email failed to send: {e}")
-            return Response({"error": "Failed to send email. Please contact ICT."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({"error": "Failed to send email. Please contact ICT."},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({"message": "OTP sent successfully", "email": user.email})
 
@@ -175,7 +181,7 @@ settings.EMAIL_HOST_USER,  # 👈 FROM address (Your Gmail)
             return Response({"error": "User not found."}, status=status.HTTP_404_NOT_FOUND)
 
         reset_record = PasswordResetOTP.objects.filter(email=user.email).last()
-        
+
         if not reset_record:
             return Response({"error": "No OTP requested for this account."}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -208,13 +214,13 @@ class CourseViewSet(BaseViewSet):
             if not dept:
                 return Course.objects.none()
             return Course.objects.filter(instructor__department__iexact=dept)
-        
+
         # ✅ NEW: Students only see courses in their department
         if user.role == 'STUDENT':
             dept = (getattr(user, 'department', None) or '').strip()
             if dept:
                 return Course.objects.filter(department__iexact=dept)
-            return Course.objects.all() # Show all if no department set
+            return Course.objects.all()  # Show all if no department set
 
         return Course.objects.all()
 
@@ -295,6 +301,7 @@ class CourseViewSet(BaseViewSet):
 
         return Response({'message': 'Enrolled successfully'})
 
+
 # ---------- COURSE MATERIAL ----------
 class CourseMaterialViewSet(BaseViewSet):
     serializer_class = CourseMaterialSerializer
@@ -309,6 +316,7 @@ class CourseMaterialViewSet(BaseViewSet):
         if user.role == 'STUDENT':
             return qs.filter(course_id__in=_student_course_ids(user))
         return qs
+
 
 # ---------- ANNOUNCEMENT ----------
 class AnnouncementViewSet(BaseViewSet):
@@ -331,6 +339,7 @@ class AssignmentViewSet(BaseViewSet):
             return qs.filter(course_id__in=_student_course_ids(user))
         return qs
 
+
 # ---------- SUBMISSION ----------
 class SubmissionViewSet(BaseViewSet):
     serializer_class = SubmissionSerializer
@@ -352,6 +361,7 @@ class SubmissionViewSet(BaseViewSet):
         if file and not serializer.validated_data.get('file_name'):
             serializer.validated_data['file_name'] = file.name
         serializer.save()
+
 
 # ---------- QUESTION ----------
 class QuestionViewSet(BaseViewSet):
@@ -453,6 +463,7 @@ class ExamAttemptViewSet(BaseViewSet):
             return qs.filter(exam__course__instructor=user)
         return qs
 
+
 # ---------- GRADE ----------
 class GradeViewSet(BaseViewSet):
     serializer_class = GradeSerializer
@@ -513,6 +524,7 @@ class GradeViewSet(BaseViewSet):
         grade.save()
         return Response({'message': 'Grade approved'})
 
+
 # ---------- TRANSCRIPT ----------
 class TranscriptViewSet(BaseViewSet):
     queryset = Transcript.objects.all()
@@ -525,6 +537,7 @@ class TranscriptViewSet(BaseViewSet):
         if user.role == 'STUDENT':
             return Transcript.objects.filter(student=user)
         return Transcript.objects.all()
+
 
 # ---------- ATTENDANCE RECORD ----------
 class AttendanceRecordViewSet(BaseViewSet):
@@ -812,10 +825,10 @@ class AttendanceSessionViewSet(BaseViewSet):
 
         forwarded = request.META.get('HTTP_X_FORWARDED_FOR', '')
         ip_address = (
-            forwarded.split(',')[0].strip()
-            if forwarded
-            else request.META.get('REMOTE_ADDR')
-        ) or None
+                         forwarded.split(',')[0].strip()
+                         if forwarded
+                         else request.META.get('REMOTE_ADDR')
+                     ) or None
 
         checkin = AttendanceCheckIn.objects.create(
             session=session,
@@ -858,6 +871,7 @@ class AttendanceSessionViewSet(BaseViewSet):
     def live(self, request, pk=None):
         session = self.get_object()
         return Response(self.get_serializer(session).data)
+
 
 # ---------- INSTRUCTOR EVALUATION ----------
 class InstructorEvaluationViewSet(BaseViewSet):
@@ -954,17 +968,20 @@ class FacilityViewSet(BaseViewSet):
 
     def create(self, request, *args, **kwargs):
         if not self._can_manage():
-            return Response({'error': 'Only admins and department heads can create facilities.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'Only admins and department heads can create facilities.'},
+                            status=status.HTTP_403_FORBIDDEN)
         return super().create(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
         if not self._can_manage():
-            return Response({'error': 'Only admins and department heads can edit facilities.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'Only admins and department heads can edit facilities.'},
+                            status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         if not self._can_manage():
-            return Response({'error': 'Only admins and department heads can delete facilities.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({'error': 'Only admins and department heads can delete facilities.'},
+                            status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
 
 
@@ -1002,7 +1019,8 @@ class FacilityBookingViewSet(BaseViewSet):
         if request.user.role not in ('DEPARTMENT_HEAD', 'ADMIN', 'REGISTRAR'):
             return Response({'error': 'Only department heads can approve bookings.'}, status=status.HTTP_403_FORBIDDEN)
         if booking.status != 'PENDING':
-            return Response({'error': f'Only PENDING bookings can be approved. Current: {booking.status}.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'Only PENDING bookings can be approved. Current: {booking.status}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
         booking.status = 'APPROVED'
         booking.approved_by = request.user
         booking.approved_at = timezone.now()
@@ -1015,7 +1033,8 @@ class FacilityBookingViewSet(BaseViewSet):
         if request.user.role not in ('DEPARTMENT_HEAD', 'ADMIN', 'REGISTRAR'):
             return Response({'error': 'Only department heads can reject bookings.'}, status=status.HTTP_403_FORBIDDEN)
         if booking.status != 'PENDING':
-            return Response({'error': f'Only PENDING bookings can be rejected. Current: {booking.status}.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': f'Only PENDING bookings can be rejected. Current: {booking.status}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
         reason = (request.data.get('reason') or '').strip()
         if not reason:
             return Response({'error': 'Rejection reason is required.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -1033,10 +1052,12 @@ class FacilityBookingViewSet(BaseViewSet):
             if booking.requested_by_id != request.user.id:
                 is_dept_head = (
                     request.user.role == 'DEPARTMENT_HEAD'
-                    and (booking.department or '').strip().lower() == (getattr(request.user, 'department', '') or '').strip().lower()
+                    and (booking.department or '').strip().lower() == (
+                            getattr(request.user, 'department', '') or '').strip().lower()
                 )
                 if not is_dept_head:
-                    return Response({'error': 'You can only cancel your own bookings.'}, status=status.HTTP_403_FORBIDDEN)
+                    return Response({'error': 'You can only cancel your own bookings.'},
+                                    status=status.HTTP_403_FORBIDDEN)
         if booking.status in ('CANCELLED', 'COMPLETED'):
             return Response({'error': f'Cannot cancel a {booking.status} booking.'}, status=status.HTTP_400_BAD_REQUEST)
         booking.status = 'CANCELLED'
@@ -1153,8 +1174,10 @@ class AIViewSet(viewsets.GenericViewSet):
         if (student.outstanding_fees or 0) > 5000: dropout_probability += 0.2
 
         classification = 'NOT_AT_RISK'
-        if dropout_probability > 0.5: classification = 'HIGH_RISK'
-        elif dropout_probability > 0.3: classification = 'MODERATE_RISK'
+        if dropout_probability > 0.5:
+            classification = 'HIGH_RISK'
+        elif dropout_probability > 0.3:
+            classification = 'MODERATE_RISK'
 
         student_name = f"{student.first_name or ''} {student.last_name or ''}".strip()
         if not student_name: student_name = student.username
@@ -1181,7 +1204,7 @@ class AIViewSet(viewsets.GenericViewSet):
         questions = []
         for i in range(num_questions):
             questions.append({
-                'questionText': f'Sample {difficulty} question on {topic} #{i+1}',
+                'questionText': f'Sample {difficulty} question on {topic} #{i + 1}',
                 'questionType': 'MCQ',
                 'options': ['Option A', 'Option B', 'Option C', 'Option D'],
                 'correctAnswer': 'Option A',
@@ -1469,6 +1492,7 @@ If no, revise.
 
 Be the academic advisor every student wishes they had."""
 
+
 @api_view(["POST"])
 @_perm_classes([permissions.AllowAny])  # <--- CHANGE TO THIS
 def ai_chat(request):
@@ -1519,7 +1543,7 @@ def ai_chat(request):
 Question: {message}"""
         groq_messages.append({"role": "user", "content": context_message})
 
-    models_to_try = [                      # ← indented 4 spaces ✅
+    models_to_try = [  # ← indented 4 spaces ✅
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
     ]
@@ -1552,6 +1576,7 @@ Question: {message}"""
 # ---------- EXAM MONITORING EVENT ----------
 import rest_framework.serializers as drf_serializers
 
+
 class ExamMonitoringEventViewSet(viewsets.ModelViewSet):
     queryset = ExamMonitoringEvent.objects.all()
     serializer_class = ExamMonitoringEventSerializer
@@ -1575,7 +1600,7 @@ class ExamMonitoringEventViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['patch'], permission_classes=[permissions.IsAuthenticated])
     def review(self, request, pk=None):
         event = self.get_object()
-        
+
         if request.user.role == 'STUDENT':
             return Response({'error': 'Only instructors can review events.'}, status=status.HTTP_403_FORBIDDEN)
 
@@ -1611,7 +1636,7 @@ class ExamMonitoringSettingViewSet(viewsets.ModelViewSet):
         if request.user.role == 'STUDENT':
             return Response({'error': 'Students cannot modify settings.'}, status=status.HTTP_403_FORBIDDEN)
         return super().update(request, *args, **kwargs)
-    
+
 
 # ---------- FACE VERIFICATION ----------
 class FaceVerificationViewSet(viewsets.GenericViewSet):
@@ -1646,6 +1671,7 @@ class FaceVerificationViewSet(viewsets.GenericViewSet):
             'expires_at': expires_at,
             'message': 'Verification token issued. You may now start the exam.'
         })
+
 
 # ============================================================================
 # VOICE AI — Speech-to-Text + Text-to-Speech (server-side Groq key)
@@ -2019,3 +2045,423 @@ class DormMaintenanceRequestViewSet(BaseViewSet):
 
     def perform_create(self, serializer):
         serializer.save(reported_by=self.request.user)
+
+
+# ============================================================================
+# MATERIAL MANAGEMENT SYSTEM (MMS) VIEWSETS
+# ----------------------------------------------------------------------------
+# The frontend `api.ts` uses these endpoints and action URLs:
+#   /inventory-items/, /requisitions/, /goods-receiving/, /fixed-assets/,
+#   /inter-store-transfers/, /property-returns/, /gate-passes/,
+#   /maintenance-orders/, /physical-audits/, /vendors/, /purchase-orders/,
+#   /asset-disposals/, /hazardous-materials/, /bin-cards/,
+#   /department-budgets/, /donation-grants/
+#
+# Ensure your router in urls.py registers these with the exact
+# basenames above (e.g. `router.register(r'inventory-items',
+# MaterialInventoryItemViewSet, basename='inventory-items')`).
+# ============================================================================
+
+def _generate_ref(prefix: str, num_digits: int = 4) -> str:
+    """Generates a year-scoped reference like REQ-2026-0042."""
+    num = secrets.randbelow(10 ** num_digits)
+    return f"{prefix}-{timezone.now().year}-{num:0{num_digits}d}"
+
+
+class MaterialInventoryItemViewSet(BaseViewSet):
+    queryset = MaterialInventoryItem.objects.all().order_by('-lastRestocked')
+    serializer_class = MaterialInventoryItemSerializer
+
+    def perform_create(self, serializer):
+        item = serializer.save()
+        # Re-derive totals server-side; ignore any client-supplied values.
+        item.total_value_etb = (item.quantity_in_stock or 0) * (item.unit_cost_etb or 0)
+        if item.quantity_in_stock <= 0:
+            item.status = 'OUT_OF_STOCK'
+        elif item.quantity_in_stock <= (item.min_threshold or 0):
+            item.status = 'LOW_STOCK'
+        else:
+            item.status = 'IN_STOCK'
+        item.last_restocked = timezone.localdate()
+        item.save(update_fields=['total_value_etb', 'status', 'last_restocked'])
+
+    @action(detail=True, methods=['post'], url_path='adjust-stock')
+    def adjust_stock(self, request, pk=None):
+        item = self.get_object()
+        try:
+            delta = int(request.data.get('delta', 0))
+        except (TypeError, ValueError):
+            return Response({'error': 'delta must be an integer.'}, status=status.HTTP_400_BAD_REQUEST)
+        if delta == 0:
+            return Response({'error': 'delta cannot be zero.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        reason = (request.data.get('reason') or 'Manual adjustment')[:255]
+        performed_by = request.data.get('performed_by') or request.user.full_name
+
+        new_qty = max(0, (item.quantity_in_stock or 0) + delta)
+        item.quantity_in_stock = new_qty
+        item.total_value_etb = new_qty * (item.unit_cost_etb or 0)
+        if new_qty == 0:
+            item.status = 'OUT_OF_STOCK'
+        elif new_qty <= (item.min_threshold or 0):
+            item.status = 'LOW_STOCK'
+        else:
+            item.status = 'IN_STOCK'
+        item.save()
+
+        # Append a bin-card ledger entry so the digital ledger stays accurate.
+        try:
+            prev = (
+                StockBinCardEntry.objects
+                .filter(item=item)
+                .order_by('-timestamp')
+                .first()
+            )
+            prev_balance = prev.balance_stock if prev else (new_qty - delta)
+            StockBinCardEntry.objects.create(
+                item=item,
+                item_code=item.item_code,
+                item_name=item.name,
+                voucher_type='AUDIT_ADJUSTMENT',
+                voucher_number=_generate_ref('ADJ'),
+                warehouse_location=item.warehouse_location,
+                quantity_in=max(0, delta),
+                quantity_out=max(0, -delta),
+                balance_stock=prev_balance + delta,
+                performed_by=performed_by,
+                remarks=reason,
+            )
+        except Exception as e:
+            print(f"[adjust_stock] bin-card log failed: {e}")
+
+        return Response(self.get_serializer(item).data)
+
+
+class MaterialRequisitionViewSet(BaseViewSet):
+    queryset = MaterialRequisition.objects.all().order_by('-requestedDate')
+    serializer_class = MaterialRequisitionSerializer
+
+    def perform_create(self, serializer):
+        return serializer.save(
+            requisition_number=_generate_ref('REQ'),
+            requested_date=timezone.localdate(),
+        )
+
+    @action(detail=True, methods=['post'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        req = self.get_object()
+        new_status = request.data.get('status')
+        valid = ('PENDING_APPROVAL', 'APPROVED', 'DISPATCHED', 'REJECTED')
+        if new_status not in valid:
+            return Response(
+                {'error': f'status must be one of {valid}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        remarks = request.data.get('remarks', '')
+        approved_by = request.data.get('approved_by') or request.user.full_name
+
+        req.status = new_status
+        if remarks:
+            req.remarks = remarks
+        if new_status == 'APPROVED':
+            req.approved_by = approved_by
+            req.approved_at = timezone.now()
+            if not req.dispatch_voucher_number:
+                req.dispatch_voucher_number = _generate_ref('M22')
+        elif new_status == 'REJECTED':
+            req.rejection_reason = remarks or 'No reason provided'
+        req.save()
+        return Response(self.get_serializer(req).data)
+
+
+class GoodsReceivingRecordViewSet(BaseViewSet):
+    queryset = GoodsReceivingRecord.objects.all().order_by('-receivedDate')
+    serializer_class = GoodsReceivingRecordSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            grn_number=_generate_ref('GRN'),
+            received_date=timezone.localdate(),
+        )
+
+
+class FixedAssetItemViewSet(BaseViewSet):
+    queryset = FixedAssetItem.objects.all().order_by('-purchaseDate')
+    serializer_class = FixedAssetItemSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(purchase_date=timezone.localdate())
+
+
+class InterStoreTransferRecordViewSet(BaseViewSet):
+    queryset = InterStoreTransferRecord.objects.all().order_by('-initiatedDate')
+    serializer_class = InterStoreTransferRecordSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            transfer_number=_generate_ref('M21'),
+            initiated_date=timezone.localdate(),
+        )
+
+    @action(detail=True, methods=['post'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        transfer = self.get_object()
+        new_status = request.data.get('status')
+        if new_status not in ('IN_TRANSIT', 'COMPLETED', 'CANCELLED'):
+            return Response({'error': 'Invalid status.'}, status=status.HTTP_400_BAD_REQUEST)
+        transfer.status = new_status
+        received_by = request.data.get('received_by')
+        if new_status == 'COMPLETED' and received_by:
+            transfer.received_by = received_by
+            transfer.received_date = timezone.localdate()
+        transfer.save()
+        return Response(self.get_serializer(transfer).data)
+
+
+class PropertyReturnRecordViewSet(BaseViewSet):
+    queryset = PropertyReturnRecord.objects.all().order_by('-returnDate')
+    serializer_class = PropertyReturnRecordSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            voucher_number=_generate_ref('M23'),
+            return_date=timezone.localdate(),
+        )
+
+
+class CampusGatePassRecordViewSet(BaseViewSet):
+    queryset = CampusGatePassRecord.objects.all().order_by('-authorizedDate')
+    serializer_class = CampusGatePassRecordSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            gate_pass_number=_generate_ref('GP'),
+            authorized_date=timezone.now(),
+        )
+
+    @action(detail=True, methods=['post'], url_path='checkout')
+    def checkout(self, request, pk=None):
+        pass_obj = self.get_object()
+        guard_name = request.data.get('guard_name') or request.user.full_name
+        exit_ts = request.data.get('security_exit_timestamp') or timezone.now().isoformat()
+
+        pass_obj.status = 'CHECKED_OUT'
+        pass_obj.guard_name = guard_name
+        pass_obj.security_exit_timestamp = exit_ts
+        pass_obj.save()
+        return Response(self.get_serializer(pass_obj).data)
+
+
+class MaintenanceWorkOrderViewSet(BaseViewSet):
+    queryset = MaintenanceWorkOrder.objects.all().order_by('-reportedDate')
+    serializer_class = MaintenanceWorkOrderSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            order_number=_generate_ref('WO'),
+            reported_date=timezone.localdate(),
+        )
+
+    @action(detail=True, methods=['post'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        order = self.get_object()
+        new_status = request.data.get('status')
+        valid = ('REPORTED', 'DIAGNOSIS', 'IN_REPAIR', 'REPAIRED', 'BEYOND_ECONOMIC_REPAIR')
+        if new_status not in valid:
+            return Response({'error': f'status must be one of {valid}.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        order.status = new_status
+        notes = request.data.get('technician_notes')
+        if notes is not None:
+            order.technician_notes = notes
+        if new_status == 'REPAIRED':
+            order.completion_date = timezone.localdate()
+            cost = request.data.get('actual_cost_etb')
+            if cost is not None:
+                try:
+                    order.actual_cost_etb = float(cost)
+                except (TypeError, ValueError):
+                    pass
+        order.save()
+        return Response(self.get_serializer(order).data)
+
+
+class PhysicalAuditEntryViewSet(BaseViewSet):
+    queryset = PhysicalAuditEntry.objects.all().order_by('-auditDate')
+    serializer_class = PhysicalAuditEntrySerializer
+
+    @action(detail=False, methods=['put'], url_path=r'by-item/(?P<item_id>[^/.]+)')
+    def by_item(self, request, item_id=None):
+        try:
+            audit = PhysicalAuditEntry.objects.get(item_id=item_id)
+        except PhysicalAuditEntry.DoesNotExist:
+            return Response({'error': 'No audit entry for that item.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(audit, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(audit_date=timezone.localdate())
+        return Response(serializer.data)
+
+
+class UniversityVendorViewSet(BaseViewSet):
+    queryset = UniversityVendor.objects.all().order_by('name')
+    serializer_class = UniversityVendorSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(vendor_code=_generate_ref('VND', 3))
+
+
+class PurchaseOrderViewSet(BaseViewSet):
+    queryset = PurchaseOrder.objects.all().order_by('-issueDate')
+    serializer_class = PurchaseOrderSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            po_number=_generate_ref('PO', 4),
+            issue_date=timezone.localdate(),
+        )
+
+    @action(detail=True, methods=['post'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        po = self.get_object()
+        new_status = request.data.get('status')
+        valid = (
+            'DRAFT', 'FINANCE_APPROVED', 'ISSUED_TO_VENDOR',
+            'PARTIALLY_DELIVERED', 'COMPLETED_M19', 'CANCELLED',
+        )
+        if new_status not in valid:
+            return Response({'error': f'status must be one of {valid}.'}, status=status.HTTP_400_BAD_REQUEST)
+        po.status = new_status
+        approver = request.data.get('approved_by')
+        if approver:
+            po.approved_by = approver
+        po.save()
+        return Response(self.get_serializer(po).data)
+
+
+class AssetDisposalRecordViewSet(BaseViewSet):
+    queryset = AssetDisposalRecord.objects.all().order_by('-committeeApprovedDate')
+    serializer_class = AssetDisposalRecordSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(
+            disposal_ref=_generate_ref('DSP'),
+            committee_approved_date=timezone.localdate(),
+        )
+
+    @action(detail=True, methods=['post'], url_path='update-status')
+    def update_status(self, request, pk=None):
+        disposal = self.get_object()
+        new_status = request.data.get('status')
+        valid = ('APPRAISAL', 'TENDER_PUBLISHED', 'AUCTIONED', 'REMITTED_TO_TREASURY')
+        if new_status not in valid:
+            return Response({'error': f'status must be one of {valid}.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        disposal.status = new_status
+        for field, key in (
+                ('winning_bid_etb', 'winning_bid_etb'),
+                ('buyer_name', 'buyer_name'),
+                ('buyer_receipt_no', 'buyer_receipt_no'),
+        ):
+            val = request.data.get(key)
+            if val is not None:
+                setattr(disposal, field, val)
+        disposal.save()
+        return Response(self.get_serializer(disposal).data)
+
+
+class HazardousMaterialRecordViewSet(BaseViewSet):
+    queryset = HazardousMaterialRecord.objects.all().order_by('chemicalName')
+    serializer_class = HazardousMaterialRecordSerializer
+
+
+class StockBinCardEntryViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only — entries are appended by other mutations, never edited."""
+    queryset = StockBinCardEntry.objects.all().order_by('-timestamp')
+    serializer_class = StockBinCardEntrySerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class DepartmentStoreBudgetViewSet(BaseViewSet):
+    queryset = DepartmentStoreBudget.objects.all().order_by('departmentName')
+    serializer_class = DepartmentStoreBudgetSerializer
+
+    @action(detail=False, methods=['post'], url_path='upsert')
+    def upsert(self, request):
+        name = (request.data.get('department_name') or '').strip()
+        if not name:
+            return Response({'error': 'department_name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            allocated = float(request.data.get('allocated_budget_etb', 0))
+        except (TypeError, ValueError):
+            return Response({'error': 'allocated_budget_etb must be numeric.'}, status=status.HTTP_400_BAD_REQUEST)
+        fiscal_year = request.data.get('fiscal_year') or f"{timezone.now().year}/{timezone.now().year + 1}"
+
+        budget, _created = DepartmentStoreBudget.objects.update_or_create(
+            department_name=name,
+            fiscal_year=fiscal_year,
+            defaults={'allocated_budget_etb': allocated},
+        )
+        return Response(self.get_serializer(budget).data, status=status.HTTP_200_OK)
+
+
+class DonationGrantAssetViewSet(BaseViewSet):
+    queryset = DonationGrantAsset.objects.all().order_by('-projectEndDate')
+    serializer_class = DonationGrantAssetSerializer
+
+
+# ============================================================================
+# HARDWARE & IOT VIEWSETS
+# ============================================================================
+
+class SmartIoTDeviceViewSet(BaseViewSet):
+    queryset = SmartIoTDevice.objects.all()
+    serializer_class = SmartIoTDeviceSerializer
+
+    @action(detail=True, methods=['post'], url_path='toggle-relay')
+    def toggle_relay(self, request, pk=None):
+        device = self.get_object()
+        new_state = request.data.get('state')
+        valid = ('LOCKED', 'UNLOCKED', 'SIREN_ON', 'SIREN_OFF')
+        if new_state is not None and new_state not in valid:
+            return Response(
+                {'error': f'state must be one of {valid} or omitted.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_state is None:
+            # Auto-toggle against current state.
+            current = getattr(device, 'relay_state', None)
+            next_map = {
+                'LOCKED': 'UNLOCKED', 'UNLOCKED': 'LOCKED',
+                'SIREN_ON': 'SIREN_OFF', 'SIREN_OFF': 'SIREN_ON',
+            }
+            new_state = next_map.get(current, 'UNLOCKED')
+        device.relay_state = new_state
+        device.save()
+        return Response(self.get_serializer(device).data)
+
+
+class SecurityCameraFeedViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = SecurityCameraFeed.objects.all()
+    serializer_class = SecurityCameraFeedSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+
+class BiometricAttendanceEventViewSet(BaseViewSet):
+    queryset = BiometricAttendanceEvent.objects.all().order_by('-timestamp')
+    serializer_class = BiometricAttendanceEventSerializer
+
+
+class IoTHardwareAlertViewSet(BaseViewSet):
+    queryset = IoTHardwareAlert.objects.all().order_by('-timestamp')
+    serializer_class = IoTHardwareAlertSerializer
+
+    @action(detail=True, methods=['post'], url_path='acknowledge')
+    def acknowledge(self, request, pk=None):
+        alert = self.get_object()
+        alert.is_acknowledged = True
+        alert.acknowledged_by = request.data.get('acknowledged_by') or request.user.full_name
+        alert.save()
+        return Response(self.get_serializer(alert).data)
