@@ -1056,7 +1056,7 @@ export const deleteZoomSession = (id: string): Promise<void> =>
 
 
 // =====================================================================
-// --- TEMPORARY MMS MOCKS (Replace with real Axios calls later) ---
+// --- TEMPORARY MMS MOCKS ---
 // =====================================================================
 
 const mockInventory: any[] = [
@@ -1094,6 +1094,7 @@ export const adjustStock = (id: string, delta: number, reason: string, by: strin
   return item;
 };
 export const getMaterialRequisitions = (): any[] => [];
+export const addMaterialRequisition = (req: any): any => { return req; }; // ✅ Added for Instructor
 export const updateMaterialRequisitionStatus = (id: string, status: string, note: string, by: string): any => ({ requisitionNumber: "REQ-001", department: "SE", status });
 export const getGoodsReceivingRecords = (): any[] => [];
 export const addGoodsReceivingRecord = (grn: any) => {};
@@ -1127,6 +1128,44 @@ export const getDepartmentBudgets = (): any[] => [];
 export const updateDepartmentBudget = (dept: string, b: number, y: string) => {};
 export const getDonationGrantAssets = (): any[] => [];
 export const addDonationGrantAsset = (a: any) => {};
+
+// =====================================================================
+// --- TEMPORARY HARDWARE & IOT MOCKS ---
+// =====================================================================
+
+const mockCameras: any[] = [
+  {
+    id: "CAM-01", deviceCode: "CAM-MAIN-GATE-01", name: "Main Gate Entrance Camera", amharicName: "ዋና በር ካሜራ",
+    campus: "Tulu Awulia (Main)", buildingBlock: "Perimeter", roomOrZone: "Main Gate 1", status: "ONLINE",
+    fps: 30, resolution: "4K UHD", nightVision: true, motionDetected: false, ipAddress: "10.140.10.101",
+    macAddress: "00:1A:2B:3C:4D:5E", protocol: "RTSP_STREAM",
+    streamUrl: "https://images.unsplash.com/photo-1557597774-9d273605dfa9?w=800",
+    aiObjectDetection: { peopleCount: 12, vehiclesCount: 3, suspiciousLoitering: false, unauthorizedPerimeterBreach: false }
+  }
+];
+
+const mockIoTDevices: any[] = [
+  {
+    id: "IOT-01", deviceCode: "ENV-LAB-01", name: "Lab Temperature Sensor", amharicName: "የላብራቶሪ ሙቀት መለኪያ",
+    deviceType: "ENVIRONMENTAL_SENSOR", campus: "Tulu Awulia (Main)", buildingBlock: "Block B", roomOrZone: "Lab 1",
+    status: "ONLINE", protocol: "MQTT", relayState: undefined,
+    telemetry: [{ metric: "Temperature", value: 24, unit: "°C" }, { metric: "Humidity", value: 45, unit: "%" }]
+  }
+];
+
+const mockBiometrics: any[] = [];
+const mockAlerts: any[] = [];
+
+export const getCameraFeeds = (): any[] => mockCameras;
+export const getIoTDevices = (): any[] => mockIoTDevices;
+export const getBiometricEvents = (): any[] => mockBiometrics;
+export const getHardwareAlerts = (): any[] => mockAlerts;
+export const updateDeviceRelay = (id: string, state: string) => {
+  const dev = mockIoTDevices.find(d => d.id === id);
+  if (dev) dev.relayState = state;
+};
+export const acknowledgeHardwareAlert = (id: string, name: string) => {};
+export const addBiometricEvent = (ev: any) => { mockBiometrics.push(ev); };
 
 // =====================================================================
 
@@ -1344,6 +1383,7 @@ export const CampusDatabase = {
   addInventoryItem,
   adjustStock,
   getMaterialRequisitions,
+  addMaterialRequisition,
   updateMaterialRequisitionStatus,
   getGoodsReceivingRecords,
   addGoodsReceivingRecord,
@@ -1377,6 +1417,15 @@ export const CampusDatabase = {
   updateDepartmentBudget,
   getDonationGrantAssets,
   addDonationGrantAsset,
+
+  // 👇 HARDWARE & IOT (Mocks connected for now) 👇
+  getCameraFeeds,
+  getIoTDevices,
+  getBiometricEvents,
+  getHardwareAlerts,
+  updateDeviceRelay,
+  acknowledgeHardwareAlert,
+  addBiometricEvent,
 };
 
 const UCS_API_KEY = "ucs_18840f9b7c82.rtGk8SzsghvmSkZFCbHmi0P8l7HU5dXcCPmPse6Kmk8";
