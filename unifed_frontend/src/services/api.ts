@@ -307,7 +307,6 @@ const mapGrade = (g: any): Grade => ({
   continuousAssessmentScore: g.continuous_assessment_score ?? g.continuousAssessmentScore ?? 0,
   midExamScore: g.mid_exam_score ?? g.midExamScore ?? 0,
   finalExamScore: g.final_exam_score ?? g.finalExamScore ?? 0,
-  // Support whatever field name Django is actually using:
   totalGrade: Number(
     g.total_grade ?? g.totalGrade ?? g.total_marks ?? g.totalMarks ?? g.score ?? 0
   ),
@@ -407,10 +406,10 @@ export const requestPasswordReset = (email: string): Promise<any> =>
   api.post('/users/request_password_reset/', { email }).then(r => r.data);
 
 export const confirmPasswordReset = (email: string, otp: string, newPassword: string): Promise<any> =>
-  api.post('/users/confirm_password_reset/', { 
-    email, 
-    otp, 
-    new_password: newPassword 
+  api.post('/users/confirm_password_reset/', {
+    email,
+    otp,
+    new_password: newPassword
   }).then(r => r.data);
 // 👆 END OF NEW FUNCTIONS 👆
 
@@ -524,7 +523,6 @@ export const getExamAttempts = (): Promise<ExamAttempt[]> =>
 export const saveExamAttempts = (attempts: ExamAttempt[]): Promise<ExamAttempt[]> =>
   api.put('/exam-attempts/', attempts).then(r => r.data);
 
-// ✅ FIX: strip "U_5" / "5" → 5 so DRF gets a valid ForeignKey pk
 export const createExamAttempt = (attempt: any): Promise<ExamAttempt> => {
   const examPk = toPk(attempt.exam);
   const studentPk = toPk(attempt.student);
@@ -548,16 +546,13 @@ export const updateExamAttempt = async (id: string, patch: any): Promise<ExamAtt
   const attemptPk = numericId(id);
 
   try {
-    // First try to PATCH the existing attempt
     const res = await api.patch(`/exam-attempts/${attemptPk}/`, patch);
     return mapExamAttempt(res.data);
   } catch (patchErr: any) {
     if (patchErr?.response?.status !== 404) {
-      // Real error (400, 401, 500) — bubble it up
       throw patchErr;
     }
 
-    // ⚠️ 404: The attempt was deleted. Create a new one from the patch data.
     console.warn(`⚠️ Attempt #${attemptPk} not found. Creating fresh attempt.`);
 
     const fallbackPayload: any = {
@@ -587,7 +582,6 @@ export const deleteExamAttempt = (id: string): Promise<void> =>
   api.delete(`/exam-attempts/${numericId(id)}/`).then(() => undefined);
 
 // ---------- MONITORING EVENTS ----------
-// ✅ FIX: coerce `attempt` to a pk so monitoring-event POSTs don't fail silently
 export const logMonitoringEvent = (data: {
   attempt: number | string;
   event_type: string;
@@ -734,7 +728,6 @@ export const deleteCourseOutline = (id: string): Promise<void> =>
 
 // ---------- EVALUATIONS ----------
 const mapEvaluation = (e: any): InstructorEvaluation => {
-  // Django sometimes returns ratings as a nested object, sometimes as flat fields
   const rawRatings = e.ratings && typeof e.ratings === 'object' ? e.ratings : {};
   return {
     id: String(e.id),
@@ -753,7 +746,7 @@ const mapEvaluation = (e: any): InstructorEvaluation => {
       overallRating: Number(
         rawRatings.overallRating ?? rawRatings.overall_rating ?? e.overall_rating ?? e.overallRating ?? 0
       ),
-    } as any, // 👈 Add this to bypass the TypeScript check for `punctuality`
+    } as any,
     comments: e.comments ?? '',
     semester: e.semester ?? '',
     submittedAt: e.submitted_at ?? e.submittedAt ?? new Date().toISOString(),
@@ -865,7 +858,6 @@ export const getCourseAdvisor = (data: {
 }): Promise<{ summary: string; recommendations: any[] }> =>
   api.post('/ai/course-advisor/', data).then(r => r.data);
 
-// ---------- AI CHAT (Groq) ----------
 export const sendChatMessage = (payload: {
   message: string;
   history?: { role: 'user' | 'assistant'; content: string }[];
@@ -884,13 +876,10 @@ export const addAuditLog = async (
 ): Promise<AuditLog | null> => {
   const token = getAccessToken();
   if (!token) {
-    // No token yet — skip silently, don't force logout
     return null;
   }
 
   try {
-    // Use a bare axios instance (not `api`) so the interceptor
-    // doesn't fire `uscms:auth-expired` on a 401 here
     const res = await axios.post(
       `${API_BASE}/audit-logs/`,
       {
@@ -959,7 +948,6 @@ export const updateFacilityBooking = (id: string, patch: any): Promise<FacilityB
 export const deleteFacilityBooking = (id: string): Promise<void> =>
   api.delete(`/facility-bookings/${numericId(id)}/`).then(() => undefined);
 
-// ---------- FACILITIES (Phase 3) ----------
 export const getFacilities = (): Promise<any[]> =>
   api.get('/facilities/').then(r => unwrapList<any>(r.data));
 
@@ -1066,6 +1054,83 @@ export const updateZoomSession = (id: string, data: any): Promise<any> =>
 export const deleteZoomSession = (id: string): Promise<void> =>
   api.delete(`/zoom-sessions/${numericId(id)}/`).then(() => undefined);
 
+
+// =====================================================================
+// --- TEMPORARY MMS MOCKS (Replace with real Axios calls later) ---
+// =====================================================================
+
+const mockInventory: any[] = [
+  {
+    id: "MMS-1", itemCode: "MMS-ICT-001", name: "Dell OptiPlex Desktop", category: "ICT_ELECTRONICS",
+    description: "Core i7, 16GB RAM, 512GB SSD", quantityInStock: 15, unit: "units", minThreshold: 5,
+    unitCostETB: 45000, totalValueETB: 675000, warehouseLocation: "ICT & Electronics Store (Main)",
+    shelfBin: "Rack A-1", status: "IN_STOCK", lastRestocked: "2026-01-15"
+  },
+  {
+    id: "MMS-2", itemCode: "MMS-LAB-002", name: "Digital Oscilloscope", category: "LAB_APPARATUS",
+    description: "100MHz, 2 Channel", quantityInStock: 3, unit: "units", minThreshold: 4,
+    unitCostETB: 85000, totalValueETB: 255000, warehouseLocation: "Science & Engineering Lab Store",
+    shelfBin: "Rack C-2", status: "LOW_STOCK", lastRestocked: "2025-11-20"
+  }
+];
+
+const mockFixedAssets: any[] = [
+  {
+    id: "FA-1", assetTag: "MAU-FA-2026-0042", serialNumber: "SN-892104", name: "Dell OptiPlex 7090 Workstation",
+    category: "ICT_ELECTRONICS", model: "7090 SFF", purchaseDate: "2024-01-01", purchaseCostETB: 55000,
+    currentValueETB: 45000, custodianName: "Dr. Chalachew", custodianDepartment: "Software Engineering",
+    location: "Block B, Lab 1", condition: "EXCELLENT"
+  }
+];
+
+export const getInventoryItems = (): any[] => mockInventory;
+export const addInventoryItem = (item: any): any[] => { mockInventory.push(item); return mockInventory; };
+export const adjustStock = (id: string, delta: number, reason: string, by: string): any => {
+  const item = mockInventory.find(i => i.id === id);
+  if (item) {
+    item.quantityInStock += delta;
+    item.totalValueETB = item.quantityInStock * item.unitCostETB;
+  }
+  return item;
+};
+export const getMaterialRequisitions = (): any[] => [];
+export const updateMaterialRequisitionStatus = (id: string, status: string, note: string, by: string): any => ({ requisitionNumber: "REQ-001", department: "SE", status });
+export const getGoodsReceivingRecords = (): any[] => [];
+export const addGoodsReceivingRecord = (grn: any) => {};
+export const getFixedAssets = (): any[] => mockFixedAssets;
+export const addFixedAsset = (asset: any): any[] => { mockFixedAssets.push(asset); return mockFixedAssets; };
+export const getInterStoreTransfers = (): any[] => [];
+export const addInterStoreTransfer = (t: any) => {};
+export const updateInterStoreTransferStatus = (id: string, status: string, by: string) => {};
+export const getPropertyReturns = (): any[] => [];
+export const addPropertyReturn = (r: any) => {};
+export const getCampusGatePasses = (): any[] => [];
+export const addCampusGatePass = (g: any) => {};
+export const updateGatePassStatus = (id: string, status: string, guard: string) => {};
+export const getMaintenanceOrders = (): any[] => [];
+export const addMaintenanceOrder = (w: any) => {};
+export const updateMaintenanceOrderStatus = (id: string, s: string, n: string, c?: number) => {};
+export const getPhysicalAudits = (): any[] => [];
+export const updatePhysicalAuditEntry = (e: any) => {};
+export const getPurchaseOrders = (): any[] => [];
+export const addPurchaseOrder = (p: any) => {};
+export const updatePurchaseOrderStatus = (id: string, s: string, b: string) => {};
+export const getVendors = (): any[] => [];
+export const addVendor = (v: any) => {};
+export const getAssetDisposals = (): any[] => [];
+export const addAssetDisposal = (d: any) => {};
+export const updateDisposalStatus = (id: string, s: string, data?: any) => {};
+export const getHazardousMaterials = (): any[] => [];
+export const addHazardousMaterial = (h: any) => {};
+export const getStockBinCards = (): any[] => [];
+export const getDepartmentBudgets = (): any[] => [];
+export const updateDepartmentBudget = (dept: string, b: number, y: string) => {};
+export const getDonationGrantAssets = (): any[] => [];
+export const addDonationGrantAsset = (a: any) => {};
+
+// =====================================================================
+
+
 // ---------- EXPORT ----------
 export const CampusDatabase = {
   // Users
@@ -1078,8 +1143,9 @@ export const CampusDatabase = {
   login,
   logout,
   uploadAvatar,
-  requestPasswordReset, // 👈 Add this here
-  confirmPasswordReset, // 👈 Add this here
+  requestPasswordReset,
+  confirmPasswordReset,
+
   // Courses
   getCourses,
   saveCourses,
@@ -1272,7 +1338,47 @@ export const CampusDatabase = {
   addZoomSession,
   updateZoomSession,
   deleteZoomSession,
+
+  // 👇 MMS (Mocks connected for now) 👇
+  getInventoryItems,
+  addInventoryItem,
+  adjustStock,
+  getMaterialRequisitions,
+  updateMaterialRequisitionStatus,
+  getGoodsReceivingRecords,
+  addGoodsReceivingRecord,
+  getFixedAssets,
+  addFixedAsset,
+  getInterStoreTransfers,
+  addInterStoreTransfer,
+  updateInterStoreTransferStatus,
+  getPropertyReturns,
+  addPropertyReturn,
+  getCampusGatePasses,
+  addCampusGatePass,
+  updateGatePassStatus,
+  getMaintenanceOrders,
+  addMaintenanceOrder,
+  updateMaintenanceOrderStatus,
+  getPhysicalAudits,
+  updatePhysicalAuditEntry,
+  getPurchaseOrders,
+  addPurchaseOrder,
+  updatePurchaseOrderStatus,
+  getVendors,
+  addVendor,
+  getAssetDisposals,
+  addAssetDisposal,
+  updateDisposalStatus,
+  getHazardousMaterials,
+  addHazardousMaterial,
+  getStockBinCards,
+  getDepartmentBudgets,
+  updateDepartmentBudget,
+  getDonationGrantAssets,
+  addDonationGrantAsset,
 };
+
 const UCS_API_KEY = "ucs_18840f9b7c82.rtGk8SzsghvmSkZFCbHmi0P8l7HU5dXcCPmPse6Kmk8";
 const UCS_BASE_URL = "https://university-clearance-system-ikpx.onrender.com/api";
 
@@ -1282,7 +1388,7 @@ export const ucsApi = axios.create({
   timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
-    'X-API-Key': UCS_API_KEY // 👈 The key you generated
+    'X-API-Key': UCS_API_KEY
   },
 });
 
@@ -1306,10 +1412,9 @@ export interface UCSForm {
   id: number;
   full_name: string;
   id_number: string;
-  status: string; // e.g., 'pending_department', 'approved_department', 'Cleared by Registrar'
+  status: string;
   department_name: string;
   created_at: string;
-  // ... add other fields as needed
 }
 
 // 1. Fetch student profile
