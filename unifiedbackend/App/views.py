@@ -22,14 +22,13 @@ from datetime import timedelta
 # ---------- AUTH ----------
 class AuthViewSet(viewsets.GenericViewSet):
     permission_classes = [permissions.AllowAny]
-    serializer_class = UserSerializer  # ← add this
+    serializer_class = UserSerializer
 
     @action(detail=False, methods=['post'])
     def login(self, request):
         username = request.data.get('username')
         password = request.data.get('password')
 
-        # ✅ FIX: Find the user regardless of uppercase/lowercase, or by email
         from django.db.models import Q
         from django.contrib.auth import get_user_model
         User = get_user_model()
@@ -40,7 +39,6 @@ class AuthViewSet(viewsets.GenericViewSet):
 
         user = None
         if user_obj:
-            # Authenticate using the EXACT username from the database
             user = authenticate(username=user_obj.username, password=password)
 
         if user:
@@ -74,7 +72,6 @@ class BaseViewSet(viewsets.ModelViewSet):
         serializer.save()
 
 
-# ✅ NEW: derive course IDs a student is enrolled in (no Enrollment model exists)
 def _student_course_ids(user):
     sub = Submission.objects.filter(student=user).values_list('course_id', flat=True)
     grd = Grade.objects.filter(student=user).values_list('course_id', flat=True)
@@ -101,12 +98,8 @@ class UserViewSet(BaseViewSet):
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # ✅ NEW: Endpoint for uploading the student's verification photo
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def upload_avatar(self, request, pk=None):
-        # A STUDENT can only update their own avatar — override the URL id
-        # to the JWT's subject instead of rejecting with 403.
-        # ADMIN / REGISTRAR can update anyone's.
         if request.user.role in ('ADMIN', 'REGISTRAR'):
             user = self.get_object()
         else:
@@ -127,8 +120,6 @@ class UserViewSet(BaseViewSet):
             })
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-    # 👇 NEW: Password Reset Endpoints 👇
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def request_password_reset(self, request):
@@ -153,8 +144,8 @@ class UserViewSet(BaseViewSet):
             send_mail(
                 'Unified Smart Campus - Password Reset',
                 f'Hello {user.full_name or user.username},\n\nYour password reset code is: {otp}\n\nThis code expires in 10 minutes.',
-                settings.EMAIL_HOST_USER,  # 👈 FROM address (Your Gmail)
-                [user.email],  # 👈 TO address (The student)
+                settings.EMAIL_HOST_USER,
+                [user.email],
                 fail_silently=False,
             )
         except Exception as e:
@@ -215,12 +206,11 @@ class CourseViewSet(BaseViewSet):
                 return Course.objects.none()
             return Course.objects.filter(instructor__department__iexact=dept)
 
-        # ✅ NEW: Students only see courses in their department
         if user.role == 'STUDENT':
             dept = (getattr(user, 'department', None) or '').strip()
             if dept:
                 return Course.objects.filter(department__iexact=dept)
-            return Course.objects.all()  # Show all if no department set
+            return Course.objects.all()
 
         return Course.objects.all()
 
@@ -272,18 +262,15 @@ class CourseViewSet(BaseViewSet):
         if student.role != 'STUDENT':
             return Response({'error': 'Only students can enroll'}, status=status.HTTP_403_FORBIDDEN)
 
-        # ✅ CHECK: Already enrolled?
         if Grade.objects.filter(student=student, course=course).exists():
             return Response({'error': 'You are already enrolled in this course.'}, status=status.HTTP_400_BAD_REQUEST)
 
         if course.enrolled_students_count >= course.capacity:
             return Response({'error': 'Course is full'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # ✅ 1. Increment counter
         course.enrolled_students_count += 1
         course.save()
 
-        # ✅ 2. Create the Grade record (the bridge)
         Grade.objects.create(
             student=student,
             student_name=student.full_name,
@@ -393,17 +380,12 @@ class ExamViewSet(BaseViewSet):
             dept = (getattr(user, 'department', None) or '').strip()
             enrolled = _student_course_ids(user)
 
-            # Student sees an exam if EITHER:
-            #   1. They have an explicit enrollment (Grade/Submission/Attempt), OR
-            #   2. The exam's course belongs to their department
             if dept:
                 return qs.filter(
-                    Q(course_id__in=enrolled) |
-                    Q(course__department__iexact=dept),
+                    Q(course_id__in=enrolled) | Q(course__department__iexact=dept),
                     is_pushed=True,
                 ).distinct()
 
-            # No dept set — fall back to enrollment-only (current behaviour)
             return qs.filter(course_id__in=enrolled, is_pushed=True)
 
         return qs
@@ -557,10 +539,6 @@ class AttendanceRecordViewSet(BaseViewSet):
 
 # ============================================================================
 # LIVE ATTENDANCE CHECK-IN
-# ----------------------------------------------------------------------------
-# Instructors open a short-lived session; students check in with the code shown
-# in class. Closing a session applies one attendance unit to every enrolled
-# student's ledger and one attended unit for each check-in.
 # ============================================================================
 
 ATTENDANCE_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -581,7 +559,6 @@ def _can_manage_course(user, course):
 
 
 def _ensure_attendance_records(course):
-    """Make sure every student registered for the course has a ledger row."""
     student_ids = (
         Grade.objects.filter(course=course, student__role='STUDENT')
         .values_list('student_id', flat=True)
@@ -599,7 +576,6 @@ def _ensure_attendance_records(course):
 
 
 def _finalize_attendance_session(session):
-    """Apply a closed session to the aggregate ledger exactly once."""
     if session.totals_applied:
         return
 
@@ -640,7 +616,6 @@ class AttendanceSessionViewSet(BaseViewSet):
 
         return qs
 
-    # Keep the generic CRUD endpoints from letting students create sessions.
     def _deny_students(self):
         if self.request.user.role == 'STUDENT':
             return Response(
@@ -675,7 +650,6 @@ class AttendanceSessionViewSet(BaseViewSet):
 
     @action(detail=False, methods=['post'], url_path='open')
     def open_session(self, request):
-        """Open a live attendance window and return its check-in code."""
         if request.user.role not in ('INSTRUCTOR', 'DEPARTMENT_HEAD', 'ADMIN', 'REGISTRAR'):
             return Response(
                 {'error': 'Only instructors and academic staff can open a session.'},
@@ -709,7 +683,6 @@ class AttendanceSessionViewSet(BaseViewSet):
             late_after_minutes = 10
         late_after_minutes = max(0, min(late_after_minutes, duration_minutes))
 
-        # Close any stale window for this course before opening a new one.
         for stale in AttendanceSession.objects.filter(course=course, status='OPEN'):
             stale.status = 'CLOSED'
             stale.ended_at = timezone.now()
@@ -763,7 +736,6 @@ class AttendanceSessionViewSet(BaseViewSet):
 
     @action(detail=False, methods=['post'], url_path='check-in')
     def check_in(self, request):
-        """Student check-in using the code displayed by the instructor."""
         if request.user.role != 'STUDENT':
             return Response(
                 {'error': 'Only students can check in to a class session.'},
@@ -861,7 +833,6 @@ class AttendanceSessionViewSet(BaseViewSet):
 
     @action(detail=False, methods=['get'], url_path='active')
     def active(self, request):
-        """Open check-in windows visible to the current user."""
         qs = self.get_queryset().filter(
             status='OPEN', expires_at__gt=timezone.now()
         )
@@ -1494,7 +1465,7 @@ Be the academic advisor every student wishes they had."""
 
 
 @api_view(["POST"])
-@_perm_classes([permissions.AllowAny])  # <--- CHANGE TO THIS
+@_perm_classes([permissions.AllowAny])
 def ai_chat(request):
     message = (request.data.get("message") or "").strip()
     if not message:
@@ -1505,7 +1476,6 @@ def ai_chat(request):
     print(f"[ai_chat] has [STUDENT CONTEXT] = {'[STUDENT CONTEXT]' in message}")
     print(f"[ai_chat] has [UPLOADED MATERIAL] = {'[UPLOADED MATERIAL]' in message}")
     print(f"[ai_chat] first 300 chars: {message[:300]!r}")
-    # ✅ CRITICAL FIX: Skip offline checks if the message has student context
     has_student_context = "[STUDENT CONTEXT]" in message
 
     if not has_student_context:
@@ -1543,7 +1513,7 @@ def ai_chat(request):
 Question: {message}"""
         groq_messages.append({"role": "user", "content": context_message})
 
-    models_to_try = [  # ← indented 4 spaces ✅
+    models_to_try = [
         "openai/gpt-oss-120b",
         "openai/gpt-oss-20b",
     ]
@@ -1596,7 +1566,6 @@ class ExamMonitoringEventViewSet(viewsets.ModelViewSet):
             raise permissions.PermissionDenied("You can only log events for your own exam attempts.")
         serializer.save()
 
-    # ✅ NEW: Only instructors/admin can review events
     @action(detail=True, methods=['patch'], permission_classes=[permissions.IsAuthenticated])
     def review(self, request, pk=None):
         event = self.get_object()
@@ -1680,13 +1649,8 @@ from django.http import HttpResponse
 
 
 @api_view(["POST"])
-@_perm_classes([permissions.AllowAny])  # <--- CHANGE TO THIS
+@_perm_classes([permissions.AllowAny])
 def ai_transcribe(request):
-    """
-    Receives multipart audio from the browser.
-    Forwards to Groq Whisper and returns {"text": "..."}.
-    The GROQ_API_KEY never leaves the server.
-    """
     audio_file = request.FILES.get("file")
     if not audio_file:
         return Response(
@@ -1742,12 +1706,8 @@ def ai_transcribe(request):
 
 
 @api_view(["POST"])
-@_perm_classes([permissions.AllowAny])  # <--- CHANGE TO THIS
+@_perm_classes([permissions.AllowAny])
 def ai_speak(request):
-    """
-    Receives {"text": "...", "voice": "troy"} and returns audio/wav bytes.
-    Groq Orpheus is English-only. Amharic TTS falls back to the browser.
-    """
     text = (request.data.get("text") or "").strip()
     if not text:
         return Response(
@@ -1827,7 +1787,6 @@ class DormBlockViewSet(BaseViewSet):
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def stats(self, request):
-        """Aggregate numbers used by the dormitory dashboard."""
         rooms = list(DormRoom.objects.select_related('block').all())
         blocks = list(DormBlock.objects.all().order_by('block_name'))
 
@@ -1935,7 +1894,6 @@ class DormAssignmentViewSet(BaseViewSet):
 
     @action(detail=False, methods=['post'], url_path='assign-room')
     def assign_room(self, request):
-        """Assign the current student (or a chosen student, for staff) to a room."""
         if request.user.role not in ('STUDENT',) and not _is_dorm_manager(request.user):
             return Response(
                 {'error': 'Only students and dormitory administrators can assign rooms.'},
@@ -2061,14 +2019,12 @@ class MaterialRequisitionViewSet(BaseViewSet):
     serializer_class = MaterialRequisitionSerializer
 
     def create(self, request, *args, **kwargs):
-        # Custom create to handle nested items
         data = request.data.copy()
         items_data = data.pop('items', [])
 
         serializer = self.get_serializer(data=data)
         if serializer.is_valid():
             requisition = serializer.save()
-            # Save nested items
             for item_data in items_data:
                 RequisitionItem.objects.create(requisition=requisition, **item_data)
             return Response(self.get_serializer(requisition).data, status=status.HTTP_201_CREATED)
