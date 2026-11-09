@@ -6,7 +6,6 @@ from .models import *
 
 # ---------- USER ----------
 class UserSerializer(serializers.ModelSerializer):
-    # Write-only password field for creating users
     password = serializers.CharField(
         write_only=True,
         required=False,
@@ -25,7 +24,6 @@ class UserSerializer(serializers.ModelSerializer):
             'password',
         ]
         read_only_fields = ['id']
-        # ✅ FIX: Allow base64 image strings for avatar_url
         extra_kwargs = {
             'avatar_url': {'required': False, 'allow_blank': True, 'allow_null': True},
         }
@@ -175,9 +173,6 @@ class ExamSerializer(serializers.ModelSerializer):
 
 
 # ---------- EXAM ATTEMPT ----------
-# ✅ FIXED: Removed broken validate_student / validate_exam methods.
-#    DRF's PrimaryKeyRelatedField already converts "19" → <User>, "15" → <Exam>
-#    BEFORE these validators run, so they were always raising "Invalid ... reference".
 class ExamAttemptSerializer(serializers.ModelSerializer):
     class Meta:
         model = ExamAttempt
@@ -195,7 +190,6 @@ class ExamAttemptSerializer(serializers.ModelSerializer):
         exam = validated_data.get('exam')
         student = validated_data.get('student')
 
-        # Auto-fill human-readable copies so the model's non-blank CharFields pass
         if exam and not validated_data.get('exam_title'):
             validated_data['exam_title'] = exam.exam_title
 
@@ -268,7 +262,6 @@ class AttendanceSessionSerializer(serializers.ModelSerializer):
         return self.context.get('request').user if self.context.get('request') else None
 
     def get_check_in_code(self, obj):
-        """Only instructors/staff may read the code. Students must be given it in class."""
         user = self._request_user()
         if user and getattr(user, 'role', None) == 'STUDENT':
             return None
@@ -616,3 +609,196 @@ class DormMaintenanceRequestSerializer(serializers.ModelSerializer):
             getattr(obj.reported_by, 'full_name', None)
             or getattr(obj.reported_by, 'username', '')
         )
+
+
+# =====================================================================
+# MATERIAL MANAGEMENT SYSTEM (MMS) SERIALIZERS
+# =====================================================================
+
+class MaterialInventoryItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MaterialInventoryItem
+        fields = '__all__'
+        read_only_fields = ['id', 'totalValueETB', 'lastRestocked']
+
+
+class RequisitionItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RequisitionItem
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class MaterialRequisitionSerializer(serializers.ModelSerializer):
+    items = RequisitionItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = MaterialRequisition
+        fields = '__all__'
+        read_only_fields = ['id', 'requisitionNumber', 'requestedDate']
+
+
+class FixedAssetItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = FixedAssetItem
+        fields = '__all__'
+        read_only_fields = ['id', 'purchaseDate']
+
+
+class GoodsReceivingItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = GoodsReceivingItem
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class GoodsReceivingRecordSerializer(serializers.ModelSerializer):
+    items = GoodsReceivingItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = GoodsReceivingRecord
+        fields = '__all__'
+        read_only_fields = ['id', 'grnNumber', 'receivedDate']
+
+
+class UniversityVendorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UniversityVendor
+        fields = '__all__'
+        read_only_fields = ['id', 'vendorCode']
+
+
+class PurchaseOrderItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PurchaseOrderItem
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class PurchaseOrderSerializer(serializers.ModelSerializer):
+    items = PurchaseOrderItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PurchaseOrder
+        fields = '__all__'
+        read_only_fields = ['id', 'poNumber', 'issueDate']
+
+
+class AssetDisposalRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AssetDisposalRecord
+        fields = '__all__'
+        read_only_fields = ['id', 'disposalRef', 'committeeApprovedDate']
+
+
+class HazardousMaterialRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = HazardousMaterialRecord
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class StockBinCardEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockBinCardEntry
+        fields = '__all__'
+        read_only_fields = ['id', 'timestamp']
+
+
+class DepartmentStoreBudgetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DepartmentStoreBudget
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class DonationGrantAssetSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DonationGrantAsset
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class InterStoreTransferItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = InterStoreTransferItem
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class InterStoreTransferRecordSerializer(serializers.ModelSerializer):
+    items = InterStoreTransferItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = InterStoreTransferRecord
+        fields = '__all__'
+        read_only_fields = ['id', 'transferNumber', 'initiatedDate']
+
+
+class PropertyReturnItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PropertyReturnItem
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class PropertyReturnRecordSerializer(serializers.ModelSerializer):
+    items = PropertyReturnItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = PropertyReturnRecord
+        fields = '__all__'
+        read_only_fields = ['id', 'voucherNumber', 'returnDate']
+
+
+class CampusGatePassRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CampusGatePassRecord
+        fields = '__all__'
+        read_only_fields = ['id', 'gatePassNumber', 'authorizedDate']
+
+
+class MaintenanceWorkOrderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MaintenanceWorkOrder
+        fields = '__all__'
+        read_only_fields = ['id', 'orderNumber', 'reportedDate']
+
+
+class PhysicalAuditEntrySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PhysicalAuditEntry
+        fields = '__all__'
+        read_only_fields = ['id', 'auditDate']
+
+
+# =====================================================================
+# HARDWARE & IOT SERIALIZERS
+# =====================================================================
+
+class SmartIoTDeviceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SmartIoTDevice
+        fields = '__all__'
+        read_only_fields = ['id', 'lastHeartbeat']
+
+
+class SecurityCameraFeedSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SecurityCameraFeed
+        fields = '__all__'
+        read_only_fields = ['id']
+
+
+class BiometricAttendanceEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BiometricAttendanceEvent
+        fields = '__all__'
+        read_only_fields = ['id', 'timestamp']
+
+
+class IoTHardwareAlertSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IoTHardwareAlert
+        fields = '__all__'
+        read_only_fields = ['id', 'timestamp']
