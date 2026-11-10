@@ -1046,3 +1046,127 @@ export interface IoTHardwareAlert {
   acknowledgedBy?: string;
   autoActionTaken?: string;
 }
+
+// ============================================================
+// STUDENT CLINIC — types (localStorage-backed for now) — ADDED
+// ============================================================
+
+export type ClinicSpecialty =
+  | "GENERAL_OUTPATIENT"
+  | "EMERGENCY_TRIAGE"
+  | "DENTAL"
+  | "OPHTHALMOLOGY"
+  | "MENTAL_HEALTH_COUNSELING"
+  | "REPRODUCTIVE_HEALTH"
+  | "PHARMACY_CONSULTATION";
+
+export interface StudentClinicProfile {
+  studentId: string;
+  patientRecordNumber: string;
+  bloodGroup: string;
+  rhFactor: string;
+  allergies: string[];
+  chronicConditions: string[];
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  emergencyContactRelation: string;
+  dormLocation: string;
+  heightCm: number;
+  weightKg: number;
+  bmi: number;
+  lastCheckupDate: string;
+  covidVaccinated: boolean;
+  hepatitisVaccinated: boolean;
+  tetanusVaccinated: boolean;
+}
+
+export interface ClinicAppointment {
+  id: string;
+  appointmentNumber: string;
+  studentId: string;
+  studentName: string;
+  campus: "Tulu Awulia (Main Health Center)" | "Masha Sub-Campus Clinic";
+  specialty: ClinicSpecialty;
+  doctorOrOfficer: string;
+  appointmentDate: string;
+  appointmentTime: string;
+  reason: string;
+  symptoms: string[];
+  vitalSigns?: { bp: string; pulse: number; temperature: number; spO2: number };
+  triagePriority: "ROUTINE" | "URGENT" | "CRITICAL";
+  status: "SCHEDULED" | "COMPLETED" | "CANCELLED" | "NO_SHOW";
+  doctorNotes?: string;
+  createdAt: string;
+}
+
+export interface ClinicPrescription {
+  id: string;
+  rxNumber: string;
+  studentId: string;
+  studentName: string;
+  prescribingDoctor: string;
+  datePrescribed: string;
+  medications: {
+    medicationName: string;
+    dosage: string;
+    frequency: string;
+    durationDays: number;
+    instructions: string;
+    quantityPrescribed: number;
+    unit: string;
+  }[];
+  dispenseStatus: "READY_FOR_PICKUP" | "DISPENSED" | "PENDING";
+  dispensedDate?: string;
+  dispensedBy?: string;
+  pharmacyLocation: string;
+}
+
+export interface ClinicLabTest {
+  id: string;
+  labOrderNumber: string;
+  studentId: string;
+  testName: string;
+  testCategory: string;
+  orderDate: string;
+  resultDate: string;
+  specimen: string;
+  technicianName: string;
+  status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
+  findings: string;
+  referenceRange: string;
+  interpretation: "NORMAL" | "ABNORMAL" | "CRITICAL";
+}
+
+export interface ClinicSickLeaveCertificate {
+  id: string;
+  certificateNumber: string;
+  studentId: string;
+  studentName: string;
+  department: string;
+  academicYear: string;
+  diagnosisCategory: string;
+  excuseStartDate: string;
+  excuseEndDate: string;
+  totalDays: number;
+  approvedByDoctor: string;
+  doctorLicenseNo: string;
+  issuedDate: string;
+  recommendations: string;
+  sentToRegistrar: boolean;
+  status: "ISSUED_VALID" | "EXPIRED" | "REVOKED";
+}
+
+export interface AmbulanceEmergencyCall {
+  id: string;
+  callNumber: string;
+  callerStudentName: string;
+  studentId: string;
+  phone: string;
+  dormitoryOrLocation: string;
+  emergencyNature: string;
+  urgencyLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  timestamp: string;
+  assignedAmbulance: string;
+  paramedicTeam: string;
+  status: "DISPATCHED" | "EN_ROUTE" | "ON_SCENE" | "RESOLVED";
+}
