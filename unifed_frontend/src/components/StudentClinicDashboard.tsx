@@ -9,7 +9,7 @@ import {
   AmbulanceEmergencyCall,
   ClinicSpecialty
 } from "../types";
-import { CampusDatabase } from "../mockData";
+import { CampusDatabase } from "../services/api";
 import { EthiopianFlag, UniversitySeal } from "./UniversityHeader";
 import {
   HeartPulse,
