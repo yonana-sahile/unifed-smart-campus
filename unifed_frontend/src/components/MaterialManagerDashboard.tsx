@@ -1000,9 +1000,10 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                   <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center space-x-2">
                     <Warehouse className="w-4 h-4 text-primary" />
                     <span>Campus Warehouses (መጋዘኖች)</span>
+                    <span>Campus Warehouses (መጋዘኖች)</span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Storage facilities across Tulu Awulia and Masha campuses.
+                    Storage facilities across Tulu Awulia and Mekane Selam campus,
                   </p>
                 </div>
 
