@@ -1790,7 +1790,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                                     <div className="flex items-center space-x-1.5 text-success">
                                       <CheckCircle2 className="w-4 h-4" />
                                       <span className="text-xs font-bold font-mono">Submitted</span>
-                                    </div> 
+                                    </div>
                                                                 ) : (
                                   <div className="w-full">
                                     {uploadProgress[as.id] !== undefined ? (

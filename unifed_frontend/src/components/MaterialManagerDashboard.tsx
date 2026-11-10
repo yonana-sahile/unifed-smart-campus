@@ -186,9 +186,9 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
   const [newAssetCondition, setNewAssetCondition] = useState<FixedAssetItem["condition"]>("EXCELLENT");
 
   useEffect(() => {
-    loadData();
+    void loadData();
 
-    const handleInventoryUpdate = () => loadData();
+    const handleInventoryUpdate = () => void loadData();
     window.addEventListener("uscms_inventory_changed", handleInventoryUpdate);
     window.addEventListener("uscms_requisitions_changed", handleInventoryUpdate);
     window.addEventListener("uscms_goods_receiving_changed", handleInventoryUpdate);
@@ -226,23 +226,50 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
     };
   }, []);
 
-  const loadData = () => {
-    setInventory(CampusDatabase.getInventoryItems());
-    setRequisitions(CampusDatabase.getMaterialRequisitions());
-    setReceivingRecords(CampusDatabase.getGoodsReceivingRecords());
-    setFixedAssets(CampusDatabase.getFixedAssets());
-    setTransfers(CampusDatabase.getInterStoreTransfers());
-    setPropertyReturns(CampusDatabase.getPropertyReturns());
-    setGatePasses(CampusDatabase.getCampusGatePasses());
-    setWorkOrders(CampusDatabase.getMaintenanceOrders());
-    setPhysicalAudits(CampusDatabase.getPhysicalAudits());
-    setPurchaseOrders(CampusDatabase.getPurchaseOrders());
-    setVendors(CampusDatabase.getVendors());
-    setDisposals(CampusDatabase.getAssetDisposals());
-    setHazardousMaterials(CampusDatabase.getHazardousMaterials());
-    setBinCardEntries(CampusDatabase.getStockBinCards());
-    setDepartmentBudgets(CampusDatabase.getDepartmentBudgets());
-    setDonationGrantAssets(CampusDatabase.getDonationGrantAssets());
+  // ✅ FIXED: Async loadData to correctly resolve Promises
+  const loadData = async () => {
+    try {
+      const [
+        inv, reqs, rec, fas, trfs, rets, gps, wos, audits,
+        pos, vnds, disps, haz, bins, budgets, grants
+      ] = await Promise.all([
+        CampusDatabase.getInventoryItems().catch(() => []),
+        CampusDatabase.getMaterialRequisitions().catch(() => []),
+        CampusDatabase.getGoodsReceivingRecords().catch(() => []),
+        CampusDatabase.getFixedAssets().catch(() => []),
+        CampusDatabase.getInterStoreTransfers().catch(() => []),
+        CampusDatabase.getPropertyReturns().catch(() => []),
+        CampusDatabase.getCampusGatePasses().catch(() => []),
+        CampusDatabase.getMaintenanceOrders().catch(() => []),
+        CampusDatabase.getPhysicalAudits().catch(() => []),
+        CampusDatabase.getPurchaseOrders().catch(() => []),
+        CampusDatabase.getVendors().catch(() => []),
+        CampusDatabase.getAssetDisposals().catch(() => []),
+        CampusDatabase.getHazardousMaterials().catch(() => []),
+        CampusDatabase.getStockBinCards().catch(() => []),
+        CampusDatabase.getDepartmentBudgets().catch(() => []),
+        CampusDatabase.getDonationGrantAssets().catch(() => []),
+      ]);
+
+      setInventory(Array.isArray(inv) ? inv : []);
+      setRequisitions(Array.isArray(reqs) ? reqs : []);
+      setReceivingRecords(Array.isArray(rec) ? rec : []);
+      setFixedAssets(Array.isArray(fas) ? fas : []);
+      setTransfers(Array.isArray(trfs) ? trfs : []);
+      setPropertyReturns(Array.isArray(rets) ? rets : []);
+      setGatePasses(Array.isArray(gps) ? gps : []);
+      setWorkOrders(Array.isArray(wos) ? wos : []);
+      setPhysicalAudits(Array.isArray(audits) ? audits : []);
+      setPurchaseOrders(Array.isArray(pos) ? pos : []);
+      setVendors(Array.isArray(vnds) ? vnds : []);
+      setDisposals(Array.isArray(disps) ? disps : []);
+      setHazardousMaterials(Array.isArray(haz) ? haz : []);
+      setBinCardEntries(Array.isArray(bins) ? bins : []);
+      setDepartmentBudgets(Array.isArray(budgets) ? budgets : []);
+      setDonationGrantAssets(Array.isArray(grants) ? grants : []);
+    } catch (err) {
+      console.error("[MMS] loadData failed:", err);
+    }
   };
 
   // Calculations & KPIs
@@ -254,7 +281,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
   const approvedRequisitions = requisitions.filter((r) => r.status === "APPROVED" || r.status === "DISPATCHED");
 
   // Handlers
-  const handleCreateItem = (e: FormEvent) => {
+  const handleCreateItem = async (e: FormEvent) => {
     e.preventDefault();
     if (!newItemName.trim() || !newItemCode.trim()) {
       alert("Please provide the Item Code and Description.");
@@ -281,93 +308,114 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       supplier: newItemSupplier.trim() || undefined
     };
 
-    const updated = CampusDatabase.addInventoryItem(newItem);
-    setInventory(updated);
-    setShowAddItemModal(false);
+    try {
+      await CampusDatabase.addInventoryItem(newItem);
+      await loadData();
+      setShowAddItemModal(false);
 
-    // Reset Form
-    setNewItemCode("");
-    setNewItemName("");
-    setNewItemAmharic("");
-    setNewItemDesc("");
-    setNewItemSupplier("");
+      // Reset Form
+      setNewItemCode("");
+      setNewItemName("");
+      setNewItemAmharic("");
+      setNewItemDesc("");
+      setNewItemSupplier("");
 
-    CampusDatabase.addAuditLog(
-      user.id,
-      user.fullName,
-      "MATERIAL_MANAGER",
-      "Create Catalog Item",
-      "MaterialInventoryItem",
-      newItem.id,
-      `Registered new inventory catalog item: ${newItem.name} (${newItem.itemCode}) with initial stock of ${newItem.quantityInStock} ${newItem.unit}.`
-    );
+      await CampusDatabase.addAuditLog(
+        user.id,
+        user.fullName,
+        "MATERIAL_MANAGER",
+        "Create Catalog Item",
+        "MaterialInventoryItem",
+        newItem.id,
+        `Registered new inventory catalog item: ${newItem.name} (${newItem.itemCode}) with initial stock of ${newItem.quantityInStock} ${newItem.unit}.`
+      );
 
-    alert(`Item ${newItem.itemCode} successfully cataloged and stored in ${newItem.warehouseLocation}!`);
+      alert(`Item ${newItem.itemCode} successfully cataloged and stored in ${newItem.warehouseLocation}!`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to create item.");
+    }
   };
 
-  const handleStockAdjustmentSubmit = (e: FormEvent) => {
+  const handleStockAdjustmentSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedItemForAdjust) return;
 
     const delta = stockAdjustmentType === "ADD" ? Math.abs(stockAdjustmentQty) : -Math.abs(stockAdjustmentQty);
-    const updated = CampusDatabase.adjustStock(
-      selectedItemForAdjust.id,
-      delta,
-      stockAdjustmentReason || "Manual inventory reconciliation",
-      user.fullName
-    );
 
-    if (updated) {
-      setInventory(CampusDatabase.getInventoryItems());
+    try {
+      await CampusDatabase.adjustStock(
+        selectedItemForAdjust.id,
+        delta,
+        stockAdjustmentReason || "Manual inventory reconciliation",
+        user.fullName
+      );
+
+      await loadData();
+
       setShowAdjustStockModal(false);
       setSelectedItemForAdjust(null);
       setStockAdjustmentQty(1);
       setStockAdjustmentReason("");
-      alert(`Stock adjusted successfully! Current quantity: ${updated.quantityInStock} ${updated.unit}.`);
+
+      alert(`Stock adjusted successfully!`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to adjust stock.");
     }
   };
 
-  const handleApproveRequisition = (reqId: string) => {
+  const handleApproveRequisition = async (reqId: string) => {
     const approver = user.fullName || "Solomon Kassa (Store Officer)";
-    const updated = CampusDatabase.updateMaterialRequisitionStatus(reqId, "APPROVED", "Approved for issue from campus store.", approver);
-    if (updated) {
-      setRequisitions(CampusDatabase.getMaterialRequisitions());
-      setInventory(CampusDatabase.getInventoryItems());
-      CampusDatabase.addAuditLog(
+
+    try {
+      await CampusDatabase.updateMaterialRequisitionStatus(reqId, "APPROVED", "Approved for issue from campus store.", approver);
+      await loadData();
+
+      await CampusDatabase.addAuditLog(
         user.id,
         user.fullName,
         "MATERIAL_MANAGER",
         "Approve Material Requisition",
         "MaterialRequisition",
         reqId,
-        `Approved requisition ${updated.requisitionNumber} for ${updated.requesterName} (${updated.department}). Generated Issue Note ${updated.dispatchVoucherNumber}.`
+        `Approved requisition.`
       );
-      alert(`Requisition ${updated.requisitionNumber} APPROVED! Model 22 Dispatch Voucher: ${updated.dispatchVoucherNumber}`);
+
+      alert(`Requisition APPROVED!`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to approve requisition.");
     }
   };
 
-  const handleDispatchRequisition = (reqId: string) => {
+  const handleDispatchRequisition = async (reqId: string) => {
     const approver = user.fullName || "Solomon Kassa (Store Officer)";
-    const updated = CampusDatabase.updateMaterialRequisitionStatus(reqId, "DISPATCHED", "Materials handed over and signed by receiver.", approver);
-    if (updated) {
-      setRequisitions(CampusDatabase.getMaterialRequisitions());
-      setInventory(CampusDatabase.getInventoryItems());
-      alert(`Requisition ${updated.requisitionNumber} marked as DISPATCHED to ${updated.department}!`);
+
+    try {
+      await CampusDatabase.updateMaterialRequisitionStatus(reqId, "DISPATCHED", "Materials handed over and signed by receiver.", approver);
+      await loadData();
+      alert(`Requisition marked as DISPATCHED!`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to dispatch requisition.");
     }
   };
 
-  const handleRejectRequisition = (reqId: string) => {
+  const handleRejectRequisition = async (reqId: string) => {
     const reason = prompt("Enter the reason for rejecting this material requisition:", "Insufficient stock or unverified course allocation.");
     if (reason !== null) {
-      const updated = CampusDatabase.updateMaterialRequisitionStatus(reqId, "REJECTED", reason, user.fullName);
-      if (updated) {
-        setRequisitions(CampusDatabase.getMaterialRequisitions());
-        alert(`Requisition ${updated.requisitionNumber} has been rejected.`);
+      try {
+        await CampusDatabase.updateMaterialRequisitionStatus(reqId, "REJECTED", reason, user.fullName);
+        await loadData();
+        alert(`Requisition has been rejected.`);
+      } catch (error) {
+        console.error(error);
       }
     }
   };
 
-  const handleSaveGoodsReceiving = (e: FormEvent) => {
+  const handleSaveGoodsReceiving = async (e: FormEvent) => {
     e.preventDefault();
     if (!grnSupplier.trim() || !grnSelectedItemId) {
       alert("Please select an item and provide supplier details.");
@@ -403,22 +451,25 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       notes: grnNotes.trim() || "Technical inspection completed. Stored in designated warehouse shelf."
     };
 
-    CampusDatabase.addGoodsReceivingRecord(newGRN);
-    setReceivingRecords(CampusDatabase.getGoodsReceivingRecords());
-    setInventory(CampusDatabase.getInventoryItems());
-    setShowReceivingModal(false);
+    try {
+      await CampusDatabase.addGoodsReceivingRecord(newGRN);
+      await loadData();
+      setShowReceivingModal(false);
 
-    // Reset Form
-    setGrnPo("");
-    setGrnInvoice("");
-    setGrnSupplier("");
-    setGrnSupplierTIN("");
-    setGrnNotes("");
+      setGrnPo("");
+      setGrnInvoice("");
+      setGrnSupplier("");
+      setGrnSupplierTIN("");
+      setGrnNotes("");
 
-    alert(`Model 19 (Goods Receiving Note) ${newGRN.grnNumber} registered! +${grnItemQty} ${itemObj.unit} added to ${itemObj.name}.`);
+      alert(`Model 19 (Goods Receiving Note) ${newGRN.grnNumber} registered!`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to save GRN.");
+    }
   };
 
-  const handleSaveFixedAsset = (e: FormEvent) => {
+  const handleSaveFixedAsset = async (e: FormEvent) => {
     e.preventDefault();
     if (!newAssetName.trim() || !newAssetTag.trim()) {
       alert("Please fill in the Asset Tag and Name.");
@@ -441,17 +492,21 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       condition: newAssetCondition
     };
 
-    const updated = CampusDatabase.addFixedAsset(newAsset);
-    setFixedAssets(updated);
-    setShowAssetModal(false);
+    try {
+      await CampusDatabase.addFixedAsset(newAsset);
+      await loadData();
+      setShowAssetModal(false);
 
-    // Reset Form
-    setNewAssetTag(`MAU-FA-2026-${Math.floor(Math.random() * 900 + 100)}`);
-    setNewAssetSerial("");
-    setNewAssetName("");
-    setNewAssetCustodian("");
+      setNewAssetTag(`MAU-FA-2026-${Math.floor(Math.random() * 900 + 100)}`);
+      setNewAssetSerial("");
+      setNewAssetName("");
+      setNewAssetCustodian("");
 
-    alert(`Fixed Asset Tag ${newAsset.assetTag} registered to ${newAsset.custodianName}!`);
+      alert(`Fixed Asset Tag ${newAsset.assetTag} registered to ${newAsset.custodianName}!`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to register asset.");
+    }
   };
 
   const handleExportCSV = () => {
