@@ -27,6 +27,13 @@ import type {
   FacilityBooking,
   CampusAlert,
   CampusMediaPost,
+  // ===== CLINIC TYPES (ADDED) =====
+  StudentClinicProfile,
+  ClinicAppointment,
+  ClinicPrescription,
+  ClinicLabTest,
+  ClinicSickLeaveCertificate,
+  AmbulanceEmergencyCall,
 } from '../types';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
@@ -794,6 +801,198 @@ export const addBiometricEvent = (ev: any): Promise<any> => api.post('/iot/biome
 // =====================================================================
 
 
+// =====================================================================
+// ✅ STUDENT CLINIC — localStorage-backed (swap to API later)  [ADDED]
+// =====================================================================
+const CLINIC_PROFILES_KEY = 'uscms_clinic_profiles';
+const CLINIC_APPOINTMENTS_KEY = 'uscms_clinic_appointments';
+const CLINIC_PRESCRIPTIONS_KEY = 'uscms_clinic_prescriptions';
+const CLINIC_LAB_TESTS_KEY = 'uscms_clinic_lab_tests';
+const CLINIC_SICK_LEAVES_KEY = 'uscms_clinic_sick_leaves';
+const CLINIC_AMBULANCE_KEY = 'uscms_ambulance_calls';
+
+const clinicRead = <T>(key: string, fallback: T): T => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const clinicWrite = <T>(key: string, value: T): void => {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* quota */ }
+};
+
+const clinicEmit = (event: string) => {
+  try { window.dispatchEvent(new CustomEvent(event)); } catch { /* SSR */ }
+};
+
+const clinicRandomSuffix = (len = 4) =>
+  Math.floor(Math.random() * Math.pow(10, len)).toString().padStart(len, '0');
+
+// ---- PROFILES ----
+export const getClinicProfile = (studentId: string): StudentClinicProfile => {
+  const all = clinicRead<StudentClinicProfile[]>(CLINIC_PROFILES_KEY, []);
+  const found = all.find((p) => p.studentId === studentId);
+  if (found) return found;
+
+  const defaultProfile: StudentClinicProfile = {
+    studentId,
+    patientRecordNumber: 'MAU-MRN-2026-' + clinicRandomSuffix(4),
+    bloodGroup: 'O+',
+    rhFactor: 'Positive',
+    allergies: ['Penicillin G (Mild rash)', 'Seasonal Grass Pollen'],
+    chronicConditions: ['None reported'],
+    emergencyContactName: 'Ato Mersha Tadesse',
+    emergencyContactPhone: '+251 91 145 8920',
+    emergencyContactRelation: 'Father / Legal Guardian',
+    dormLocation: 'Block 06 (Tulu Awulia Main Campus), Room 304',
+    heightCm: 176,
+    weightKg: 69,
+    bmi: 22.3,
+    lastCheckupDate: '2026-09-12',
+    covidVaccinated: true,
+    hepatitisVaccinated: true,
+    tetanusVaccinated: true,
+  };
+  clinicWrite(CLINIC_PROFILES_KEY, [...all, defaultProfile]);
+  return defaultProfile;
+};
+
+export const saveClinicProfiles = (profiles: StudentClinicProfile[]): void => {
+  clinicWrite(CLINIC_PROFILES_KEY, profiles);
+  clinicEmit('uscms_clinic_profile_changed');
+};
+
+export const updateClinicProfile = (profile: StudentClinicProfile): StudentClinicProfile => {
+  const all = clinicRead<StudentClinicProfile[]>(CLINIC_PROFILES_KEY, []);
+  const idx = all.findIndex((p) => p.studentId === profile.studentId);
+  if (idx >= 0) all[idx] = profile;
+  else all.push(profile);
+  saveClinicProfiles(all);
+  return profile;
+};
+
+// ---- APPOINTMENTS ----
+export const getClinicAppointments = (studentId?: string): ClinicAppointment[] => {
+  const all = clinicRead<ClinicAppointment[]>(CLINIC_APPOINTMENTS_KEY, []);
+  return studentId ? all.filter((a) => a.studentId === studentId) : all;
+};
+
+export const saveClinicAppointments = (appointments: ClinicAppointment[]): void => {
+  clinicWrite(CLINIC_APPOINTMENTS_KEY, appointments);
+  clinicEmit('uscms_clinic_appointments_changed');
+};
+
+export const bookClinicAppointment = (
+  input: Omit<ClinicAppointment, 'id' | 'appointmentNumber' | 'createdAt' | 'status'>
+): ClinicAppointment => {
+  const all = clinicRead<ClinicAppointment[]>(CLINIC_APPOINTMENTS_KEY, []);
+  const created: ClinicAppointment = {
+    ...input,
+    id: 'APT_' + Date.now(),
+    appointmentNumber: 'APT-MAU-2026-' + clinicRandomSuffix(3),
+    createdAt: new Date().toISOString(),
+    status: 'SCHEDULED',
+  };
+  all.unshift(created);
+  saveClinicAppointments(all);
+  return created;
+};
+
+export const cancelClinicAppointment = (appointmentId: string): boolean => {
+  const all = clinicRead<ClinicAppointment[]>(CLINIC_APPOINTMENTS_KEY, []);
+  const target = all.find((a) => a.id === appointmentId);
+  if (!target) return false;
+  target.status = 'CANCELLED';
+  saveClinicAppointments(all);
+  return true;
+};
+
+// ---- PRESCRIPTIONS ----
+export const getClinicPrescriptions = (studentId?: string): ClinicPrescription[] => {
+  const all = clinicRead<ClinicPrescription[]>(CLINIC_PRESCRIPTIONS_KEY, []);
+  return studentId ? all.filter((p) => p.studentId === studentId) : all;
+};
+
+export const saveClinicPrescriptions = (prescriptions: ClinicPrescription[]): void => {
+  clinicWrite(CLINIC_PRESCRIPTIONS_KEY, prescriptions);
+  clinicEmit('uscms_clinic_prescriptions_changed');
+};
+
+// ---- LAB TESTS ----
+export const getClinicLabTests = (studentId?: string): ClinicLabTest[] => {
+  const all = clinicRead<ClinicLabTest[]>(CLINIC_LAB_TESTS_KEY, []);
+  return studentId ? all.filter((t) => t.studentId === studentId) : all;
+};
+
+export const saveClinicLabTests = (tests: ClinicLabTest[]): void => {
+  clinicWrite(CLINIC_LAB_TESTS_KEY, tests);
+  clinicEmit('uscms_clinic_lab_tests_changed');
+};
+
+// ---- SICK LEAVE CERTIFICATES ----
+export const getSickLeaveCertificates = (studentId?: string): ClinicSickLeaveCertificate[] => {
+  const all = clinicRead<ClinicSickLeaveCertificate[]>(CLINIC_SICK_LEAVES_KEY, []);
+  return studentId ? all.filter((c) => c.studentId === studentId) : all;
+};
+
+export const saveSickLeaveCertificates = (certs: ClinicSickLeaveCertificate[]): void => {
+  clinicWrite(CLINIC_SICK_LEAVES_KEY, certs);
+  clinicEmit('uscms_clinic_sick_leaves_changed');
+};
+
+export const requestSickLeaveCertificate = (
+  input: Omit<ClinicSickLeaveCertificate, 'id' | 'certificateNumber' | 'issuedDate' | 'sentToRegistrar' | 'status'>
+): ClinicSickLeaveCertificate => {
+  const all = clinicRead<ClinicSickLeaveCertificate[]>(CLINIC_SICK_LEAVES_KEY, []);
+  const created: ClinicSickLeaveCertificate = {
+    ...input,
+    id: 'MED_CERT_' + Date.now(),
+    certificateNumber: 'MAU-MED-CERT-2026-' + clinicRandomSuffix(3),
+    issuedDate: new Date().toISOString().split('T')[0],
+    sentToRegistrar: true,
+    status: 'ISSUED_VALID',
+  };
+  all.unshift(created);
+  saveSickLeaveCertificates(all);
+  return created;
+};
+
+// ---- AMBULANCE ----
+export const getAmbulanceCalls = (studentId?: string): AmbulanceEmergencyCall[] => {
+  const all = clinicRead<AmbulanceEmergencyCall[]>(CLINIC_AMBULANCE_KEY, []);
+  return studentId ? all.filter((c) => c.studentId === studentId) : all;
+};
+
+export const saveAmbulanceCalls = (calls: AmbulanceEmergencyCall[]): void => {
+  clinicWrite(CLINIC_AMBULANCE_KEY, calls);
+  clinicEmit('uscms_ambulance_calls_changed');
+};
+
+export const dispatchEmergencyAmbulance = (
+  input: Omit<AmbulanceEmergencyCall, 'id' | 'callNumber' | 'timestamp' | 'assignedAmbulance' | 'paramedicTeam' | 'status'>
+): AmbulanceEmergencyCall => {
+  const all = clinicRead<AmbulanceEmergencyCall[]>(CLINIC_AMBULANCE_KEY, []);
+  const created: AmbulanceEmergencyCall = {
+    ...input,
+    id: 'AMB_CALL_' + Date.now(),
+    callNumber: 'EMERGENCY-MAU-' + clinicRandomSuffix(4),
+    timestamp: new Date().toISOString(),
+    assignedAmbulance: 'Ambulance MAU-AMB-01 (Toyota LandCruiser 4WD Mobile ICU)',
+    paramedicTeam: 'Paramedic Yonas B. & Nurse Selamawit T.',
+    status: 'DISPATCHED',
+  };
+  all.unshift(created);
+  saveAmbulanceCalls(all);
+  return created;
+};
+
+// =====================================================================
+
+
 // ---------- EXPORT ----------
 export const CampusDatabase = {
   // Users
@@ -888,6 +1087,14 @@ export const CampusDatabase = {
 
   // 👇 HARDWARE & IOT (Now using real Django API) 👇
   getCameraFeeds, getIoTDevices, getBiometricEvents, getHardwareAlerts, updateDeviceRelay, acknowledgeHardwareAlert, addBiometricEvent,
+
+  // 👇 STUDENT CLINIC (localStorage-backed, swap to API later) 👇
+  getClinicProfile, saveClinicProfiles, updateClinicProfile,
+  getClinicAppointments, saveClinicAppointments, bookClinicAppointment, cancelClinicAppointment,
+  getClinicPrescriptions, saveClinicPrescriptions,
+  getClinicLabTests, saveClinicLabTests,
+  getSickLeaveCertificates, saveSickLeaveCertificates, requestSickLeaveCertificate,
+  getAmbulanceCalls, saveAmbulanceCalls, dispatchEmergencyAmbulance,
 };
 
 const UCS_API_KEY = "ucs_18840f9b7c82.rtGk8SzsghvmSkZFCbHmi0P8l7HU5dXcCPmPse6Kmk8";
