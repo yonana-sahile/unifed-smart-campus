@@ -6,7 +6,7 @@ import {
   BiometricAttendanceEvent,
   IoTHardwareAlert
 } from "../types";
-import { CampusDatabase } from "../services/api"; // 👈 UPDATED THIS LINE
+import { CampusDatabase } from "../services/api";
 import { EthiopianFlag, UniversitySeal } from "./UniversityHeader";
 import {
   Cpu,
@@ -50,30 +50,44 @@ export function SmartCampusHardwareHub({ user }: SmartCampusHardwareHubProps) {
     "CAMERAS" | "TELEMETRY" | "BIOMETRIC" | "ALERTS" | "SIMULATOR"
   >("CAMERAS");
 
-  const [cameras, setCameras] = useState<SecurityCameraFeed[]>(CampusDatabase.getCameraFeeds());
-  const [devices, setDevices] = useState<SmartIoTDevice[]>(CampusDatabase.getIoTDevices());
-  const [biometrics, setBiometrics] = useState<BiometricAttendanceEvent[]>(
-    CampusDatabase.getBiometricEvents()
-  );
-  const [alerts, setAlerts] = useState<IoTHardwareAlert[]>(CampusDatabase.getHardwareAlerts());
+  // ✅ FIXED: Initialize with empty arrays, not Promises
+  const [cameras, setCameras] = useState<SecurityCameraFeed[]>([]);
+  const [devices, setDevices] = useState<SmartIoTDevice[]>([]);
+  const [biometrics, setBiometrics] = useState<BiometricAttendanceEvent[]>([]);
+  const [alerts, setAlerts] = useState<IoTHardwareAlert[]>([]);
 
   const [selectedCampus, setSelectedCampus] = useState<"ALL" | "Tulu Awulia (Main)" | "Masha Campus">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCameraModal, setActiveCameraModal] = useState<SecurityCameraFeed | null>(null);
 
   // Hardware Simulation State
-  const [simulatedDevice, setSimulatedDevice] = useState<string>(devices[0]?.id || "IOT-001");
+  const [simulatedDevice, setSimulatedDevice] = useState<string>("");
   const [simMetricValue, setSimMetricValue] = useState<number>(24);
   const [simTriggerAlarm, setSimTriggerAlarm] = useState<boolean>(false);
 
-  useEffect(() => {
-    const handleUpdate = () => {
-      setCameras(CampusDatabase.getCameraFeeds());
-      setDevices(CampusDatabase.getIoTDevices());
-      setBiometrics(CampusDatabase.getBiometricEvents());
-      setAlerts(CampusDatabase.getHardwareAlerts());
-    };
+  // ✅ FIXED: Async loadData to correctly resolve Promises
+  const loadData = async () => {
+    try {
+      const [cams, devs, bios, alrts] = await Promise.all([
+        CampusDatabase.getCameraFeeds().catch(() => []),
+        CampusDatabase.getIoTDevices().catch(() => []),
+        CampusDatabase.getBiometricEvents().catch(() => []),
+        CampusDatabase.getHardwareAlerts().catch(() => []),
+      ]);
 
+      setCameras(Array.isArray(cams) ? cams : []);
+      setDevices(Array.isArray(devs) ? devs : []);
+      setBiometrics(Array.isArray(bios) ? bios : []);
+      setAlerts(Array.isArray(alrts) ? alrts : []);
+    } catch (err) {
+      console.error("[HardwareHub] loadData failed:", err);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+
+    const handleUpdate = () => void loadData();
     window.addEventListener("uscms_cameras_changed", handleUpdate);
     window.addEventListener("uscms_iot_devices_changed", handleUpdate);
     window.addEventListener("uscms_biometric_changed", handleUpdate);
@@ -87,24 +101,44 @@ export function SmartCampusHardwareHub({ user }: SmartCampusHardwareHubProps) {
     };
   }, []);
 
-  const handleToggleRelay = (deviceId: string, currentRelay?: SmartIoTDevice["relayState"]) => {
+  // Ensure the simulated device dropdown selects the first device once loaded
+  useEffect(() => {
+    if (!simulatedDevice && devices.length > 0) {
+      setSimulatedDevice(devices[0].id);
+    }
+  }, [devices, simulatedDevice]);
+
+  // ✅ FIXED: Async handler for relay toggle
+  const handleToggleRelay = async (deviceId: string, currentRelay?: SmartIoTDevice["relayState"]) => {
     let nextState: SmartIoTDevice["relayState"] = "UNLOCKED";
     if (currentRelay === "LOCKED") nextState = "UNLOCKED";
     else if (currentRelay === "UNLOCKED") nextState = "LOCKED";
     else if (currentRelay === "SIREN_OFF") nextState = "SIREN_ON";
     else if (currentRelay === "SIREN_ON") nextState = "SIREN_OFF";
 
-    CampusDatabase.updateDeviceRelay(deviceId, nextState);
-    setDevices(CampusDatabase.getIoTDevices());
+    try {
+      await CampusDatabase.updateDeviceRelay(deviceId, nextState);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to toggle relay:", err);
+    }
   };
 
-  const handleAcknowledgeAlert = (alertId: string) => {
-    CampusDatabase.acknowledgeHardwareAlert(alertId, user.fullName);
-    setAlerts(CampusDatabase.getHardwareAlerts());
+  // ✅ FIXED: Async handler for alert acknowledgment
+  const handleAcknowledgeAlert = async (alertId: string) => {
+    try {
+      await CampusDatabase.acknowledgeHardwareAlert(alertId, user.fullName);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to acknowledge alert:", err);
+    }
   };
 
-  const handleSimulateHardwareTap = () => {
+  // ✅ FIXED: Async handler for simulated hardware tap
+  const handleSimulateHardwareTap = async () => {
     const target = devices.find((d) => d.id === simulatedDevice) || devices[0];
+    if (!target) return; // Guard clause if no devices exist yet
+
     const newEvent: BiometricAttendanceEvent = {
       id: `BIO-SIM-${Date.now()}`,
       deviceId: target.id,
@@ -120,11 +154,14 @@ export function SmartCampusHardwareHub({ user }: SmartCampusHardwareHubProps) {
       authStatus: "GRANTED"
     };
 
-    CampusDatabase.addBiometricEvent(newEvent);
-    setBiometrics(CampusDatabase.getBiometricEvents());
-
-    // Flash success
-    alert(`Hardware Sensor Signal Ingested: Access Granted for ${user.fullName} at [${target.name}]!`);
+    try {
+      await CampusDatabase.addBiometricEvent(newEvent);
+      await loadData();
+      alert(`Hardware Sensor Signal Ingested: Access Granted for ${user.fullName} at [${target.name}]!`);
+    } catch (err) {
+      console.error("Failed to simulate tap:", err);
+      alert("Failed to transmit simulated signal.");
+    }
   };
 
   const filteredCameras = cameras.filter((cam) => {
