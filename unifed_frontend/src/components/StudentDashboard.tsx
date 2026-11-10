@@ -6,10 +6,14 @@ import { SmartAICopilot } from "./SmartAICopilot";
 import { SmartCampusFacilities } from "./SmartCampusFacilities";
 import { SmartCampusAlerts } from "./SmartCampusAlerts";
 import { ExamResultsModal } from "./ExamResultsModal";
+// ===== CLINIC IMPORT (ADDED) =====
+import { StudentClinicDashboard } from "./StudentClinicDashboard";
 import {
   BookOpen, Calendar, FileText, CheckCircle2, AlertCircle, Play, Clock, Upload,
   Download, CreditCard, Star, Check, Award, Sparkles, Cpu, ShieldCheck, Radio, Video, X, Search, Lock, LayoutGrid, List, ArrowLeft, Maximize2,
   Hand, Home,
+  // ===== CLINIC ICON (ADDED) =====
+  HeartPulse,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { StudentZoomLearningHub } from "./StudentZoomLearningHub";
@@ -42,9 +46,10 @@ const CLEARANCE_PORTAL_URL = "https://university-clearance-system-lake.vercel.ap
 const digits = (v: unknown) => String(v ?? "").replace(/\D/g, "");
 
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
+  // ===== CLINIC TAB (ADDED "clinic" to union) =====
   const [activeTab, setActiveTab] = useState<
     "dashboard" | "courses" | "materials" | "library" | "exams" | "zoom" | "grades" |
-    "attendance" | "transcript" | "fees" | "dormitory" | "copilot" | "facilities" | "alerts" | "clearance"
+    "attendance" | "transcript" | "fees" | "dormitory" | "copilot" | "facilities" | "alerts" | "clearance" | "clinic"
   >("dashboard");
 
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
@@ -1190,8 +1195,10 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     { id: "fees", label: "Finance & Tuition", shortLabel: "Tuition", Icon: CreditCard, isFees: true },
   ] as const;
 
+  // ===== CLINIC ENTRY ADDED to smartItems (auto-wires sidebar + drawer + mobile quick-nav) =====
   const smartItems = [
     { id: "copilot", label: "Smart AI Copilot", shortLabel: "AI Copilot", Icon: Sparkles, isCopilot: true },
+    { id: "clinic", label: "Student Clinic", shortLabel: "Clinic", Icon: HeartPulse },
     { id: "clearance", label: "Digital Clearance", shortLabel: "Clearance", Icon: ShieldCheck },
     { id: "facilities", label: "Smart Labs & Facilities", shortLabel: "Facilities", Icon: Cpu },
     { id: "alerts", label: "Campus Alerts", shortLabel: "Alerts", Icon: Radio },
@@ -3236,6 +3243,18 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
                 exit={{ opacity: 0, y: -15 }}
               >
                 <SmartCampusAlerts user={user} />
+              </motion.div>
+            )}
+
+            {/* ===== CLINIC TAB — RENDER BLOCK (ADDED) ===== */}
+            {activeTab === "clinic" && (
+              <motion.div
+                key="student-clinic-tab"
+                initial={{ opacity: 0, y: 15 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -15 }}
+              >
+                <StudentClinicDashboard user={user} />
               </motion.div>
             )}
           </AnimatePresence>
