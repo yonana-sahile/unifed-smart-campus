@@ -2056,7 +2056,7 @@ class MaterialInventoryItemViewSet(BaseViewSet):
         try:
             prev = (
                 StockBinCardEntry.objects
-                .filter(item=item)
+                .filter(itemId=item.id)  # ✅ FIXED: Changed from item=item to itemId=item.id
                 .order_by('-timestamp')
                 .first()
             )
@@ -2064,7 +2064,7 @@ class MaterialInventoryItemViewSet(BaseViewSet):
 
             # ✅ FIXED: Using camelCase for StockBinCardEntry as well
             StockBinCardEntry.objects.create(
-                item=item,
+                itemId=item.id,          # ✅ FIXED: Changed from item=item to itemId=item.id
                 itemCode=item.itemCode,
                 itemName=item.name,
                 voucherType='AUDIT_ADJUSTMENT',
