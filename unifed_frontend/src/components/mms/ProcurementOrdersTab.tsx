@@ -7,7 +7,7 @@ import {
   PurchaseOrderItem,
   MaterialCategory
 } from "../../types";
-import { CampusDatabase } from "../../services/api"; // 👈 UPDATED THIS LINE
+import { CampusDatabase } from "../../services/api";
 import { EthiopianFlag, UniversitySeal } from "../UniversityHeader";
 import {
   ShoppingCart,
@@ -169,7 +169,20 @@ export function ProcurementOrdersTab({
 
   const handleCreatePO = (e: FormEvent) => {
     e.preventDefault();
+
+    // ✅ FIX: Guard clause to prevent crash if no vendors exist
+    if (!vendors.length) {
+      alert("Please register a vendor first in the 'Registered Vendors' tab.");
+      return;
+    }
+
     const vendor = vendors.find((v) => v.id === selectedVendorId) || vendors[0];
+
+    if (!vendor) {
+      alert("Please select a valid vendor.");
+      return;
+    }
+
     const poCount = purchaseOrders.length + 1;
     const poNum = `PO-MAU-2026-${String(poCount).padStart(4, "0")}`;
 
@@ -612,7 +625,13 @@ export function ProcurementOrdersTab({
                       value={selectedVendorId}
                       onChange={(e) => setSelectedVendorId(e.target.value)}
                       className="w-full px-3 py-2 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      required
                     >
+                      {vendors.length === 0 && (
+                        <option value="" disabled>
+                          No vendors registered. Please add a vendor first.
+                        </option>
+                      )}
                       {vendors.map((v) => (
                         <option key={v.id} value={v.id}>
                           {v.name} (TIN: {v.tinNumber})
@@ -687,7 +706,7 @@ export function ProcurementOrdersTab({
                           <input
                             type="number"
                             min="1"
-                            value={item.quantityOrdered} // 👈 FIXED
+                            value={item.quantityOrdered}
                             onChange={(e) => handleQtyChange(idx, parseInt(e.target.value) || 1)}
                             className="w-full px-2 py-1.5 text-xs rounded border border-slate-200 dark:border-slate-700 bg-transparent text-slate-900 dark:text-white font-mono"
                             placeholder="Qty"
@@ -708,7 +727,7 @@ export function ProcurementOrdersTab({
                         </div>
 
                         <div className="col-span-2 font-mono font-medium text-right tabular-nums text-slate-900 dark:text-white">
-                          {item.lineTotalETB.toLocaleString()} ETB {/* 👈 FIXED */}
+                          {item.lineTotalETB.toLocaleString()} ETB
                         </div>
 
                         <div className="col-span-1 text-right">
