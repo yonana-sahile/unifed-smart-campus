@@ -2072,7 +2072,10 @@ class MaterialInventoryItemViewSet(BaseViewSet):
                 performed_by=performed_by,
                 remarks=reason,
             )
+            print("✅ [adjust_stock] Successfully created Bin Card Entry!")
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             print(f"❌ [adjust_stock] bin-card log failed: {e}")
 
         return Response(self.get_serializer(item).data)
