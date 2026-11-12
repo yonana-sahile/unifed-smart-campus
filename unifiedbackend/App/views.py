@@ -1024,7 +1024,7 @@ class FacilityBookingViewSet(BaseViewSet):
                 is_dept_head = (
                     request.user.role == 'DEPARTMENT_HEAD'
                     and (booking.department or '').strip().lower() == (
-                            getattr(request.user, 'department', '') or '').strip().lower()
+                        getattr(request.user, 'department', '') or '').strip().lower()
                 )
                 if not is_dept_head:
                     return Response({'error': 'You can only cancel your own bookings.'},
@@ -2015,16 +2015,16 @@ class MaterialInventoryItemViewSet(BaseViewSet):
 
     def perform_create(self, serializer):
         item = serializer.save()
-        # Re-derive totals server-side; ignore any client-supplied values.
-        item.total_value_etb = (item.quantity_in_stock or 0) * (item.unit_cost_etb or 0)
-        if item.quantity_in_stock <= 0:
+        # ✅ FIXED: Using camelCase to match your Django models
+        item.totalValueETB = (item.quantityInStock or 0) * (item.unitCostETB or 0)
+        if item.quantityInStock <= 0:
             item.status = 'OUT_OF_STOCK'
-        elif item.quantity_in_stock <= (item.min_threshold or 0):
+        elif item.quantityInStock <= (item.minThreshold or 0):
             item.status = 'LOW_STOCK'
         else:
             item.status = 'IN_STOCK'
-        item.last_restocked = timezone.localdate()
-        item.save(update_fields=['total_value_etb', 'status', 'last_restocked'])
+        item.lastRestocked = timezone.localdate()
+        item.save(update_fields=['totalValueETB', 'status', 'lastRestocked'])
 
     @action(detail=True, methods=['post'], url_path='adjust-stock')
     def adjust_stock(self, request, pk=None):
@@ -2039,12 +2039,14 @@ class MaterialInventoryItemViewSet(BaseViewSet):
         reason = (request.data.get('reason') or 'Manual adjustment')[:255]
         performed_by = request.data.get('performed_by') or request.user.full_name
 
-        new_qty = max(0, (item.quantity_in_stock or 0) + delta)
-        item.quantity_in_stock = new_qty
-        item.total_value_etb = new_qty * (item.unit_cost_etb or 0)
+        # ✅ FIXED: Using camelCase to match your Django models
+        new_qty = max(0, (item.quantityInStock or 0) + delta)
+        item.quantityInStock = new_qty
+        item.totalValueETB = new_qty * (item.unitCostETB or 0)
+
         if new_qty == 0:
             item.status = 'OUT_OF_STOCK'
-        elif new_qty <= (item.min_threshold or 0):
+        elif new_qty <= (item.minThreshold or 0):
             item.status = 'LOW_STOCK'
         else:
             item.status = 'IN_STOCK'
@@ -2058,18 +2060,20 @@ class MaterialInventoryItemViewSet(BaseViewSet):
                 .order_by('-timestamp')
                 .first()
             )
-            prev_balance = prev.balance_stock if prev else (new_qty - delta)
+            prev_balance = prev.balanceStock if prev else (new_qty - delta)
+
+            # ✅ FIXED: Using camelCase for StockBinCardEntry as well
             StockBinCardEntry.objects.create(
                 item=item,
-                item_code=item.item_code,
-                item_name=item.name,
-                voucher_type='AUDIT_ADJUSTMENT',
-                voucher_number=f"ADJ-{int(timezone.now().timestamp())}",
-                warehouse_location=item.warehouse_location,
-                quantity_in=max(0, delta),
-                quantity_out=max(0, -delta),
-                balance_stock=prev_balance + delta,
-                performed_by=performed_by,
+                itemCode=item.itemCode,
+                itemName=item.name,
+                voucherType='AUDIT_ADJUSTMENT',
+                voucherNumber=f"ADJ-{int(timezone.now().timestamp())}",
+                warehouseLocation=item.warehouseLocation,
+                quantityIn=max(0, delta),
+                quantityOut=max(0, -delta),
+                balanceStock=prev_balance + delta,
+                performedBy=performed_by,
                 remarks=reason,
             )
             print("✅ [adjust_stock] Successfully created Bin Card Entry!")
