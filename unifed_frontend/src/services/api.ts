@@ -745,12 +745,16 @@ export const deleteZoomSession = (id: string): Promise<void> => api.delete(`/zoo
 // =====================================================================
 export const getInventoryItems = (): Promise<any[]> => api.get('/mms/inventory/').then(r => unwrapList(r.data));
 export const addInventoryItem = (item: any): Promise<any> => api.post('/mms/inventory/', item).then(r => r.data);
-export const adjustStock = async (id: string, delta: number, reason: string, by: string): Promise<any> => {
-  const item = await api.get(`/mms/inventory/${id}/`).then(r => r.data);
-  const newQty = item.quantityInStock + delta;
-  const newTotal = newQty * item.unitCostETB;
-  return api.patch(`/mms/inventory/${id}/`, { quantityInStock: newQty, totalValueETB: newTotal }).then(r => r.data);
+
+// ✅ FIXED: Now points to the custom action endpoint to trigger the bin-card ledger
+export const adjustStock = (id: string, delta: number, reason: string, by: string): Promise<any> => {
+  return api.post(`/mms/inventory/${id}/adjust-stock/`, {
+    delta,
+    reason,
+    performed_by: by
+  }).then(r => r.data);
 };
+
 export const getMaterialRequisitions = (): Promise<any[]> => api.get('/mms/requisitions/').then(r => unwrapList(r.data));
 export const addMaterialRequisition = (req: any): Promise<any> => api.post('/mms/requisitions/', req).then(r => r.data);
 export const updateMaterialRequisitionStatus = (id: string, status: string, note: string, by: string): Promise<any> => api.patch(`/mms/requisitions/${id}/`, { status, approvedBy: by, remarks: note }).then(r => r.data);
