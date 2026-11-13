@@ -320,7 +320,7 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
       {/* FLOATING TRIGGER BUTTON */}
       <AnimatePresence>
         {!isOpen && (
-          <div className="fixed bottom-6 right-6 z-50">
+          <div className="fixed bottom-6 right-6 z-40"> {/* ✅ FIXED: Changed z-50 to z-40 */}
             <motion.button
               initial={{ opacity: 0, scale: 0.85, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -363,9 +363,9 @@ export const FloatingAIAssistant: React.FC<FloatingAIAssistantProps> = ({ curren
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.95 }}
             transition={{ type: "spring", stiffness: 300, damping: 25 }}
-            className={`fixed bottom-24 right-4 sm:right-6 z-50 w-[92vw] sm:w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col font-sans transition-all duration-300 ${
+            className={`fixed bottom-24 right-4 sm:right-6 z-40 w-[92vw] sm:w-[420px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col font-sans transition-all duration-300 ${
               isMinimized ? "h-[76px]" : "h-[620px] max-h-[82vh]"
-            }`}
+            }`} /* ✅ FIXED: Changed z-50 to z-40 */
           >
             {/* Header */}
             <div className="p-4 bg-gradient-to-r from-slate-950 via-primary to-slate-950 text-white flex items-center justify-between border-b border-amber-500/20 shrink-0">
