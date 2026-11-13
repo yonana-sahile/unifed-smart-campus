@@ -417,6 +417,8 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
 
   const handleSaveGoodsReceiving = async (e: FormEvent) => {
     e.preventDefault();
+    console.log("🚀 [GRN] Submit button clicked!"); // ✅ ADDED LOG TO VERIFY CLICK
+
     if (!grnSupplier.trim() || !grnSelectedItemId) {
       alert("Please select an item and provide supplier details.");
       return;
@@ -1000,10 +1002,9 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                   <h3 className="font-bold text-slate-900 dark:text-slate-100 text-sm flex items-center space-x-2">
                     <Warehouse className="w-4 h-4 text-primary" />
                     <span>Campus Warehouses (መጋዘኖች)</span>
-                    <span>Campus Warehouses (መጋዘኖች)</span>
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Storage facilities across Tulu Awulia and Mekane Selam campus,
+                    Storage facilities across Tulu Awulia and Masha campuses.
                   </p>
                 </div>
 
@@ -2336,7 +2337,8 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                 </button>
               </div>
 
-              <form onSubmit={handleSaveGoodsReceiving} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
+              {/* ✅ FIXED: Added noValidate to ensure the button always fires and React handles the validation */}
+              <form onSubmit={handleSaveGoodsReceiving} noValidate className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="font-bold text-slate-800 dark:text-slate-200">Purchase Order (PO Number) *</label>
