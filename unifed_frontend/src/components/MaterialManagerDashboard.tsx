@@ -417,7 +417,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
 
   const handleSaveGoodsReceiving = async (e: FormEvent) => {
     e.preventDefault();
-    console.log("🚀 [GRN] Submit button clicked!"); // ✅ ADDED LOG TO VERIFY CLICK
+    console.log("🚀 [GRN] Submit button clicked!"); // ✅ VERIFY CLICK
 
     if (!grnSupplier.trim() || !grnSelectedItemId) {
       alert("Please select an item and provide supplier details.");
@@ -428,14 +428,13 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
     if (!itemObj) return;
 
     const totalCost = Number(grnItemQty) * Number(grnItemCost);
-    const newGRN: GoodsReceivingRecord = {
-      id: "GRN_" + Date.now(),
-      grnNumber: `GRN-2026-${Math.floor(Math.random() * 9000 + 1000)}`,
+
+    // ✅ FIXED: Removed client-side grnNumber/id generation. Let the backend handle it.
+    const newGRN = {
       poNumber: grnPo.trim() || `PO-MAU-2026-${Math.floor(Math.random() * 900 + 100)}`,
       invoiceNumber: grnInvoice.trim() || `INV-${Math.floor(Math.random() * 90000 + 10000)}`,
       supplierName: grnSupplier.trim(),
       supplierTIN: grnSupplierTIN.trim() || undefined,
-      receivedDate: new Date().toISOString().split("T")[0],
       receivedBy: user.fullName || "Solomon Kassa",
       warehouseLocation: grnWarehouse,
       items: [
@@ -454,7 +453,9 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
     };
 
     try {
-      await CampusDatabase.addGoodsReceivingRecord(newGRN);
+      // The backend now returns the saved record with the generated GRN Number
+      const savedGRN = await CampusDatabase.addGoodsReceivingRecord(newGRN);
+
       await loadData();
       setShowReceivingModal(false);
 
@@ -464,10 +465,10 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       setGrnSupplierTIN("");
       setGrnNotes("");
 
-      alert(`Model 19 (Goods Receiving Note) ${newGRN.grnNumber} registered!`);
-    } catch (error) {
+      alert(`Model 19 (Goods Receiving Note) ${savedGRN?.grnNumber || 'Created'} registered!`);
+    } catch (error: any) {
       console.error(error);
-      alert("Failed to save GRN.");
+      alert(`Failed to save GRN: ${error?.response?.data ? JSON.stringify(error.response.data) : error.message}`);
     }
   };
 
@@ -600,7 +601,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       {/* MOBILE SLIDE-OUT NAVIGATION DRAWER */}
       <AnimatePresence>
         {isMobileNavOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
+          <div className="fixed inset-0 z-[100] md:hidden">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -1996,7 +1997,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       {/* ------------------------------------------------------------- */}
       <AnimatePresence>
         {showAddItemModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2202,7 +2203,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       {/* ------------------------------------------------------------- */}
       <AnimatePresence>
         {showAdjustStockModal && selectedItemForAdjust && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2314,7 +2315,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       {/* ------------------------------------------------------------- */}
       <AnimatePresence>
         {showReceivingModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2337,7 +2338,6 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                 </button>
               </div>
 
-              {/* ✅ FIXED: Added noValidate to ensure the button always fires and React handles the validation */}
               <form onSubmit={handleSaveGoodsReceiving} noValidate className="p-6 space-y-4 max-h-[80vh] overflow-y-auto text-xs">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
@@ -2491,7 +2491,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       {/* ------------------------------------------------------------- */}
       <AnimatePresence>
         {showAssetModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2624,7 +2624,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       {/* ------------------------------------------------------------- */}
       <AnimatePresence>
         {activeVoucherRequisition && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2664,92 +2664,82 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                   </div>
                   <h2 className="font-bold text-sm tracking-wide uppercase">Federal Democratic Republic of Ethiopia</h2>
                   <h3 className="font-bold text-base text-slate-900">MEKDELA AMBA UNIVERSITY</h3>
-                  <p className="text-xs text-slate-700 italic">Property Administration & Store Directorate (የንብረትና ስቶር አስተዳደር ዳይሬክቶሬት)</p>
-                  <div className="inline-block border border-slate-900 px-3 py-1 rounded mt-2 font-mono font-bold text-xs">
-                    MODEL 22: STORE ISSUE VOUCHER (የዕቃ መውጫ ደረሰኝ)
+                  <p className="text-xs text-slate-700 italic">Property Administration & Store Directorate (የንብረትና ዕቃ አስተዳደር ዳይሬክቶሬት)</p>
+                  <div className="inline-block border border-slate-900 px-3 py-0.5 rounded mt-1 font-mono font-bold text-xs bg-amber-50">
+                    MODEL 20 / 22: MATERIAL REQUISITION & ISSUE VOUCHER (የዕቃ መጠየቂያ እና ማውጫ ደረሰኝ)
                   </div>
                 </div>
 
-                {/* Metadata Row */}
                 <div className="grid grid-cols-2 gap-4 text-xs font-sans">
                   <div className="space-y-1">
-                    <div><strong>Requisition No:</strong> <span className="font-mono">{activeVoucherRequisition.requisitionNumber}</span></div>
-                    <div><strong>Issue Voucher No:</strong> <span className="font-mono text-emerald-700 font-bold">{activeVoucherRequisition.dispatchVoucherNumber || "M22-PENDING"}</span></div>
+                    <div><strong>Requisition No:</strong> <span className="font-mono font-bold">{activeVoucherRequisition.requisitionNumber}</span></div>
+                    <div><strong>Requester:</strong> {activeVoucherRequisition.requesterName}</div>
                     <div><strong>Department:</strong> {activeVoucherRequisition.department}</div>
                   </div>
                   <div className="space-y-1 text-right">
                     <div><strong>Date Requested:</strong> <span className="font-mono">{activeVoucherRequisition.requestedDate}</span></div>
-                    <div><strong>Requester:</strong> {activeVoucherRequisition.requesterName}</div>
-                    <div><strong>Status:</strong> <span className="font-mono font-bold uppercase">{activeVoucherRequisition.status}</span></div>
+                    <div><strong>Urgency:</strong> <span className="font-mono font-bold">{activeVoucherRequisition.urgency}</span></div>
+                    <div><strong>Status:</strong> <span className="font-mono font-bold">{activeVoucherRequisition.status}</span></div>
                   </div>
                 </div>
 
-                {/* Purpose Callout */}
-                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-sans">
-                  <strong>Purpose / Justification (የዕቃው አገልግሎት):</strong>
-                  <p className="text-slate-700 mt-0.5">{activeVoucherRequisition.purpose}</p>
-                </div>
-
-                {/* Items Ledger Table */}
                 <table className="w-full text-left text-xs border border-slate-300 font-sans">
                   <thead className="bg-slate-100 font-mono text-[11px] uppercase border-b border-slate-300">
                     <tr>
-                      <th className="py-2 px-3 border-r border-slate-300">No.</th>
                       <th className="py-2 px-3 border-r border-slate-300">Item Code</th>
                       <th className="py-2 px-3 border-r border-slate-300">Item Description</th>
-                      <th className="py-2 px-3 border-r border-slate-300 text-right">Qty Requested</th>
-                      <th className="py-2 px-3 text-right">Qty Issued</th>
+                      <th className="py-2 px-3 border-r border-slate-300 text-right">Requested Qty</th>
+                      <th className="py-2 px-3">Unit</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {activeVoucherRequisition.items.map((item, idx) => (
+                    {activeVoucherRequisition.items.map((it, idx) => (
                       <tr key={idx}>
-                        <td className="py-2.5 px-3 border-r border-slate-300 font-mono">{idx + 1}</td>
-                        <td className="py-2.5 px-3 border-r border-slate-300 font-mono font-bold">{item.itemCode}</td>
-                        <td className="py-2.5 px-3 border-r border-slate-300 font-medium">{item.itemName}</td>
-                        <td className="py-2.5 px-3 border-r border-slate-300 text-right font-mono">{item.quantityRequested} {item.unit}</td>
-                        <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
-                          {activeVoucherRequisition.status === "APPROVED" || activeVoucherRequisition.status === "DISPATCHED" ? item.quantityRequested : 0} {item.unit}
-                        </td>
+                        <td className="py-2 px-3 border-r border-slate-300 font-mono font-bold">{it.itemCode}</td>
+                        <td className="py-2 px-3 border-r border-slate-300">{it.itemName}</td>
+                        <td className="py-2 px-3 border-r border-slate-300 text-right font-mono font-bold">{it.quantityRequested}</td>
+                        <td className="py-2 px-3 font-mono">{it.unit}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
 
-                {/* Official Signatures Row */}
-                <div className="grid grid-cols-3 gap-4 pt-8 text-[11px] font-sans text-center border-t border-slate-200">
+                <p className="text-[11px] font-sans text-slate-700 bg-slate-50 p-2.5 rounded border border-slate-200">
+                  <strong>Purpose / Justification:</strong> {activeVoucherRequisition.purpose}
+                </p>
+
+                <div className="grid grid-cols-3 gap-4 pt-6 text-[11px] font-sans text-center border-t border-slate-200">
                   <div className="space-y-6">
                     <p className="font-semibold text-slate-700">Requested By:</p>
                     <div className="border-t border-slate-400 pt-1">
                       <p className="font-bold">{activeVoucherRequisition.requesterName}</p>
-                      <p className="text-[10px] text-slate-400">Department Faculty</p>
+                      <p className="text-[10px] text-slate-400">Signature & Date</p>
                     </div>
                   </div>
-
                   <div className="space-y-6">
-                    <p className="font-semibold text-slate-700">Approved & Issued By:</p>
+                    <p className="font-semibold text-slate-700">Approved By (Store Manager):</p>
                     <div className="border-t border-slate-400 pt-1">
-                      <p className="font-bold">{activeVoucherRequisition.approvedBy || "Solomon Kassa"}</p>
-                      <p className="text-[10px] text-slate-400">Storekeeper / Property Officer</p>
+                      <p className="font-bold">Solomon Kassa</p>
+                      <p className="text-[10px] text-slate-400">Signature & Date</p>
                     </div>
                   </div>
-
                   <div className="space-y-6">
                     <p className="font-semibold text-slate-700">Received By:</p>
                     <div className="border-t border-slate-400 pt-1">
-                      <p className="font-bold">____________________</p>
-                      <p className="text-[10px] text-slate-400">Receiver Signature & Stamp</p>
+                      <p className="font-bold">{activeVoucherRequisition.status === "DISPATCHED" ? activeVoucherRequisition.requesterName : "Pending Dispatch"}</p>
+                      <p className="text-[10px] text-slate-400">Signature & Date</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end">
+              <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end print:hidden">
                 <button
+                  type="button"
                   onClick={() => setActiveVoucherRequisition(null)}
                   className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold"
                 >
-                  Close Document
+                  Close Voucher
                 </button>
               </div>
             </motion.div>
@@ -2758,11 +2748,11 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       </AnimatePresence>
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL: OFFICIAL PRINTABLE MODEL 19 GRN VOUCHER                */}
+      {/* MODAL: MODEL 19 GRN PREVIEW                                   */}
       {/* ------------------------------------------------------------- */}
       <AnimatePresence>
         {activeGRNPreview && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -2771,13 +2761,13 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
             >
               <div className="bg-slate-900 text-white p-4 flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <Printer className="w-5 h-5 text-emerald-400" />
-                  <span className="font-bold text-sm">Official Model 19 Goods Receiving Note</span>
+                  <Printer className="w-5 h-5 text-amber-400" />
+                  <span className="font-bold text-sm">Official Model 19 GRN Voucher</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => window.print()}
-                    className="px-3 py-1 bg-emerald-500 hover:bg-emerald-400 text-white rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
+                    className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-xs font-bold transition flex items-center space-x-1 cursor-pointer"
                   >
                     <Printer className="w-3.5 h-3.5" />
                     <span>Print GRN</span>
@@ -2799,7 +2789,8 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                   </div>
                   <h2 className="font-bold text-sm tracking-wide uppercase">Federal Democratic Republic of Ethiopia</h2>
                   <h3 className="font-bold text-base text-slate-900">MEKDELA AMBA UNIVERSITY</h3>
-                  <div className="inline-block border border-slate-900 px-3 py-1 rounded mt-2 font-mono font-bold text-xs bg-emerald-50">
+                  <p className="text-xs text-slate-700 italic">Property Administration & Store Directorate (የንብረትና ዕቃ አስተዳደር ዳይሬክቶሬት)</p>
+                  <div className="inline-block border border-slate-900 px-3 py-0.5 rounded mt-1 font-mono font-bold text-xs bg-emerald-50">
                     MODEL 19: GOODS RECEIVING NOTE (ዕቃ መቀበያ ደረሰኝ)
                   </div>
                 </div>
@@ -2807,14 +2798,13 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                 <div className="grid grid-cols-2 gap-4 text-xs font-sans">
                   <div className="space-y-1">
                     <div><strong>GRN Number:</strong> <span className="font-mono font-bold">{activeGRNPreview.grnNumber}</span></div>
-                    <div><strong>PO Number:</strong> <span className="font-mono">{activeGRNPreview.poNumber}</span></div>
-                    <div><strong>Supplier:</strong> {activeGRNPreview.supplierName}</div>
-                    {activeGRNPreview.supplierTIN && <div><strong>TIN:</strong> <span className="font-mono">{activeGRNPreview.supplierTIN}</span></div>}
+                    <div><strong>PO Number:</strong> {activeGRNPreview.poNumber}</div>
+                    <div><strong>Invoice Number:</strong> {activeGRNPreview.invoiceNumber}</div>
                   </div>
                   <div className="space-y-1 text-right">
                     <div><strong>Date Received:</strong> <span className="font-mono">{activeGRNPreview.receivedDate}</span></div>
-                    <div><strong>Invoice No:</strong> <span className="font-mono">{activeGRNPreview.invoiceNumber}</span></div>
-                    <div><strong>Store Location:</strong> {activeGRNPreview.warehouseLocation}</div>
+                    <div><strong>Supplier:</strong> {activeGRNPreview.supplierName}</div>
+                    <div><strong>Warehouse:</strong> {activeGRNPreview.warehouseLocation}</div>
                   </div>
                 </div>
 
@@ -2822,10 +2812,10 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                   <thead className="bg-slate-100 font-mono text-[11px] uppercase border-b border-slate-300">
                     <tr>
                       <th className="py-2 px-3 border-r border-slate-300">Item Code</th>
-                      <th className="py-2 px-3 border-r border-slate-300">Item Name</th>
-                      <th className="py-2 px-3 border-r border-slate-300 text-right">Quantity</th>
-                      <th className="py-2 px-3 border-r border-slate-300 text-right">Unit Price</th>
-                      <th className="py-2 px-3 text-right">Total (ETB)</th>
+                      <th className="py-2 px-3 border-r border-slate-300">Description</th>
+                      <th className="py-2 px-3 border-r border-slate-300 text-right">Qty Received</th>
+                      <th className="py-2 px-3 border-r border-slate-300 text-right">Unit Cost</th>
+                      <th className="py-2 px-3 text-right">Total Cost</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -2835,57 +2825,49 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                         <td className="py-2 px-3 border-r border-slate-300">{it.itemName}</td>
                         <td className="py-2 px-3 border-r border-slate-300 text-right font-mono">{it.quantityReceived}</td>
                         <td className="py-2 px-3 border-r border-slate-300 text-right font-mono">{it.unitCostETB.toLocaleString()}</td>
-                        <td className="py-2 px-3 text-right font-mono font-bold">{it.totalCostETB.toLocaleString()} ETB</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold">{it.totalCostETB.toLocaleString()}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="bg-slate-50 font-bold border-t border-slate-300">
-                      <td colSpan={4} className="py-2 px-3 text-right">Total Delivery Valuation:</td>
-                      <td className="py-2 px-3 text-right font-mono text-emerald-800 font-black">
-                        {activeGRNPreview.totalAmountETB.toLocaleString()} ETB
-                      </td>
+                      <td colSpan={4} className="py-2 px-3 text-right">Total Amount (ETB):</td>
+                      <td className="py-2 px-3 text-right font-mono text-sm">{activeGRNPreview.totalAmountETB.toLocaleString()}</td>
                     </tr>
                   </tfoot>
                 </table>
 
-                {activeGRNPreview.notes && (
-                  <p className="text-[11px] font-sans text-slate-600 bg-slate-50 p-2.5 rounded border border-slate-200">
-                    <strong>Inspection Certification:</strong> {activeGRNPreview.notes}
-                  </p>
-                )}
-
                 <div className="grid grid-cols-2 gap-8 pt-6 text-[11px] font-sans text-center border-t border-slate-200">
                   <div className="space-y-6">
-                    <p className="font-semibold text-slate-700">Delivered By (Vendor Rep):</p>
+                    <p className="font-semibold text-slate-700">Delivered By (Supplier Rep):</p>
                     <div className="border-t border-slate-400 pt-1">
                       <p className="font-bold">{activeGRNPreview.supplierName}</p>
+                      <p className="text-[10px] text-slate-400">Signature & Date</p>
                     </div>
                   </div>
                   <div className="space-y-6">
-                    <p className="font-semibold text-slate-700">Received Into Store By:</p>
+                    <p className="font-semibold text-slate-700">Received By (Storekeeper):</p>
                     <div className="border-t border-slate-400 pt-1">
                       <p className="font-bold">{activeGRNPreview.receivedBy}</p>
-                      <p className="text-[10px] text-slate-400">Storekeeper / Property Officer</p>
+                      <p className="text-[10px] text-slate-400">Signature & Date</p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end">
+              <div className="bg-slate-50 p-4 border-t border-slate-200 flex justify-end print:hidden">
                 <button
+                  type="button"
                   onClick={() => setActiveGRNPreview(null)}
                   className="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold"
                 >
-                  Close Document
+                  Close
                 </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
-      <AcademicFooter />
     </div>
   );
 }
