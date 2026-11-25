@@ -630,12 +630,27 @@ class RequisitionItemSerializer(serializers.ModelSerializer):
 
 
 class MaterialRequisitionSerializer(serializers.ModelSerializer):
-    items = RequisitionItemSerializer(many=True, read_only=True)
+    items = RequisitionItemSerializer(many=True, required=False)
 
     class Meta:
         model = MaterialRequisition
         fields = '__all__'
-        read_only_fields = ['id', 'requisitionNumber', 'requestedDate']
+        read_only_fields = ['id', 'requestedDate']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+
+        if not validated_data.get('requisitionNumber'):
+            last = MaterialRequisition.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last else 1
+            validated_data['requisitionNumber'] = f"REQ-{timezone.now().year}-{next_id:04d}"
+
+        requisition = MaterialRequisition.objects.create(**validated_data)
+        for item_data in items_data:
+            item_data.pop('id', None)
+            RequisitionItem.objects.create(requisition=requisition, **item_data)
+
+        return requisition
 
 
 class FixedAssetItemSerializer(serializers.ModelSerializer):
@@ -653,19 +668,65 @@ class GoodsReceivingItemSerializer(serializers.ModelSerializer):
 
 
 class GoodsReceivingRecordSerializer(serializers.ModelSerializer):
-    items = GoodsReceivingItemSerializer(many=True, read_only=True)
+    items = GoodsReceivingItemSerializer(many=True, required=False)
 
     class Meta:
         model = GoodsReceivingRecord
         fields = '__all__'
-        read_only_fields = ['id', 'grnNumber', 'receivedDate']
+        read_only_fields = ['id', 'receivedDate']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+
+        if not validated_data.get('grnNumber'):
+            last = GoodsReceivingRecord.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last else 1
+            validated_data['grnNumber'] = f"GRN-{timezone.now().year}-{next_id:04d}"
+
+        record = GoodsReceivingRecord.objects.create(**validated_data)
+
+        total = 0
+        for item_data in items_data:
+            item_data.pop('id', None)
+            line = GoodsReceivingItem.objects.create(grn=record, **item_data)
+            total += line.totalCostETB
+
+            # Update Inventory & Create Bin Card Entry
+            inv = MaterialInventoryItem.objects.filter(id=item_data['itemId']).first()
+            if inv:
+                inv.quantityInStock += item_data['quantityReceived']
+                inv.status = (
+                    'OUT_OF_STOCK' if inv.quantityInStock == 0
+                    else 'LOW_STOCK' if inv.quantityInStock <= inv.minThreshold
+                    else 'IN_STOCK'
+                )
+                inv.totalValueETB = inv.quantityInStock * inv.unitCostETB
+                inv.save(update_fields=['quantityInStock', 'status', 'totalValueETB'])
+
+                StockBinCardEntry.objects.create(
+                    itemId=str(inv.id),
+                    itemCode=inv.itemCode,
+                    itemName=inv.name,
+                    voucherType='MODEL_19_RECEIPT',
+                    voucherNumber=record.grnNumber,
+                    warehouseLocation=record.warehouseLocation,
+                    quantityIn=item_data['quantityReceived'],
+                    quantityOut=0,
+                    balanceStock=inv.quantityInStock,
+                    performedBy=record.receivedBy,
+                    remarks=f"Received against {record.poNumber}",
+                )
+
+        record.totalAmountETB = total
+        record.save(update_fields=['totalAmountETB'])
+        return record
 
 
 class UniversityVendorSerializer(serializers.ModelSerializer):
     class Meta:
         model = UniversityVendor
         fields = '__all__'
-        read_only_fields = ['id', 'vendorCode']
+        read_only_fields = ['id']
 
 
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
@@ -676,19 +737,34 @@ class PurchaseOrderItemSerializer(serializers.ModelSerializer):
 
 
 class PurchaseOrderSerializer(serializers.ModelSerializer):
-    items = PurchaseOrderItemSerializer(many=True, read_only=True)
+    items = PurchaseOrderItemSerializer(many=True, required=False)
 
     class Meta:
         model = PurchaseOrder
         fields = '__all__'
-        read_only_fields = ['id', 'poNumber', 'issueDate']
+        read_only_fields = ['id', 'issueDate']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+
+        if not validated_data.get('poNumber'):
+            last = PurchaseOrder.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last else 1
+            validated_data['poNumber'] = f"PO-MAU-{timezone.now().year}-{next_id:04d}"
+
+        po = PurchaseOrder.objects.create(**validated_data)
+        for item_data in items_data:
+            item_data.pop('id', None)
+            PurchaseOrderItem.objects.create(po=po, **item_data)
+
+        return po
 
 
 class AssetDisposalRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = AssetDisposalRecord
         fields = '__all__'
-        read_only_fields = ['id', 'disposalRef', 'committeeApprovedDate']
+        read_only_fields = ['id', 'committeeApprovedDate']
 
 
 class HazardousMaterialRecordSerializer(serializers.ModelSerializer):
@@ -727,12 +803,27 @@ class InterStoreTransferItemSerializer(serializers.ModelSerializer):
 
 
 class InterStoreTransferRecordSerializer(serializers.ModelSerializer):
-    items = InterStoreTransferItemSerializer(many=True, read_only=True)
+    items = InterStoreTransferItemSerializer(many=True, required=False)
 
     class Meta:
         model = InterStoreTransferRecord
         fields = '__all__'
-        read_only_fields = ['id', 'transferNumber', 'initiatedDate']
+        read_only_fields = ['id', 'initiatedDate']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+
+        if not validated_data.get('transferNumber'):
+            last = InterStoreTransferRecord.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last else 1
+            validated_data['transferNumber'] = f"M21-{timezone.now().year}-{next_id:04d}"
+
+        transfer = InterStoreTransferRecord.objects.create(**validated_data)
+        for item_data in items_data:
+            item_data.pop('id', None)
+            InterStoreTransferItem.objects.create(transfer=transfer, **item_data)
+
+        return transfer
 
 
 class PropertyReturnItemSerializer(serializers.ModelSerializer):
@@ -743,26 +834,41 @@ class PropertyReturnItemSerializer(serializers.ModelSerializer):
 
 
 class PropertyReturnRecordSerializer(serializers.ModelSerializer):
-    items = PropertyReturnItemSerializer(many=True, read_only=True)
+    items = PropertyReturnItemSerializer(many=True, required=False)
 
     class Meta:
         model = PropertyReturnRecord
         fields = '__all__'
-        read_only_fields = ['id', 'voucherNumber', 'returnDate']
+        read_only_fields = ['id', 'returnDate']
+
+    def create(self, validated_data):
+        items_data = validated_data.pop('items', [])
+
+        if not validated_data.get('voucherNumber'):
+            last = PropertyReturnRecord.objects.order_by('-id').first()
+            next_id = (last.id + 1) if last else 1
+            validated_data['voucherNumber'] = f"M23-{timezone.now().year}-{next_id:04d}"
+
+        record = PropertyReturnRecord.objects.create(**validated_data)
+        for item_data in items_data:
+            item_data.pop('id', None)
+            PropertyReturnItem.objects.create(return_record=record, **item_data)
+
+        return record
 
 
 class CampusGatePassRecordSerializer(serializers.ModelSerializer):
     class Meta:
         model = CampusGatePassRecord
         fields = '__all__'
-        read_only_fields = ['id', 'gatePassNumber', 'authorizedDate']
+        read_only_fields = ['id', 'authorizedDate']
 
 
 class MaintenanceWorkOrderSerializer(serializers.ModelSerializer):
     class Meta:
         model = MaintenanceWorkOrder
         fields = '__all__'
-        read_only_fields = ['id', 'orderNumber', 'reportedDate']
+        read_only_fields = ['id', 'reportedDate']
 
 
 class PhysicalAuditEntrySerializer(serializers.ModelSerializer):
