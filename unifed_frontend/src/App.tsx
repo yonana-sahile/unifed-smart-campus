@@ -408,11 +408,9 @@ export default function App() {
         <CampusNewsTopBar />
         {renderRoleDashboard()}
 
-        {/* ✅ FIX: Wrapped floating assistants in pointer-events-none so they don't block dashboard clicks */}
-        <div className="pointer-events-none">
-          <FloatingVoiceAssistant currentUser={currentUser} />
-          <FloatingAIAssistant currentUser={currentUser} />
-        </div>
+        {/* ✅ FIX: assistants render directly (no pointer-events-none wrapper) so they stay clickable */}
+        <FloatingVoiceAssistant currentUser={currentUser} />
+        <FloatingAIAssistant currentUser={currentUser} />
       </>
     );
   }
@@ -596,25 +594,25 @@ export default function App() {
                   </div>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
-<input
-  type={showPassword ? "text" : "password"}
-  required
-  autoCapitalize="none"
-  autoCorrect="off"
-  autoComplete="current-password"
-  spellCheck={false}
-  placeholder="••••••••"
-  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
-  value={passwordInput}
-  onChange={(e) => setPasswordInput(e.target.value)}
-/>
-<button
-  type="button"
-  onClick={() => setShowPassword(!showPassword)}
-  className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
->
-  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-</button>
+                    <input
+                      type={showPassword ? "text" : "password"}
+                      required
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      autoComplete="current-password"
+                      spellCheck={false}
+                      placeholder="••••••••"
+                      className="w-full border border-slate-200 dark:border-slate-700 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm font-medium text-slate-900 dark:text-slate-100 bg-slate-50/50 dark:bg-slate-800/60 focus:bg-white dark:focus:bg-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/20 focus:outline-none transition"
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3.5 top-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
                   </div>
                   <div className="flex justify-end pt-0.5">
                     <button
@@ -828,11 +826,9 @@ export default function App() {
         }}
       />
 
-      {/* ✅ FIX: Wrapped floating assistants in pointer-events-none so they don't block login page clicks */}
-      <div className="pointer-events-none">
-        <FloatingVoiceAssistant currentUser={currentUser} />
-        <FloatingAIAssistant currentUser={currentUser} />
-      </div>
+      {/* ✅ FIX: assistants render directly (no pointer-events-none wrapper) so they stay clickable */}
+      <FloatingVoiceAssistant currentUser={currentUser} />
+      <FloatingAIAssistant currentUser={currentUser} />
     </div>
   );
 }
