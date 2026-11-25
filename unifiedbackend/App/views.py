@@ -2015,7 +2015,6 @@ class MaterialInventoryItemViewSet(BaseViewSet):
 
     def perform_create(self, serializer):
         item = serializer.save()
-        # ✅ FIXED: Using camelCase to match your Django models
         item.totalValueETB = (item.quantityInStock or 0) * (item.unitCostETB or 0)
         if item.quantityInStock <= 0:
             item.status = 'OUT_OF_STOCK'
@@ -2039,7 +2038,6 @@ class MaterialInventoryItemViewSet(BaseViewSet):
         reason = (request.data.get('reason') or 'Manual adjustment')[:255]
         performed_by = request.data.get('performed_by') or request.user.full_name
 
-        # ✅ FIXED: Using camelCase to match your Django models
         new_qty = max(0, (item.quantityInStock or 0) + delta)
         item.quantityInStock = new_qty
         item.totalValueETB = new_qty * (item.unitCostETB or 0)
@@ -2052,19 +2050,17 @@ class MaterialInventoryItemViewSet(BaseViewSet):
             item.status = 'IN_STOCK'
         item.save()
 
-        # Append a bin-card ledger entry so the digital ledger stays accurate.
         try:
             prev = (
                 StockBinCardEntry.objects
-                .filter(itemId=item.id)  # ✅ FIXED: Changed from item=item to itemId=item.id
+                .filter(itemId=item.id)
                 .order_by('-timestamp')
                 .first()
             )
             prev_balance = prev.balanceStock if prev else (new_qty - delta)
 
-            # ✅ FIXED: Using camelCase for StockBinCardEntry as well
             StockBinCardEntry.objects.create(
-                itemId=item.id,          # ✅ FIXED: Changed from item=item to itemId=item.id
+                itemId=item.id,
                 itemCode=item.itemCode,
                 itemName=item.name,
                 voucherType='AUDIT_ADJUSTMENT',
@@ -2089,18 +2085,6 @@ class MaterialRequisitionViewSet(BaseViewSet):
     queryset = MaterialRequisition.objects.all().order_by('-id')
     serializer_class = MaterialRequisitionSerializer
 
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        items_data = data.pop('items', [])
-
-        serializer = self.get_serializer(data=data)
-        if serializer.is_valid():
-            requisition = serializer.save()
-            for item_data in items_data:
-                RequisitionItem.objects.create(requisition=requisition, **item_data)
-            return Response(self.get_serializer(requisition).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class FixedAssetItemViewSet(BaseViewSet):
     queryset = FixedAssetItem.objects.all().order_by('-id')
@@ -2111,18 +2095,6 @@ class GoodsReceivingRecordViewSet(BaseViewSet):
     queryset = GoodsReceivingRecord.objects.all().order_by('-id')
     serializer_class = GoodsReceivingRecordSerializer
 
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        items_data = data.pop('items', [])
-
-        serializer = self.get_serializer(data=data)
-        if serializer.is_valid():
-            record = serializer.save()
-            for item_data in items_data:
-                GoodsReceivingItem.objects.create(grn=record, **item_data)
-            return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class UniversityVendorViewSet(BaseViewSet):
     queryset = UniversityVendor.objects.all().order_by('-id')
@@ -2132,18 +2104,6 @@ class UniversityVendorViewSet(BaseViewSet):
 class PurchaseOrderViewSet(BaseViewSet):
     queryset = PurchaseOrder.objects.all().order_by('-id')
     serializer_class = PurchaseOrderSerializer
-
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        items_data = data.pop('items', [])
-
-        serializer = self.get_serializer(data=data)
-        if serializer.is_valid():
-            po = serializer.save()
-            for item_data in items_data:
-                PurchaseOrderItem.objects.create(po=po, **item_data)
-            return Response(self.get_serializer(po).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AssetDisposalRecordViewSet(BaseViewSet):
@@ -2175,34 +2135,10 @@ class InterStoreTransferRecordViewSet(BaseViewSet):
     queryset = InterStoreTransferRecord.objects.all().order_by('-id')
     serializer_class = InterStoreTransferRecordSerializer
 
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        items_data = data.pop('items', [])
-
-        serializer = self.get_serializer(data=data)
-        if serializer.is_valid():
-            transfer = serializer.save()
-            for item_data in items_data:
-                InterStoreTransferItem.objects.create(transfer=transfer, **item_data)
-            return Response(self.get_serializer(transfer).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
 
 class PropertyReturnRecordViewSet(BaseViewSet):
     queryset = PropertyReturnRecord.objects.all().order_by('-id')
     serializer_class = PropertyReturnRecordSerializer
-
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-        items_data = data.pop('items', [])
-
-        serializer = self.get_serializer(data=data)
-        if serializer.is_valid():
-            record = serializer.save()
-            for item_data in items_data:
-                PropertyReturnItem.objects.create(return_record=record, **item_data)
-            return Response(self.get_serializer(record).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CampusGatePassRecordViewSet(BaseViewSet):
