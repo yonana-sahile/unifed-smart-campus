@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.password_validation import validate_password
+from django.db import transaction
 from django.utils import timezone
 from .models import *
 
@@ -625,7 +626,7 @@ class MaterialInventoryItemSerializer(serializers.ModelSerializer):
 class RequisitionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = RequisitionItem
-        fields = '__all__'
+        exclude = ['requisition']   # parent is set in create()
         read_only_fields = ['id']
 
 
@@ -663,7 +664,7 @@ class FixedAssetItemSerializer(serializers.ModelSerializer):
 class GoodsReceivingItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = GoodsReceivingItem
-        fields = '__all__'
+        exclude = ['grn']           # parent is set in create()
         read_only_fields = ['id']
 
 
@@ -674,7 +675,12 @@ class GoodsReceivingRecordSerializer(serializers.ModelSerializer):
         model = GoodsReceivingRecord
         fields = '__all__'
         read_only_fields = ['id', 'receivedDate']
+        extra_kwargs = {
+            'grnNumber': {'required': False, 'allow_blank': True},
+            'totalAmountETB': {'required': False},
+        }
 
+    @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
 
@@ -732,7 +738,7 @@ class UniversityVendorSerializer(serializers.ModelSerializer):
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrderItem
-        fields = '__all__'
+        exclude = ['po']            # parent is set in create()
         read_only_fields = ['id']
 
 
@@ -798,7 +804,7 @@ class DonationGrantAssetSerializer(serializers.ModelSerializer):
 class InterStoreTransferItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterStoreTransferItem
-        fields = '__all__'
+        exclude = ['transfer']      # parent is set in create()
         read_only_fields = ['id']
 
 
@@ -829,7 +835,7 @@ class InterStoreTransferRecordSerializer(serializers.ModelSerializer):
 class PropertyReturnItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PropertyReturnItem
-        fields = '__all__'
+        exclude = ['return_record']  # parent is set in create()
         read_only_fields = ['id']
 
 
