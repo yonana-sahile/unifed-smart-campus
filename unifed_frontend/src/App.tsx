@@ -407,8 +407,12 @@ export default function App() {
         />
         <CampusNewsTopBar />
         {renderRoleDashboard()}
-        <FloatingVoiceAssistant currentUser={currentUser} />
-        <FloatingAIAssistant currentUser={currentUser} />
+
+        {/* ✅ FIX: Wrapped floating assistants in pointer-events-none so they don't block dashboard clicks */}
+        <div className="pointer-events-none">
+          <FloatingVoiceAssistant currentUser={currentUser} />
+          <FloatingAIAssistant currentUser={currentUser} />
+        </div>
       </>
     );
   }
@@ -823,8 +827,12 @@ export default function App() {
           setPasswordInput("password");
         }}
       />
-      <FloatingVoiceAssistant currentUser={currentUser} />
-      <FloatingAIAssistant currentUser={currentUser} />
+
+      {/* ✅ FIX: Wrapped floating assistants in pointer-events-none so they don't block login page clicks */}
+      <div className="pointer-events-none">
+        <FloatingVoiceAssistant currentUser={currentUser} />
+        <FloatingAIAssistant currentUser={currentUser} />
+      </div>
     </div>
   );
 }
