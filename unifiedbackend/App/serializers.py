@@ -626,7 +626,7 @@ class MaterialInventoryItemSerializer(serializers.ModelSerializer):
 class RequisitionItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = RequisitionItem
-        exclude = ['requisition']   # parent is set in create()
+        exclude = ['requisition']
         read_only_fields = ['id']
 
 
@@ -664,7 +664,7 @@ class FixedAssetItemSerializer(serializers.ModelSerializer):
 class GoodsReceivingItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = GoodsReceivingItem
-        exclude = ['grn']           # parent is set in create()
+        exclude = ['grn']
         read_only_fields = ['id']
 
 
@@ -694,6 +694,12 @@ class GoodsReceivingRecordSerializer(serializers.ModelSerializer):
         total = 0
         for item_data in items_data:
             item_data.pop('id', None)
+
+            # ✅ FIX: Force backend calculation for line total to prevent 0 ETB bug
+            qty = float(item_data.get('quantityReceived', 0))
+            cost = float(item_data.get('unitCostETB', 0))
+            item_data['totalCostETB'] = qty * cost
+
             line = GoodsReceivingItem.objects.create(grn=record, **item_data)
             total += line.totalCostETB
 
@@ -738,7 +744,7 @@ class UniversityVendorSerializer(serializers.ModelSerializer):
 class PurchaseOrderItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PurchaseOrderItem
-        exclude = ['po']            # parent is set in create()
+        exclude = ['po']
         read_only_fields = ['id']
 
 
@@ -757,6 +763,22 @@ class PurchaseOrderSerializer(serializers.ModelSerializer):
             last = PurchaseOrder.objects.order_by('-id').first()
             next_id = (last.id + 1) if last else 1
             validated_data['poNumber'] = f"PO-MAU-{timezone.now().year}-{next_id:04d}"
+
+        # ✅ FIX: Force backend calculation for PO totals
+        subtotal = 0
+        for item_data in items_data:
+            qty = float(item_data.get('quantityOrdered', 0))
+            price = float(item_data.get('unitPriceETB', 0))
+            line_total = qty * price
+            item_data['lineTotalETB'] = line_total
+            subtotal += line_total
+
+        vat = subtotal * 0.15
+        grand_total = subtotal + vat
+
+        validated_data['subtotalETB'] = subtotal
+        validated_data['vatAmountETB'] = vat
+        validated_data['grandTotalETB'] = grand_total
 
         po = PurchaseOrder.objects.create(**validated_data)
         for item_data in items_data:
@@ -804,7 +826,7 @@ class DonationGrantAssetSerializer(serializers.ModelSerializer):
 class InterStoreTransferItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = InterStoreTransferItem
-        exclude = ['transfer']      # parent is set in create()
+        exclude = ['transfer']
         read_only_fields = ['id']
 
 
@@ -835,7 +857,7 @@ class InterStoreTransferRecordSerializer(serializers.ModelSerializer):
 class PropertyReturnItemSerializer(serializers.ModelSerializer):
     class Meta:
         model = PropertyReturnItem
-        exclude = ['return_record']  # parent is set in create()
+        exclude = ['return_record']
         read_only_fields = ['id']
 
 
