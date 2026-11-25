@@ -19,9 +19,8 @@ import {
   DepartmentStoreBudget,
   DonationGrantAsset
 } from "../types";
-import { CampusDatabase } from "../services/api"; // 👈 UPDATED THIS LINE
+import { CampusDatabase } from "../services/api";
 import { UniversityTopBar, AcademicFooter, EthiopianFlag, UniversitySeal } from "./UniversityHeader";
-// 👇 COMMENTED OUT THESE TWO MISSING COMPONENTS
 // import { SmartCampusAlerts } from "./SmartCampusAlerts";
 // import { SmartCampusHardwareHub } from "./SmartCampusHardwareHub";
 import { InterStoreTransfersTab } from "./mms/InterStoreTransfersTab";
@@ -226,7 +225,6 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
     };
   }, []);
 
-  // ✅ FIXED: Async loadData to correctly resolve Promises
   const loadData = async () => {
     try {
       const [
@@ -417,19 +415,22 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
 
   const handleSaveGoodsReceiving = async (e: FormEvent) => {
     e.preventDefault();
-    console.log("🚀 [GRN] Submit button clicked!"); // ✅ VERIFY CLICK
+    console.log("🚀 [GRN] Submit button clicked!");
 
     if (!grnSupplier.trim() || !grnSelectedItemId) {
       alert("Please select an item and provide supplier details.");
       return;
     }
 
-    const itemObj = inventory.find((it) => it.id === grnSelectedItemId);
-    if (!itemObj) return;
+    // ✅ FIX: select values are strings, backend ids may be numbers
+    const itemObj = inventory.find((it) => String(it.id) === String(grnSelectedItemId));
+    if (!itemObj) {
+      alert("Selected item not found in inventory.");
+      return;
+    }
 
     const totalCost = Number(grnItemQty) * Number(grnItemCost);
 
-    // ✅ FIXED: Removed client-side grnNumber/id generation. Let the backend handle it.
     const newGRN = {
       poNumber: grnPo.trim() || `PO-MAU-2026-${Math.floor(Math.random() * 900 + 100)}`,
       invoiceNumber: grnInvoice.trim() || `INV-${Math.floor(Math.random() * 90000 + 10000)}`,
@@ -439,7 +440,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
       warehouseLocation: grnWarehouse,
       items: [
         {
-          itemId: itemObj.id,
+          itemId: String(itemObj.id),
           itemCode: itemObj.itemCode,
           itemName: itemObj.name,
           quantityReceived: Number(grnItemQty),
@@ -453,7 +454,6 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
     };
 
     try {
-      // The backend now returns the saved record with the generated GRN Number
       const savedGRN = await CampusDatabase.addGoodsReceivingRecord(newGRN);
 
       await loadData();
@@ -1439,7 +1439,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                         </thead>
                         <tbody className="divide-y divide-slate-200/50 dark:divide-slate-700/50">
                           {req.items.map((item, idx) => {
-                            const invObj = inventory.find((i) => i.id === item.itemId || i.itemCode === item.itemCode);
+                            const invObj = inventory.find((i) => String(i.id) === String(item.itemId) || i.itemCode === item.itemCode);
                             const stockAvailable = invObj ? invObj.quantityInStock : "Unknown";
                             const isEnough = invObj ? invObj.quantityInStock >= item.quantityRequested : true;
 
@@ -2397,7 +2397,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                     value={grnSelectedItemId}
                     onChange={(e) => {
                       setGrnSelectedItemId(e.target.value);
-                      const it = inventory.find((i) => i.id === e.target.value);
+                      const it = inventory.find((i) => String(i.id) === e.target.value);
                       if (it) {
                         setGrnItemCost(it.unitCostETB);
                         setGrnWarehouse(it.warehouseLocation);
@@ -2407,7 +2407,7 @@ export function MaterialManagerDashboard({ user, onLogout }: MaterialManagerDash
                   >
                     <option value="">-- Choose item from inventory catalog --</option>
                     {inventory.map((it) => (
-                      <option key={it.id} value={it.id}>
+                      <option key={it.id} value={String(it.id)}>
                         {it.itemCode} - {it.name} (Current: {it.quantityInStock} {it.unit})
                       </option>
                     ))}
