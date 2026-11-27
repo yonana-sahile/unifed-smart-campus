@@ -845,7 +845,22 @@ class ZoomClassSession(models.Model):
     lecture_notes = models.TextField(blank=True, null=True)
     recording_url = models.URLField(max_length=500, blank=True, null=True)
     recording_duration = models.CharField(max_length=20, blank=True, null=True)
-
+    # Shared classroom PDF presentation
+    presentation_pdf_url = models.URLField(
+        max_length=1000,
+        blank=True,
+        null=True
+    )
+    presentation_pdf_name = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+    presentation_pdf_public_id = models.CharField(
+        max_length=500,
+        blank=True,
+        null=True
+    )
     active_attendees = models.JSONField(default=list, blank=True)
     chat_messages = models.JSONField(default=list, blank=True)
 

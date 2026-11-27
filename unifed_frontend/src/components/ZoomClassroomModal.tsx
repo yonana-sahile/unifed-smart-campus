@@ -62,6 +62,8 @@ const [jitsiParticipants, setJitsiParticipants] = useState<
     isVideoMuted: boolean;
   }[]
 >([]);
+const [isJitsiModerator, setIsJitsiModerator] = useState(false);
+const jitsiLocalParticipantIdRef = useRef<string | null>(null);
 const chatBottomRef = useRef<HTMLDivElement>(null);
 const [copiedId, setCopiedId] = useState(false);
 const streamRef = useRef<MediaStream | null>(null);
@@ -75,21 +77,29 @@ useEffect(() => {
     jitsiCleanupRef.current = null;
     jitsiApiRef.current = null;
     setJitsiParticipants([]);
+    setIsJitsiModerator(false);
+jitsiLocalParticipantIdRef.current = null;
   }
 }, [isOpen]);
+
 useEffect(() => {
   if (viewMode !== "speaker" || !showJitsi) {
     jitsiCleanupRef.current?.();
     jitsiCleanupRef.current = null;
     jitsiApiRef.current = null;
     setJitsiParticipants([]);
+    setIsJitsiModerator(false);
+jitsiLocalParticipantIdRef.current = null;
   }
 }, [viewMode, showJitsi]);
+
 
 const handleJitsiApiReady = (api: any) => {
   jitsiCleanupRef.current?.();
 
   jitsiApiRef.current = api;
+  jitsiLocalParticipantIdRef.current = null;
+  setIsJitsiModerator(false);
 
   const refreshParticipants = async () => {
     try {
@@ -110,28 +120,48 @@ const handleJitsiApiReady = (api: any) => {
           isVideoMuted: Boolean(participant.videoMuted),
         }))
       );
+
+      const localId = jitsiLocalParticipantIdRef.current;
+
+      if (localId) {
+        const localParticipant = participants.find(
+          (participant: any) => String(participant.id) === localId
+        );
+
+        setIsJitsiModerator(
+          localParticipant?.role === "moderator"
+        );
+      }
     } catch (error) {
-      console.error("Failed to load Jitsi participants:", error);
+      console.error("[JITSI] Failed to load participants:", error);
     }
   };
 
-  const handleParticipantJoined = (participant: any) => {
-    setJitsiParticipants((previous) => {
-      const id = String(participant.id);
+  const handleVideoConferenceJoined = (event: any) => {
+    jitsiLocalParticipantIdRef.current = String(event.id);
+    void refreshParticipants();
+  };
 
-      if (previous.some((item) => item.id === id)) return previous;
+  const handleVideoConferenceLeft = () => {
+    jitsiLocalParticipantIdRef.current = null;
+    setIsJitsiModerator(false);
+    setJitsiParticipants([]);
+  };
 
-      return [
-        ...previous,
-        {
-          id,
-          displayName: participant.displayName || "Unknown participant",
-          role: participant.role || "participant",
-          isMuted: Boolean(participant.audioMuted),
-          isVideoMuted: Boolean(participant.videoMuted),
-        },
-      ];
-    });
+  const handleParticipantRoleChanged = (event: any) => {
+    const localId = jitsiLocalParticipantIdRef.current;
+
+    if (!localId || String(event.id) !== localId) return;
+
+    const moderator = event.role === "moderator";
+
+    setIsJitsiModerator(moderator);
+
+    console.info("[JITSI] Local participant role:", event.role);
+  };
+
+  const handleParticipantJoined = () => {
+    void refreshParticipants();
   };
 
   const handleParticipantLeft = (participant: any) => {
@@ -146,10 +176,10 @@ const handleJitsiApiReady = (api: any) => {
         item.id === String(participant.id)
           ? {
               ...item,
-           displayName:
-  participant.displayName ||
-  participant.displayname ||
-  item.displayName,
+              displayName:
+                participant.displayname ||
+                participant.displayName ||
+                item.displayName,
             }
           : item
       )
@@ -186,6 +216,9 @@ const handleJitsiApiReady = (api: any) => {
   };
 
   const listeners: [string, (...args: any[]) => void][] = [
+    ["videoConferenceJoined", handleVideoConferenceJoined],
+    ["videoConferenceLeft", handleVideoConferenceLeft],
+    ["participantRoleChanged", handleParticipantRoleChanged],
     ["participantJoined", handleParticipantJoined],
     ["participantLeft", handleParticipantLeft],
     ["displayNameChange", handleDisplayNameChange],
@@ -206,10 +239,12 @@ const handleJitsiApiReady = (api: any) => {
 
     if (jitsiApiRef.current === api) {
       jitsiApiRef.current = null;
+      jitsiLocalParticipantIdRef.current = null;
+      setIsJitsiModerator(false);
     }
   };
 
-  refreshParticipants();
+  void refreshParticipants();
 
   api.isAudioMuted()
     .then((muted: boolean) => {
@@ -278,6 +313,8 @@ const handleJitsiApiReady = (api: any) => {
   useEffect(() => {
     if (!isOpen) return;
     setSession(initialSession);
+    setPdfUrl(initialSession.presentationPdfUrl ?? null);
+setPdfName(initialSession.presentationPdfName ?? "");
     if (typeof (initialSession as any).jitsiEnabled === "boolean") {
       setShowJitsi((initialSession as any).jitsiEnabled);
     }
@@ -313,27 +350,132 @@ const handleJitsiApiReady = (api: any) => {
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [session.chatMessages?.length, activeDrawer]);
+// Sync shared classroom PDF from the backend every 5 seconds
+useEffect(() => {
+  if (!isOpen) return;
 
-  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.type !== "application/pdf") {
-      alert("Please select a PDF file.");
-      return;
+  let cancelled = false;
+
+  const syncPresentation = async () => {
+    try {
+      const sessions = await CampusDatabase.getZoomSessions();
+
+      if (cancelled) return;
+
+      const latest = sessions.find(
+        (item: any) => String(item.id) === String(initialSession.id)
+      );
+
+      if (!latest) return;
+
+      const nextUrl = latest.presentationPdfUrl ?? null;
+      const nextName = latest.presentationPdfName ?? "";
+
+      setPdfUrl((current) =>
+        current === nextUrl ? current : nextUrl
+      );
+
+      setPdfName((current) =>
+        current === nextName ? current : nextName
+      );
+
+      setSession((current) => ({
+        ...current,
+        presentationPdfUrl: nextUrl,
+        presentationPdfName: nextName,
+      }));
+    } catch (error) {
+      console.error("[PDF] Presentation sync failed:", error);
     }
-    const url = URL.createObjectURL(file);
-    setPdfUrl(url);
-    setPdfName(file.name);
-    setCurrentSlideIndex(0);
   };
 
-  const handleClearPdf = () => {
-    if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+  void syncPresentation();
+
+  const intervalId = window.setInterval(() => {
+    void syncPresentation();
+  }, 5000);
+
+  return () => {
+    cancelled = true;
+    window.clearInterval(intervalId);
+  };
+}, [isOpen, initialSession.id]);
+const handlePdfUpload = async (
+  e: React.ChangeEvent<HTMLInputElement>
+) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  if (file.type !== "application/pdf") {
+    alert("Please select a valid PDF file.");
+    e.target.value = "";
+    return;
+  }
+
+  if (file.size > 20 * 1024 * 1024) {
+    alert("PDF file is too large. Maximum allowed size is 20 MB.");
+    e.target.value = "";
+    return;
+  }
+
+  try {
+    const updatedSession =
+      await CampusDatabase.uploadZoomSessionPresentation(
+        String(session.id),
+        file
+      );
+
+    setSession(updatedSession);
+    setPdfUrl(updatedSession.presentationPdfUrl ?? null);
+    setPdfName(updatedSession.presentationPdfName ?? file.name);
+    setCurrentSlideIndex(0);
+
+    onSessionUpdated?.(updatedSession);
+
+    alert("PDF uploaded successfully. It is now saved for this classroom.");
+  } catch (error: any) {
+    console.error("[PDF] Upload failed:", error);
+
+    alert(
+      error?.response?.data?.error ||
+      error?.response?.data?.detail ||
+      "PDF upload failed. Please try again."
+    );
+  } finally {
+    if (pdfInputRef.current) {
+      pdfInputRef.current.value = "";
+    }
+  }
+};
+ const handleClearPdf = async () => {
+  try {
+    const updatedSession =
+      await CampusDatabase.clearZoomSessionPresentation(
+        String(session.id)
+      );
+
+    setSession(updatedSession);
     setPdfUrl(null);
     setPdfName("");
-    if (pdfInputRef.current) pdfInputRef.current.value = "";
-  };
+    setCurrentSlideIndex(0);
 
+    onSessionUpdated?.(updatedSession);
+
+    if (pdfInputRef.current) {
+      pdfInputRef.current.value = "";
+    }
+
+    alert("Shared PDF removed successfully.");
+  } catch (error: any) {
+    console.error("[PDF] Clear failed:", error);
+
+    alert(
+      error?.response?.data?.error ||
+      error?.response?.data?.detail ||
+      "Could not remove the shared PDF. Please try again."
+    );
+  }
+};
   const handleToggleRecording = () => {
     if (!isInstructor) {
       console.warn("[SECURITY] Non-instructor attempted to record. Blocked.");
@@ -534,7 +676,10 @@ const handleMuteAll = async () => {
     alert("The live meeting is not connected.");
     return;
   }
-
+if (!isJitsiModerator) {
+  alert("You are not a Jitsi moderator. Mute All is unavailable.");
+  return;
+}
   try {
     // Mute audio for everyone in the Jitsi meeting.
     // Requires the current Jitsi participant to be a moderator.
@@ -709,26 +854,31 @@ const handleMuteAll = async () => {
                         <span className="font-semibold text-slate-200">
                           {isInstructor ? "You are sharing: Slides" : `${session.instructorName}'s Screen`}
                         </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          ({currentSlideIndex + 1}/{sampleSlides.length})
-                        </span>
+{!showJitsi && !pdfUrl && (
+  <span className="text-[10px] text-slate-400 font-mono">
+    ({currentSlideIndex + 1}/{sampleSlides.length})
+  </span>
+)}
                       </div>
-                      <div className="flex items-center space-x-1">
-                        <button
-                          onClick={() => setCurrentSlideIndex((p) => Math.max(0, p - 1))}
-                          disabled={currentSlideIndex === 0}
-                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setCurrentSlideIndex((p) => Math.min(sampleSlides.length - 1, p + 1))}
-                          disabled={currentSlideIndex === sampleSlides.length - 1}
-                          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
-                        >
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+{!showJitsi && !pdfUrl && (
+  <div className="flex items-center space-x-1">
+    <button
+      onClick={() => setCurrentSlideIndex((p) => Math.max(0, p - 1))}
+      disabled={currentSlideIndex === 0}
+      className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
+    >
+      <ChevronLeft className="w-3.5 h-3.5" />
+    </button>
+
+    <button
+      onClick={() => setCurrentSlideIndex((p) => Math.min(sampleSlides.length - 1, p + 1))}
+      disabled={currentSlideIndex === sampleSlides.length - 1}
+      className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
+    >
+      <ChevronRight className="w-3.5 h-3.5" />
+    </button>
+  </div>
+)}
                     </div>
 
                     <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
@@ -809,7 +959,14 @@ onReadyToClose={() => {
                         <div className="w-full h-full flex flex-col">
                           <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-xs shrink-0">
                             <span className="text-slate-300 font-medium truncate">📄 {pdfName}</span>
-                            <button onClick={handleClearPdf} className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10">Close PDF</button>
+                            {isInstructor && (
+  <button
+    onClick={handleClearPdf}
+    className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10"
+  >
+    Remove PDF
+  </button>
+)}
                           </div>
                           <iframe
                             src={`${pdfUrl}#toolbar=0&navpanes=0`}
@@ -1183,28 +1340,49 @@ onReadyToClose={() => {
                 <MonitorUp className="w-4 h-4 mb-0.5" />
                 <span className="text-[10px]">Sharing</span>
               </button>
+{!isInstructor && pdfUrl && (
+  <button
+    type="button"
+    onClick={() => {
+      jitsiCleanupRef.current?.();
+      jitsiCleanupRef.current = null;
+      jitsiApiRef.current = null;
+      setJitsiParticipants([]);
+      setShowJitsi(false);
+      setViewMode("speaker");
+    }}
+    className="px-3 py-2 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 text-xs font-medium flex flex-col items-center min-w-[54px]"
+  >
+    <FileText className="w-4 h-4 mb-0.5" />
+    <span className="text-[10px]">View PDF</span>
+  </button>
+)}
+{isInstructor && (
+  <>
+    <input
+      ref={pdfInputRef}
+      type="file"
+      accept="application/pdf"
+      onChange={handlePdfUpload}
+      className="hidden"
+    />
 
-              <input
-                ref={pdfInputRef}
-                type="file"
-                accept="application/pdf"
-                onChange={handlePdfUpload}
-                className="hidden"
-              />
-              <button
-                type="button"
-onClick={() => {
-  jitsiCleanupRef.current?.();
-  jitsiCleanupRef.current = null;
-  setJitsiParticipants([]);
-  setShowJitsi(false);
-  pdfInputRef.current?.click();
-}}
-                className="px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium flex flex-col items-center min-w-[54px]"
-              >
-                <FileText className="w-4 h-4 mb-0.5" />
-                <span className="text-[10px]">PDF</span>
-              </button>
+    <button
+      type="button"
+      onClick={() => {
+        jitsiCleanupRef.current?.();
+        jitsiCleanupRef.current = null;
+        setJitsiParticipants([]);
+        setShowJitsi(false);
+        pdfInputRef.current?.click();
+      }}
+      className="px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium flex flex-col items-center min-w-[54px]"
+    >
+      <FileText className="w-4 h-4 mb-0.5" />
+      <span className="text-[10px]">PDF</span>
+    </button>
+  </>
+)}
 
               <button
                 type="button"

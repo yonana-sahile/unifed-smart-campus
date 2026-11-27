@@ -29,3 +29,4 @@ uritemplate==4.2.0
 wheel==0.42.0
 whitenoise==6.6.0
 groq
+cloudinary==1.47.0

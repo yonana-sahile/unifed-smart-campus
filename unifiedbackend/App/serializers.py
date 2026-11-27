@@ -479,7 +479,14 @@ class ZoomClassSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ZoomClassSession
         fields = '__all__'
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = [
+    'id',
+    'created_at',
+    'updated_at',
+    'presentation_pdf_url',
+    'presentation_pdf_name',
+    'presentation_pdf_public_id',
+]
         extra_kwargs = {
             'course': {'required': False, 'allow_null': True},
             'passcode': {'required': False, 'allow_blank': True, 'allow_null': True},

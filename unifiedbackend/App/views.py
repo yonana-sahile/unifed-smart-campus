@@ -16,6 +16,10 @@ import random
 import secrets
 import string
 import uuid
+import os
+import cloudinary.uploader
+
+from django.db import transaction
 from datetime import timedelta
 
 
@@ -1087,9 +1091,226 @@ class CampusMediaPostViewSet(BaseViewSet):
 
 
 # ---------- ZOOM CLASS SESSION ----------
+
+# ---------- ZOOM CLASS SESSION ----------
 class ZoomClassSessionViewSet(BaseViewSet):
     queryset = ZoomClassSession.objects.all().order_by('-start_time')
     serializer_class = ZoomClassSessionSerializer
+
+    MAX_PDF_SIZE = 20 * 1024 * 1024  # 20 MB
+
+    def _can_manage_presentation(self, user, session):
+        role = getattr(user, 'role', None)
+
+        if role in ('ADMIN', 'REGISTRAR'):
+            return True
+
+        if role == 'INSTRUCTOR':
+            return (
+                session.instructor_id == user.id
+                or (
+                    session.course is not None
+                    and session.course.instructor_id == user.id
+                )
+            )
+
+        if role == 'DEPARTMENT_HEAD':
+            if session.instructor_id == user.id:
+                return True
+
+            if session.course is not None:
+                user_department = (getattr(user, 'department', '') or '').strip()
+                course_department = (session.course.department or '').strip()
+
+                return (
+                    bool(user_department)
+                    and user_department.lower() == course_department.lower()
+                )
+
+        return False
+
+    def _check_presentation_permission(self, request, session):
+        if not self._can_manage_presentation(request.user, session):
+            return Response(
+                {
+                    'error': 'You are not allowed to manage the PDF for this class.'
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return None
+
+    @action(
+        detail=True,
+        methods=['post'],
+        parser_classes=[MultiPartParser, FormParser],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path='upload-presentation',
+    )
+    def upload_presentation(self, request, pk=None):
+        session = self.get_object()
+
+        denied = self._check_presentation_permission(request, session)
+        if denied:
+            return denied
+
+        pdf_file = request.FILES.get('file')
+
+        if not pdf_file:
+            return Response(
+                {'error': 'Please select a PDF file.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if pdf_file.size > self.MAX_PDF_SIZE:
+            return Response(
+                {'error': 'PDF file is too large. Maximum size is 20 MB.'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        original_name = os.path.basename(
+            (pdf_file.name or 'presentation.pdf').replace('\\', '/')
+        )[:255]
+
+        if not original_name.lower().endswith('.pdf'):
+            return Response(
+                {'error': 'Only PDF files are allowed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check the actual file signature, not only its extension or MIME type.
+        try:
+            signature = pdf_file.read(5)
+            pdf_file.seek(0)
+        except Exception:
+            return Response(
+                {'error': 'Could not read the uploaded file.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if signature != b'%PDF-':
+            return Response(
+                {'error': 'The selected file is not a valid PDF.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if pdf_file.content_type not in (
+            'application/pdf',
+            'application/octet-stream',
+            None,
+        ):
+            return Response(
+                {'error': 'Invalid PDF content type.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_public_id = session.presentation_pdf_public_id
+        uploaded_public_id = None
+
+        try:
+            upload_result = cloudinary.uploader.upload(
+                pdf_file,
+                resource_type='raw',
+                folder='smart-campus/classroom-pdfs',
+                public_id=f'{uuid.uuid4().hex}.pdf',
+                overwrite=False,
+            )
+
+            pdf_url = upload_result.get('secure_url')
+            uploaded_public_id = upload_result.get('public_id')
+
+            if not pdf_url or not uploaded_public_id:
+                raise RuntimeError('Cloudinary did not return the PDF URL.')
+
+            # Save the new PDF details in the database.
+            with transaction.atomic():
+                session.presentation_pdf_url = pdf_url
+                session.presentation_pdf_name = original_name
+                session.presentation_pdf_public_id = uploaded_public_id
+
+                session.save(update_fields=[
+                    'presentation_pdf_url',
+                    'presentation_pdf_name',
+                    'presentation_pdf_public_id',
+                    'updated_at',
+                ])
+
+        except Exception:
+            # If the database save fails, clean up the newly uploaded file.
+            if uploaded_public_id:
+                try:
+                    cloudinary.uploader.destroy(
+                        uploaded_public_id,
+                        resource_type='raw',
+                        invalidate=True,
+                    )
+                except Exception:
+                    pass
+
+            return Response(
+                {'error': 'PDF upload failed. Please try again.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        # The new PDF is saved. Now remove the previous Cloudinary file.
+        if old_public_id and old_public_id != uploaded_public_id:
+            try:
+                cloudinary.uploader.destroy(
+                    old_public_id,
+                    resource_type='raw',
+                    invalidate=True,
+                )
+            except Exception:
+                pass
+
+        return Response({
+            'message': 'Class presentation uploaded successfully.',
+            'presentation_pdf_url': session.presentation_pdf_url,
+            'presentation_pdf_name': session.presentation_pdf_name,
+            'session': self.get_serializer(session).data,
+        }, status=status.HTTP_200_OK)
+
+    @action(
+        detail=True,
+        methods=['post'],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path='clear-presentation',
+    )
+    def clear_presentation(self, request, pk=None):
+        session = self.get_object()
+
+        denied = self._check_presentation_permission(request, session)
+        if denied:
+            return denied
+
+        old_public_id = session.presentation_pdf_public_id
+
+        # Remove the PDF reference from the database first.
+        session.presentation_pdf_url = None
+        session.presentation_pdf_name = None
+        session.presentation_pdf_public_id = None
+
+        session.save(update_fields=[
+            'presentation_pdf_url',
+            'presentation_pdf_name',
+            'presentation_pdf_public_id',
+            'updated_at',
+        ])
+
+        # Then remove the stored Cloudinary file.
+        if old_public_id:
+            try:
+                cloudinary.uploader.destroy(
+                    old_public_id,
+                    resource_type='raw',
+                    invalidate=True,
+                )
+            except Exception:
+                pass
+
+        return Response({
+            'message': 'Class presentation removed successfully.',
+            'session': self.get_serializer(session).data,
+        })
 
     @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
     def start(self, request, pk=None):
@@ -1102,12 +1323,16 @@ class ZoomClassSessionViewSet(BaseViewSet):
     def end(self, request, pk=None):
         session = self.get_object()
         session.status = 'COMPLETED'
+
         recording_url = request.data.get('recording_url', '')
         recording_duration = request.data.get('recording_duration', '')
+
         if recording_url:
             session.recording_url = recording_url
+
         if recording_duration:
             session.recording_duration = recording_duration
+
         session.save()
         return Response(self.get_serializer(session).data)
 

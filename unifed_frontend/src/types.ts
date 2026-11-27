@@ -479,6 +479,12 @@ export interface ZoomClassSession {
   hostUrl?: string;
   status: "UPCOMING" | "LIVE" | "COMPLETED" | "CANCELLED";
   lectureNotes?: string;
+
+  // Shared classroom PDF presentation
+  presentationPdfUrl?: string | null;
+  presentationPdfName?: string;
+  presentationPdfPublicId?: string;
+
   recordingUrl?: string;
   recordingDuration?: string;
   activeAttendees: ZoomAttendee[];

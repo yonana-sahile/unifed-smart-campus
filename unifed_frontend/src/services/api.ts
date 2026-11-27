@@ -718,6 +718,9 @@ const result: any = {};
   return result;
 };
 const fromZoomSnakeCase = (raw: any) => ({
+    presentationPdfUrl: raw?.presentation_pdf_url ?? raw?.presentationPdfUrl ?? null,
+  presentationPdfName: raw?.presentation_pdf_name ?? raw?.presentationPdfName ?? '',
+  presentationPdfPublicId: raw?.presentation_pdf_public_id ?? raw?.presentationPdfPublicId ?? '',
   id: String(raw?.id ?? ''),
   courseId: raw?.course != null ? String(raw.course) : String(raw?.courseId ?? ''),
   courseCode: raw?.course_code ?? raw?.courseCode ?? '',
@@ -742,6 +745,30 @@ const fromZoomSnakeCase = (raw: any) => ({
 export const getZoomSessions = (): Promise<any[]> => api.get('/zoom-sessions/').then(r => unwrapList<any>(r.data).map(fromZoomSnakeCase));
 export const addZoomSession = (data: any): Promise<any> => api.post('/zoom-sessions/', toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
 export const updateZoomSession = (id: string, data: any): Promise<any> => api.patch(`/zoom-sessions/${numericId(id)}/`, toZoomSnakeCase(data)).then(r => fromZoomSnakeCase(r.data));
+export const uploadZoomSessionPresentation = async (
+  id: string,
+  file: File
+): Promise<any> => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const { data } = await api.post(
+    `/zoom-sessions/${numericId(id)}/upload-presentation/`,
+    formData
+  );
+
+  return fromZoomSnakeCase(data);
+};
+
+export const clearZoomSessionPresentation = async (
+  id: string
+): Promise<any> => {
+  const { data } = await api.post(
+    `/zoom-sessions/${numericId(id)}/clear-presentation/`
+  );
+
+  return fromZoomSnakeCase(data);
+};
 export const deleteZoomSession = (id: string): Promise<void> => api.delete(`/zoom-sessions/${numericId(id)}/`).then(() => undefined);
 
 
@@ -1089,7 +1116,13 @@ export const CampusDatabase = {
   getMediaPosts, saveMediaPosts, addMediaPost, updateMediaPost, uploadMediaPost, deleteMediaPost, incrementMediaViews, toggleMediaLike,
 
   // Zoom
-  getZoomSessions, addZoomSession, updateZoomSession, deleteZoomSession,
+// Zoom
+getZoomSessions,
+addZoomSession,
+updateZoomSession,
+deleteZoomSession,
+uploadZoomSessionPresentation,
+clearZoomSessionPresentation,
 
   // 👇 MMS (Now using real Django API) 👇
   getInventoryItems, addInventoryItem, adjustStock, getMaterialRequisitions, addMaterialRequisition, updateMaterialRequisitionStatus, getGoodsReceivingRecords, addGoodsReceivingRecord, getFixedAssets, addFixedAsset, getInterStoreTransfers, addInterStoreTransfer, updateInterStoreTransferStatus, getPropertyReturns, addPropertyReturn, getCampusGatePasses, addCampusGatePass, updateGatePassStatus, getMaintenanceOrders, addMaintenanceOrder, updateMaintenanceOrderStatus, getPhysicalAudits, updatePhysicalAuditEntry, getPurchaseOrders, addPurchaseOrder, updatePurchaseOrderStatus, getVendors, addVendor, getAssetDisposals, addAssetDisposal, updateDisposalStatus, getHazardousMaterials, addHazardousMaterial, getStockBinCards, getDepartmentBudgets, updateDepartmentBudget, getDonationGrantAssets, addDonationGrantAsset,
