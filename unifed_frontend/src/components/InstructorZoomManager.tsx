@@ -54,17 +54,29 @@ export function InstructorZoomManager({
 
   const [previewRecordingSession, setPreviewRecordingSession] = useState<ZoomClassSession | null>(null);
 
+useEffect(() => {
+    if (selectedCourseId) {
+      setFormCourseId(String(selectedCourseId));
+    } else if (courses.length > 0 && !formCourseId) {
+      setFormCourseId(String(courses[0].id));
+    }
+  }, [selectedCourseId, courses]);
+
   useEffect(() => {
     loadSessions();
-  }, []);
+  }, [instructor.id]);
 
   const loadSessions = async () => {
     try {
       const all = await CampusDatabase.getZoomSessions();
-      // Only show sessions taught by this instructor
-      const mine = (all || []).filter(
-        (s: any) => String(s.instructorId) === String(instructor.id)
-      );
+      const myNumericId = toNumericId(instructor.id);
+      const mine = (all || []).filter((s: any) => {
+        const sessionNumericId = toNumericId(s.instructorId);
+        if (myNumericId !== null && sessionNumericId !== null) {
+          return myNumericId === sessionNumericId;
+        }
+        return String(s.instructorId) === String(instructor.id);
+      });
       setSessions(mine);
     } catch (err) {
       console.error("Failed to load zoom sessions:", err);
@@ -72,8 +84,9 @@ export function InstructorZoomManager({
     }
   };
 
-  const handleInstantStartClass = async () => {
-    const activeCourse = courses.find((c) => c.id === formCourseId) || courses[0];
+const handleInstantStartClass = async () => {
+    const activeCourse =
+      courses.find((c) => String(c.id) === String(formCourseId)) || courses[0];
     if (!activeCourse) {
       alert("Please create a course first before starting a Zoom class.");
       return;
@@ -154,7 +167,8 @@ export function InstructorZoomManager({
       return;
     }
 
-    const activeCourse = courses.find((c) => c.id === formCourseId) || courses[0];
+   const activeCourse =
+      courses.find((c) => String(c.id) === String(formCourseId)) || courses[0];
     if (!activeCourse) {
       alert("Please create a course first.");
       return;
@@ -223,9 +237,12 @@ export function InstructorZoomManager({
     try {
       await CampusDatabase.deleteZoomSession(id);
       await loadSessions();
-    } catch (err) {
-      console.error(err);
-      alert("Failed to delete session.");
+} catch (err: any) {
+      const detail = err?.response?.data
+        ? JSON.stringify(err.response.data)
+        : err?.message || "Unknown error";
+      console.error("Failed to delete session:", err?.response?.status, detail, err);
+      alert(`Failed to delete session: ${detail}`);
     }
   };
 
@@ -472,7 +489,7 @@ export function InstructorZoomManager({
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 rounded-xl bg-blue-100 text-blue-700"><Video className="w-5 h-5" /></div>
                 <div>
-                  <h3 className="font-bold text-base text-slate-900">Schedule Zoom Virtual Lecture</h3>
+<h3 className="font-bold text-base text-slate-900">Schedule Jitsi Virtual Lecture</h3>
                   <p className="text-xs text-slate-500">Set up an online lecture session for your enrolled students</p>
                 </div>
               </div>

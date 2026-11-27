@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { WhiteboardCanvas } from "./WhiteboardCanvas";
-import { JaaSMeeting } from "@jitsi/react-sdk";
+import { JitsiMeeting } from "@jitsi/react-sdk";
+
 interface ZoomClassroomModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -23,81 +24,207 @@ export function ZoomClassroomModal({
   const [session, setSession] = useState<ZoomClassSession>(initialSession);
   const isInstructor = currentUser.role === "INSTRUCTOR" || currentUser.role === "DEPARTMENT_HEAD";
 
-  const [isMuted, setIsMuted] = useState(isInstructor ? false : true);
-  const [isVideoOn, setIsVideoOn] = useState(true);
-  const [isScreenSharing, setIsScreenSharing] = useState(isInstructor);
+const [isMuted, setIsMuted] = useState(true);
+const [isVideoOn, setIsVideoOn] = useState(true);
+const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const recordingTimerRef = useRef<number | null>(null);
-    const [isHandRaised, setIsHandRaised] = useState(false);
+  const [isHandRaised, setIsHandRaised] = useState(false);
 
   const [viewMode, setViewMode] = useState<"speaker" | "gallery" | "whiteboard">("speaker");
   const [activeDrawer, setActiveDrawer] = useState<"chat" | "participants" | null>(null);
 
   const [chatInput, setChatInput] = useState("");
-    const [floatingEmojis, setFloatingEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
-      // 📄 PDF Presenter state
+  const [floatingEmojis, setFloatingEmojis] = useState<{ id: number; emoji: string; left: number }[]>([]);
+
+  // PDF Presenter state
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfName, setPdfName] = useState<string>("");
   const pdfInputRef = useRef<HTMLInputElement>(null);
-      // 🎥 Jitsi live video state
-  const [showJitsi, setShowJitsi] = useState(false);
-  const chatBottomRef = useRef<HTMLDivElement>(null);
-  const [copiedId, setCopiedId] = useState(false);
-  // ✅ Real webcam stream
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const [cameraError, setCameraError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isVideoOn) {
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      if (videoRef.current) videoRef.current.srcObject = null;
-      return;
+  // Jitsi live video state + per-open refresh counter
+  const [showJitsi, setShowJitsi] = useState(true);
+  const [jitsiOpenCount, setJitsiOpenCount] = useState(0);
+// Jitsi External API reference
+const jitsiCleanupRef = useRef<(() => void) | null>(null);
+const jitsiApiRef = useRef<any>(null);
+
+const [jitsiParticipants, setJitsiParticipants] = useState<
+  {
+    id: string;
+    displayName: string;
+    role: string;
+    isMuted: boolean;
+    isVideoMuted: boolean;
+  }[]
+>([]);
+const chatBottomRef = useRef<HTMLDivElement>(null);
+const [copiedId, setCopiedId] = useState(false);
+const streamRef = useRef<MediaStream | null>(null);
+const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+const [elapsedSeconds, setElapsedSeconds] = useState(0);
+useEffect(() => {
+  if (isOpen) {
+    setJitsiOpenCount((c) => c + 1);
+  } else {
+    jitsiCleanupRef.current?.();
+    jitsiCleanupRef.current = null;
+    jitsiApiRef.current = null;
+    setJitsiParticipants([]);
+  }
+}, [isOpen]);
+useEffect(() => {
+  if (viewMode !== "speaker" || !showJitsi) {
+    jitsiCleanupRef.current?.();
+    jitsiCleanupRef.current = null;
+    jitsiApiRef.current = null;
+    setJitsiParticipants([]);
+  }
+}, [viewMode, showJitsi]);
+
+const handleJitsiApiReady = (api: any) => {
+  jitsiCleanupRef.current?.();
+
+  jitsiApiRef.current = api;
+
+  const refreshParticipants = async () => {
+    try {
+      const result = await api.getRoomsInfo();
+
+      if (jitsiApiRef.current !== api) return;
+
+      const participants = (result.rooms ?? []).flatMap(
+        (room: any) => room.participants ?? []
+      );
+
+      setJitsiParticipants(
+        participants.map((participant: any) => ({
+          id: String(participant.id),
+          displayName: participant.displayName || "Unknown participant",
+          role: participant.role || "participant",
+          isMuted: Boolean(participant.audioMuted),
+          isVideoMuted: Boolean(participant.videoMuted),
+        }))
+      );
+    } catch (error) {
+      console.error("Failed to load Jitsi participants:", error);
     }
+  };
 
-    let cancelled = false;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 1280, height: 720, facingMode: "user" },
-          audio: false,
-        });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
-        setCameraError(null);
-      } catch (err: any) {
-        const msg =
-          err?.name === "NotAllowedError"
-            ? "Camera permission denied. Allow it in your browser settings."
-            : err?.name === "NotFoundError"
-            ? "No webcam found. Connect a camera and refresh."
-            : err?.name === "NotReadableError"
-            ? "Camera is in use by another app (Zoom, Teams, etc)."
-            : "Could not start camera.";
-        setCameraError(msg);
-        console.error("[webcam]", err);
-      }
-    })();
+  const handleParticipantJoined = (participant: any) => {
+    setJitsiParticipants((previous) => {
+      const id = String(participant.id);
 
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    };
-  }, [isVideoOn]);
-  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
+      if (previous.some((item) => item.id === id)) return previous;
+
+      return [
+        ...previous,
+        {
+          id,
+          displayName: participant.displayName || "Unknown participant",
+          role: participant.role || "participant",
+          isMuted: Boolean(participant.audioMuted),
+          isVideoMuted: Boolean(participant.videoMuted),
+        },
+      ];
+    });
+  };
+
+  const handleParticipantLeft = (participant: any) => {
+    setJitsiParticipants((previous) =>
+      previous.filter((item) => item.id !== String(participant.id))
+    );
+  };
+
+  const handleDisplayNameChange = (participant: any) => {
+    setJitsiParticipants((previous) =>
+      previous.map((item) =>
+        item.id === String(participant.id)
+          ? {
+              ...item,
+           displayName:
+  participant.displayName ||
+  participant.displayname ||
+  item.displayName,
+            }
+          : item
+      )
+    );
+  };
+
+  const handleParticipantMuted = (event: any) => {
+    setJitsiParticipants((previous) =>
+      previous.map((participant) =>
+        participant.id === String(event.participantId)
+          ? {
+              ...participant,
+              ...(event.mediaType === "audio"
+                ? { isMuted: event.isMuted }
+                : event.mediaType === "video"
+                ? { isVideoMuted: event.isMuted }
+                : {}),
+            }
+          : participant
+      )
+    );
+  };
+
+  const handleAudioMuteChanged = (event: any) => {
+    setIsMuted(event.muted);
+  };
+
+  const handleVideoMuteChanged = (event: any) => {
+    setIsVideoOn(!event.muted);
+  };
+
+  const handleScreenSharingChanged = (event: any) => {
+    setIsScreenSharing(event.on);
+  };
+
+  const listeners: [string, (...args: any[]) => void][] = [
+    ["participantJoined", handleParticipantJoined],
+    ["participantLeft", handleParticipantLeft],
+    ["displayNameChange", handleDisplayNameChange],
+    ["participantMuted", handleParticipantMuted],
+    ["audioMuteStatusChanged", handleAudioMuteChanged],
+    ["videoMuteStatusChanged", handleVideoMuteChanged],
+    ["screenSharingStatusChanged", handleScreenSharingChanged],
+  ];
+
+  listeners.forEach(([event, callback]) => {
+    api.addListener(event, callback);
+  });
+
+  jitsiCleanupRef.current = () => {
+    listeners.forEach(([event, callback]) => {
+      api.removeListener(event, callback);
+    });
+
+    if (jitsiApiRef.current === api) {
+      jitsiApiRef.current = null;
+    }
+  };
+
+  refreshParticipants();
+
+  api.isAudioMuted()
+    .then((muted: boolean) => {
+      if (jitsiApiRef.current === api) setIsMuted(muted);
+    })
+    .catch(console.error);
+
+  api.isVideoMuted()
+    .then((muted: boolean) => {
+      if (jitsiApiRef.current === api) setIsVideoOn(!muted);
+    })
+    .catch(console.error);
+};
+
+
   const sampleSlides = [
     {
       title: "1. Microservices Architectural Principles",
@@ -131,11 +258,12 @@ export function ZoomClassroomModal({
     },
   ];
 
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
   useEffect(() => {
+    if (!isOpen) return;
     const t = setInterval(() => setElapsedSeconds((p) => p + 1), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [isOpen]);
 
   const formatTimer = (totalSec: number) => {
     const hrs = Math.floor(totalSec / 3600);
@@ -148,9 +276,16 @@ export function ZoomClassroomModal({
   };
 
   useEffect(() => {
+    if (!isOpen) return;
     setSession(initialSession);
+    if (typeof (initialSession as any).jitsiEnabled === "boolean") {
+      setShowJitsi((initialSession as any).jitsiEnabled);
+    }
     const currentAttendees = initialSession.activeAttendees || [];
-    const exists = currentAttendees.some((a) => String(a.id) === String(currentUser.id));
+    const deduped = Array.from(
+      new Map(currentAttendees.map((a) => [String(a.id), a])).values()
+    );
+    const exists = deduped.some((a) => String(a.id) === String(currentUser.id));
     if (!exists) {
       const newAtt: ZoomAttendee = {
         id: String(currentUser.id),
@@ -158,24 +293,28 @@ export function ZoomClassroomModal({
         avatarUrl: (currentUser as any).avatarUrl,
         role: isInstructor ? "INSTRUCTOR" : "STUDENT",
         joinedAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        isMuted: isInstructor ? false : true,
+        isMuted: true,
         isVideoOn: true,
         isHandRaised: false
       };
-      const updated = { ...initialSession, activeAttendees: [...currentAttendees, newAtt] };
+      const nextAttendees = [...deduped, newAtt];
+      const updated = { ...initialSession, activeAttendees: nextAttendees };
       setSession(updated);
-      CampusDatabase.updateZoomSession(String(initialSession.id), { activeAttendees: updated.activeAttendees })
+      CampusDatabase.updateZoomSession(String(initialSession.id), { activeAttendees: nextAttendees })
         .then((res) => { if (onSessionUpdated) onSessionUpdated(res); })
         .catch((err) => console.error("Failed to register attendee:", err));
+    } else if (deduped.length !== currentAttendees.length) {
+      setSession({ ...initialSession, activeAttendees: deduped });
     }
-  }, [initialSession.id, currentUser.id]);
+  }, [isOpen, initialSession.id, currentUser.id]);
 
   useEffect(() => {
     if (activeDrawer === "chat") {
       chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [session.chatMessages?.length, activeDrawer]);
-      const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+
+  const handlePdfUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.type !== "application/pdf") {
@@ -202,7 +341,6 @@ export function ZoomClassroomModal({
     }
 
     if (isRecording) {
-      // STOP RECORDING
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
         mediaRecorderRef.current.stop();
       }
@@ -214,10 +352,24 @@ export function ZoomClassroomModal({
       return;
     }
 
-    // START RECORDING
-    if (!streamRef.current) {
-      alert("Please turn on your camera before recording.");
-      return;
+    let sourceStream: MediaStream | null = streamRef.current;
+    let fallbackCanvas: HTMLCanvasElement | null = null;
+    if (!sourceStream || sourceStream.getVideoTracks().length === 0) {
+      fallbackCanvas = document.createElement("canvas");
+      fallbackCanvas.width = 1280;
+      fallbackCanvas.height = 720;
+      const ctx = fallbackCanvas.getContext("2d");
+      if (ctx) {
+        ctx.fillStyle = "#090d16";
+        ctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
+        ctx.fillStyle = "#e2e8f0";
+        ctx.font = "28px sans-serif";
+        ctx.fillText(`${session.courseCode}: ${session.title}`, 60, 120);
+        ctx.font = "20px sans-serif";
+        ctx.fillStyle = "#94a3b8";
+        ctx.fillText(`Instructor: ${session.instructorName}`, 60, 165);
+      }
+      sourceStream = fallbackCanvas.captureStream(15);
     }
 
     try {
@@ -228,7 +380,7 @@ export function ZoomClassroomModal({
         ? "video/webm;codecs=vp8"
         : "video/webm";
 
-      const recorder = new MediaRecorder(streamRef.current, { mimeType });
+      const recorder = new MediaRecorder(sourceStream, { mimeType });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
@@ -260,19 +412,25 @@ export function ZoomClassroomModal({
 
   useEffect(() => {
     return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        mediaRecorderRef.current.stop();
+      }
       if (recordingUrl) URL.revokeObjectURL(recordingUrl);
     };
   }, [recordingUrl]);
+
   const handleEmojiReaction = async (emoji: string) => {
-    // 1. Trigger the floating animation
     const id = Date.now();
-    const left = Math.random() * 80 + 10; // random horizontal position (10% - 90%)
+    const left = Math.random() * 80 + 10;
     setFloatingEmojis((prev) => [...prev, { id, emoji, left }]);
     setTimeout(() => {
       setFloatingEmojis((prev) => prev.filter((e) => e.id !== id));
     }, 2500);
 
-    // 2. Save to chat as a system message so it persists
     const newMsg: ZoomChatMessage = {
       id: "emoji-" + id,
       senderId: currentUser.id,
@@ -281,7 +439,7 @@ export function ZoomClassroomModal({
       message: `Reacted with ${emoji}`,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
     };
-    
+
     const updatedMessages = [...(session.chatMessages || []), newMsg];
     const updated = { ...session, chatMessages: updatedMessages };
     setSession(updated);
@@ -293,6 +451,7 @@ export function ZoomClassroomModal({
       console.error("Failed to save reaction:", err);
     }
   };
+
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!chatInput.trim()) return;
@@ -347,7 +506,7 @@ export function ZoomClassroomModal({
   };
 
   const handleLowerAllHands = async () => {
-        if (!isInstructor) {
+    if (!isInstructor) {
       console.warn("[SECURITY] Non-instructor attempted to lower hands. Blocked.");
       return;
     }
@@ -362,26 +521,35 @@ export function ZoomClassroomModal({
     }
   };
 
-  const handleMuteAll = async () => {
-        if (!isInstructor) {
-      console.warn("[SECURITY] Non-instructor attempted to mute all. Blocked.");
-      return;
-    }
-    const updatedAttendees = (session.activeAttendees || []).map((a) =>
-      a.role === "STUDENT" ? { ...a, isMuted: true } : a
-    );
-    const updated = { ...session, activeAttendees: updatedAttendees };
-    setSession(updated);
-    try {
-      const res = await CampusDatabase.updateZoomSession(String(session.id), { activeAttendees: updatedAttendees });
-      if (onSessionUpdated) onSessionUpdated(res);
-    } catch (err) {
-      console.error(err);
-    }
-  };
+
+const handleMuteAll = async () => {
+  if (!isInstructor) {
+    console.warn("[SECURITY] Non-instructor attempted to mute all. Blocked.");
+    return;
+  }
+
+  const api = jitsiApiRef.current;
+
+  if (!api) {
+    alert("The live meeting is not connected.");
+    return;
+  }
+
+  try {
+    // Mute audio for everyone in the Jitsi meeting.
+    // Requires the current Jitsi participant to be a moderator.
+    api.executeCommand("muteEveryone", "audio");
+
+    console.info("[JITSI] Mute All command sent.");
+  } catch (error) {
+    console.error("[JITSI] Failed to send Mute All command:", error);
+    alert("Could not send the Mute All command.");
+  }
+};
+
 
   const handleEndSessionForEveryone = async () => {
-        if (!isInstructor) {
+    if (!isInstructor) {
       console.warn("[SECURITY] Non-instructor attempted to end session. Blocked.");
       return;
     }
@@ -389,8 +557,7 @@ export function ZoomClassroomModal({
     const updated = {
       ...session,
       status: "COMPLETED" as const,
-      recordingUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-      recordingDuration: formatTimer(elapsedSeconds),
+      ...(recordingUrl ? { recordingUrl, recordingDuration: formatTimer(recordingDuration || elapsedSeconds) } : {}),
       lectureNotes: session.lectureNotes || "Official lecture concluded with recorded presentation and student Q&A."
     };
     setSession(updated);
@@ -427,9 +594,9 @@ export function ZoomClassroomModal({
           className="w-full max-w-7xl h-[92vh] max-h-[900px] flex flex-col bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden text-slate-100"
         >
           {/* Top Bar */}
-<div className="flex items-center justify-between px-4 py-3 zoom-glass-deep border-b border-slate-800 shrink-0">
-              <div className="flex items-center space-x-3">
-<div className="flex items-center space-x-2 zoom-crimson-gradient text-red-100 border border-red-500/40 px-2.5 py-1 rounded-lg text-xs font-mono font-bold tracking-wider shadow-sm shadow-red-900/30">
+          <div className="flex items-center justify-between px-4 py-3 zoom-glass-deep border-b border-slate-800 shrink-0">
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-2 zoom-crimson-gradient text-red-100 border border-red-500/40 px-2.5 py-1 rounded-lg text-xs font-mono font-bold tracking-wider shadow-sm shadow-red-900/30">
                 <span className="w-2 h-2 rounded-full bg-red-100 zoom-live-dot" />
                 <span>ZOOM CLASSROOM</span>
               </div>
@@ -450,11 +617,11 @@ export function ZoomClassroomModal({
               </div>
             </div>
             <div className="flex items-center space-x-2">
-<div className="flex items-center space-x-1.5 px-3 py-1 bg-slate-800/80 border border-slate-700/60 rounded-lg text-xs font-mono text-slate-300" title="Session timer · not recording">
-  <span className="w-2 h-2 rounded-full bg-amber-400" />
-  <span className="font-bold">{formatTimer(elapsedSeconds)}</span>
-  <span className="text-[9px] text-amber-300 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded ml-1">DEMO</span>
-</div>
+              <div className="flex items-center space-x-1.5 px-3 py-1 bg-slate-800/80 border border-slate-700/60 rounded-lg text-xs font-mono text-slate-300" title="Session timer · not recording">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span className="font-bold">{formatTimer(elapsedSeconds)}</span>
+                <span className="text-[9px] text-amber-300 font-bold bg-amber-950/40 px-1.5 py-0.5 rounded ml-1">DEMO</span>
+              </div>
               <button
                 type="button"
                 onClick={handleCopyMeetingDetails}
@@ -480,8 +647,7 @@ export function ZoomClassroomModal({
             </div>
           </div>
 
-          {/* Main Content */}
-                    {/* Recording banner + download prompt */}
+          {/* Recording banner + download prompt */}
           {isRecording && (
             <div className="bg-red-950/80 border-b border-red-600/50 px-4 py-1.5 flex items-center justify-center space-x-2 text-xs shrink-0 z-40">
               <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
@@ -513,8 +679,10 @@ export function ZoomClassroomModal({
               </button>
             </div>
           )}
+
+          {/* Main Content */}
           <div className="flex-1 flex overflow-hidden relative">
-                        {/* Floating Emoji Animation Layer */}
+            {/* Floating Emoji Animation Layer */}
             <div className="absolute inset-0 pointer-events-none overflow-hidden z-40">
               {floatingEmojis.map((e) => (
                 <motion.div
@@ -529,6 +697,7 @@ export function ZoomClassroomModal({
                 </motion.div>
               ))}
             </div>
+
             <div className="flex-1 flex flex-col bg-slate-900/50 p-2 sm:p-4 overflow-y-auto">
               {/* Speaker View */}
               {viewMode === "speaker" && (
@@ -561,16 +730,59 @@ export function ZoomClassroomModal({
                         </button>
                       </div>
                     </div>
-                      <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
-                        {showJitsi ? (
-                          <div className="w-full h-full bg-black">
-                            <JaaSMeeting
-                              appId="vpaas-magic-cookie-ef8460b035634e9eb0faebf872b10662"
-                              roomName={`MAU-Classroom-${session.id}`}
+
+                    <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
+                      {showJitsi ? (
+                        <div className="w-full h-full flex flex-col bg-black">
+                          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 text-[11px] shrink-0">
+                            <span className="text-slate-400">
+                              Live Room:{" "}
+                              <span className="font-mono text-slate-200">
+                               MAU-Classroom-{session.id}
+                              </span>
+                            </span>
+                            <div className="flex items-center space-x-2">
+                              <button
+                                type="button"
+                              onClick={() => {
+  jitsiCleanupRef.current?.();
+  jitsiCleanupRef.current = null;
+  jitsiApiRef.current = null;
+  setJitsiParticipants([]);
+  setJitsiOpenCount((c) => c + 1);
+}}
+                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                              >
+                                Reload Video
+                              </button>
+                              <button
+                                type="button"
+onClick={() => {
+  jitsiCleanupRef.current?.();
+  jitsiCleanupRef.current = null;
+  setJitsiParticipants([]);
+  setShowJitsi(false);
+}}
+                                className="px-2 py-0.5 rounded bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40"
+                              >
+                                Slides / PDF
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex-1 w-full min-h-0">
+                            <JitsiMeeting
+                              key={`jitsi-${session.id}-${jitsiOpenCount}`}
+                              domain="meet.jit.si"
+                              onApiReady={handleJitsiApiReady}
+                             roomName={`MAU-Classroom-${session.id}`}
                               configOverwrite={{
                                 startWithAudioMuted: true,
+                                startWithVideoMuted: false,
                                 disableModeratorIndicator: true,
                                 prejoinPageEnabled: false,
+                                enableLobby: false,
+                                enableUserRolesBasedOnToken: false,
+                                requireDisplayName: false,
                               }}
                               interfaceConfigOverwrite={{
                                 DISABLE_JOIN_LEAVE_NOTIFICATIONS: true,
@@ -579,6 +791,12 @@ export function ZoomClassroomModal({
                                 displayName: currentUser.fullName,
                                 email: currentUser.email,
                               }}
+onReadyToClose={() => {
+  jitsiCleanupRef.current?.();
+  jitsiCleanupRef.current = null;
+  setJitsiParticipants([]);
+  setShowJitsi(false);
+}}
                               getIFrameRef={(iframeRef) => {
                                 iframeRef.style.height = "100%";
                                 iframeRef.style.width = "100%";
@@ -586,117 +804,90 @@ export function ZoomClassroomModal({
                               }}
                             />
                           </div>
-                        ) : pdfUrl ? (
-                          <div className="w-full h-full flex flex-col">
-                            <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-xs shrink-0">
-                              <span className="text-slate-300 font-medium truncate">📄 {pdfName}</span>
-                              <button onClick={handleClearPdf} className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10">Close PDF</button>
-                            </div>
-                            <iframe
-                              src={`${pdfUrl}#toolbar=0&navpanes=0`}
-                              className="w-full flex-1 border-none bg-white"
-                              title="PDF Presentation"
-                            />
+                        </div>
+                      ) : pdfUrl ? (
+                        <div className="w-full h-full flex flex-col">
+                          <div className="bg-slate-900 border-b border-slate-800 px-4 py-1.5 flex items-center justify-between text-xs shrink-0">
+                            <span className="text-slate-300 font-medium truncate">📄 {pdfName}</span>
+                            <button onClick={handleClearPdf} className="text-red-400 hover:text-red-300 px-2 py-0.5 rounded bg-red-500/10">Close PDF</button>
                           </div>
-                        ) : (
-                          <div className="max-w-2xl w-full bg-slate-900/90 border border-slate-800/80 rounded-xl p-6 shadow-2xl">
-                            <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-3">
-                              <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
-                                MAU Computer Science & Engineering
-                              </span>
-                              <span className="text-xs text-slate-400">Week 7 • Lecture 14</span>
-                            </div>
-                            <h2 className="text-xl font-bold text-white mb-1">
-                              {sampleSlides[currentSlideIndex].title}
-                            </h2>
-                            <p className="text-xs text-slate-300 mb-4">
-                              {sampleSlides[currentSlideIndex].subtitle}
-                            </p>
-                            <div className="p-3.5 rounded-lg bg-slate-950/80 border border-blue-500/30 text-blue-300 font-mono text-xs my-3 text-center">
-                              {sampleSlides[currentSlideIndex].diagram}
-                            </div>
-                            <div className="space-y-2 mt-4">
-                              {sampleSlides[currentSlideIndex].points.map((pt, idx) => (
-                                <div key={idx} className="flex items-start space-x-2 text-xs text-slate-300">
-                                  <span className="text-blue-400 mt-0.5">•</span>
-                                  <span>{pt}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    {/* Instructor PIP — real webcam when video on */}
-                    <div className="absolute top-12 right-4 w-44 sm:w-56 h-32 sm:h-40 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500/80 bg-slate-900">
-                      <div className="flex-1 h-full relative flex items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950">
-                        {isVideoOn && !cameraError ? (
-                          <video
-                            ref={videoRef}
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover"
+                          <iframe
+                            src={`${pdfUrl}#toolbar=0&navpanes=0`}
+                            className="w-full flex-1 border-none bg-white"
+                            title="PDF Presentation"
                           />
-                        ) : (
-                          <div className="text-center px-2">
-                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xl mx-auto">
-                              {currentUser.fullName.charAt(0)}
-                            </div>
-                            {cameraError && (
-                              <p className="text-[9px] text-amber-300 mt-1 leading-tight">
-                                {cameraError}
-                              </p>
-                            )}
+                        </div>
+                      ) : (
+                        <div className="max-w-2xl w-full bg-slate-900/90 border border-slate-800/80 rounded-xl p-6 shadow-2xl">
+                          <div className="flex items-center justify-between mb-3 border-b border-slate-800 pb-3">
+                            <span className="text-xs font-mono font-bold text-blue-400 uppercase tracking-wider">
+                              MAU Computer Science & Engineering
+                            </span>
+                            <span className="text-xs text-slate-400">Week 7 • Lecture 14</span>
                           </div>
-                        )}
-                      </div>
-                      <div className="px-2 py-1 bg-slate-950/90 flex items-center justify-between text-[11px]">
-                        <span className="truncate text-slate-200 font-medium">
-                          {currentUser.fullName} (You)
-                        </span>
-                        {isMuted ? <MicOff className="w-3 h-3 text-red-400 shrink-0" /> : <Mic className="w-3 h-3 text-emerald-400 shrink-0" />}
-                      </div>
+                          <h2 className="text-xl font-bold text-white mb-1">
+                            {sampleSlides[currentSlideIndex].title}
+                          </h2>
+                          <p className="text-xs text-slate-300 mb-4">
+                            {sampleSlides[currentSlideIndex].subtitle}
+                          </p>
+                          <div className="p-3.5 rounded-lg bg-slate-950/80 border border-blue-500/30 text-blue-300 font-mono text-xs my-3 text-center">
+                            {sampleSlides[currentSlideIndex].diagram}
+                          </div>
+                          <div className="space-y-2 mt-4">
+                            {sampleSlides[currentSlideIndex].points.map((pt, idx) => (
+                              <div key={idx} className="flex items-start space-x-2 text-xs text-slate-300">
+                                <span className="text-blue-400 mt-0.5">•</span>
+                                <span>{pt}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
+
+                    {!showJitsi && (
+                      <div className="absolute top-12 right-4 w-44 sm:w-56 h-32 sm:h-40 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500/80 bg-slate-900">
+                        <div className="flex-1 h-full relative flex items-center justify-center bg-gradient-to-b from-slate-800 to-slate-950">
+                          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-xl mx-auto">
+                            {currentUser.fullName.charAt(0)}
+                          </div>
+                        </div>
+                        <div className="px-2 py-1 bg-slate-950/90 flex items-center justify-between text-[11px]">
+                          <span className="truncate text-slate-200 font-medium">
+                            {currentUser.fullName} (You)
+                          </span>
+                          {isMuted ? <MicOff className="w-3 h-3 text-red-400 shrink-0" /> : <Mic className="w-3 h-3 text-emerald-400 shrink-0" />}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Horizontal attendees */}
                   <div className="h-28 flex items-center space-x-2.5 overflow-x-auto pb-1 shrink-0">
-<div className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-1 flex flex-col justify-between shrink-0 overflow-hidden">
-                      <div className="flex-1 flex items-center justify-center relative overflow-hidden rounded">
-                        {isVideoOn && !cameraError ? (
-                          <video
-                            autoPlay
-                            playsInline
-                            muted
-                            className="w-full h-full object-cover rounded"
-                            ref={(el) => {
-                              // Reuse the same stream in multiple <video> tags
-                              if (el && streamRef.current && el.srcObject !== streamRef.current) {
-                                el.srcObject = streamRef.current;
-                                el.play().catch(() => {});
-                              }
-                            }}
-                          />
-                        ) : (
+                    {!showJitsi && (
+                      <div className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-1 flex flex-col justify-between shrink-0 overflow-hidden">
+                        <div className="flex-1 flex items-center justify-center relative overflow-hidden rounded">
                           <div className="relative">
                             <div className="w-10 h-10 rounded-full bg-blue-700 flex items-center justify-center font-bold text-xs text-white">
                               {currentUser.fullName.charAt(0)}
                             </div>
                             {isHandRaised && <span className="absolute -top-1 -right-2 text-sm">✋</span>}
                           </div>
-                        )}
+                        </div>
+                        <div className="flex items-center justify-between px-1.5 py-0.5 bg-slate-900/90 rounded text-[10px]">
+                          <span className="truncate text-slate-300 font-medium">You</span>
+                          {isMuted ? <MicOff className="w-3 h-3 text-red-400" /> : <Mic className="w-3 h-3 text-emerald-400" />}
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between px-1.5 py-0.5 bg-slate-900/90 rounded text-[10px]">
-                        <span className="truncate text-slate-300 font-medium">You</span>
-                        {isMuted ? <MicOff className="w-3 h-3 text-red-400" /> : <Mic className="w-3 h-3 text-emerald-400" />}
-                      </div>
-                    </div>
+                    )}
                     {(session.activeAttendees || [])
                       .filter((a) => String(a.id) !== String(currentUser.id) && a.role === "STUDENT")
                       .map((att) => (
                         <div
                           key={att.id}
-className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-1 flex flex-col justify-between shrink-0 overflow-hidden"                        >
+                          className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-1 flex flex-col justify-between shrink-0 overflow-hidden"
+                        >
                           <div className="flex-1 flex items-center justify-center">
                             <div className="relative">
                               <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-xs text-slate-200">
@@ -706,8 +897,8 @@ className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-7
                             </div>
                           </div>
                           <div className="flex items-center justify-between px-1.5 py-0.5 bg-slate-900/90 rounded text-[10px]">
-                            <span className="truncate max-w-[80px] text-slate-300">{att.name}</span>
-                            {att.isMuted ? <MicOff className="w-3 h-3 text-slate-500" /> : <Mic className="w-3 h-3 text-emerald-400" />}
+                            <span className="truncate text-slate-300">{att.name}</span>
+                            {att.isMuted ? <MicOff className="w-3 h-3 text-red-400 shrink-0" /> : <Mic className="w-3 h-3 text-emerald-400 shrink-0" />}
                           </div>
                         </div>
                       ))}
@@ -717,400 +908,417 @@ className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-7
 
               {/* Gallery View */}
               {viewMode === "gallery" && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 h-full overflow-y-auto">
-                  <div className="aspect-video rounded-xl zoom-glass zoom-video-tile border-2 border-red-500/50 p-2 flex flex-col justify-between">
-                    <div className="flex-1 flex flex-col items-center justify-center">
-                      <div className="w-14 h-14 rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 flex items-center justify-center text-white font-bold text-lg">
-                        {session.instructorName.charAt(0)}
-                      </div>
-                      <span className="text-[10px] text-emerald-400 font-medium mt-1">Lecturing</span>
-                    </div>
-                    <div className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded text-xs">
-                      <span className="text-slate-200 font-semibold truncate">{session.instructorName} (Host)</span>
-                      <Mic className="w-3.5 h-3.5 text-emerald-400" />
-                    </div>
-                  </div>
-                  <div 
-                  className="aspect-video rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-2 flex flex-col justify-between overflow-hidden">
-                    <div className="flex-1 flex flex-col items-center justify-center relative overflow-hidden rounded">
-                      {isVideoOn && !cameraError ? (
-                        <video
-                          autoPlay
-                          playsInline
-                          muted
-                          className="w-full h-full object-cover rounded"
-                          ref={(el) => {
-                            if (el && streamRef.current && el.srcObject !== streamRef.current) {
-                              el.srcObject = streamRef.current;
-                              el.play().catch(() => {});
-                            }
-                          }}
-                        />
-                      ) : (
-                        <>
-                          <div className="w-14 h-14 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-lg">
-                            {currentUser.fullName.charAt(0)}
-                          </div>
-                          {isHandRaised && <span className="text-base">✋</span>}
-                        </>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded text-xs">
-                      <span className="text-slate-200 font-semibold truncate">You</span>
-                      {isMuted ? <MicOff className="w-3.5 h-3.5 text-red-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
-                    </div>
-                  </div>
-                  {(session.activeAttendees || [])
-                    .filter((a) => String(a.id) !== String(currentUser.id) && a.role === "STUDENT")
-                    .map((att) => (
-                      <div key={att.id} className="aspect-video rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-2 flex flex-col justify-between">
-                        <div className="flex-1 flex flex-col items-center justify-center">
-                          <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-200 font-bold text-lg">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 auto-rows-fr h-full">
+                  {(session.activeAttendees || []).map((att) => (
+                    <div
+                      key={att.id}
+                      className="rounded-xl zoom-glass zoom-video-tile border border-slate-800 p-3 flex flex-col justify-between min-h-[160px]"
+                    >
+                      <div className="flex-1 flex items-center justify-center">
+                        <div className="relative">
+                          <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-base text-slate-200">
                             {att.name.charAt(0)}
                           </div>
-                          {att.isHandRaised && <span className="text-base">✋</span>}
-                        </div>
-                        <div className="flex items-center justify-between px-2 py-1 bg-slate-900 rounded text-xs">
-                          <span className="text-slate-300 truncate">{att.name}</span>
-                          {att.isMuted ? <MicOff className="w-3.5 h-3.5 text-slate-500" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
+                          {att.isHandRaised && <span className="absolute -top-1 -right-2 text-base">✋</span>}
                         </div>
                       </div>
-                    ))}
+                      <div className="flex items-center justify-between px-2 py-1 bg-slate-900/90 rounded-lg text-xs">
+                        <span className="truncate text-slate-200 font-medium">{att.name}</span>
+                        {att.isMuted ? <MicOff className="w-3.5 h-3.5 text-red-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {/* Whiteboard View */}
               {/* Whiteboard View */}
               {viewMode === "whiteboard" && (
-                <div className="flex-1 flex flex-col bg-slate-950 border border-slate-800 rounded-xl p-3 overflow-hidden min-h-0">
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-800 shrink-0">
-                    <div>
-                      <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                        <BookOpen className="w-4 h-4 text-red-400" />
-                        <span>Live Whiteboard</span>
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        {session.courseCode} · {isInstructor ? "You are presenting" : `${session.instructorName} is presenting`}
-                      </p>
-                    </div>
-                  </div>
-                  <WhiteboardCanvas isInstructor={isInstructor} />
+                <div className="flex-1 rounded-xl overflow-hidden border border-slate-800 bg-slate-950">
+                  <WhiteboardCanvas />
                 </div>
               )}
             </div>
 
-            {/* Right drawer: chat / participants */}
-            <AnimatePresence>
-              {activeDrawer && (
-                <motion.div
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 340, opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink-0 overflow-hidden shadow-2xl"                >
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800 bg-slate-900/90">
-                    <div className="flex items-center space-x-2">
-                      {activeDrawer === "chat" && <MessageSquare className="w-4 h-4 text-blue-400" />}
-                      {activeDrawer === "participants" && <Users className="w-4 h-4 text-blue-400" />}
-                      <span className="font-semibold text-sm text-white">
-                        {activeDrawer === "chat" ? "Meeting Chat" : `Participants (${(session.activeAttendees || []).length})`}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => setActiveDrawer(null)}
-                      className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
+            {/* Side Drawer (Chat / Participants) */}
+            {activeDrawer && (
+              <div className="w-80 sm:w-96 border-l border-slate-800 bg-slate-900/95 flex flex-col shrink-0">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+                  <span className="font-semibold text-sm text-slate-100 capitalize">{activeDrawer}</span>
+                  <button
+                    onClick={() => setActiveDrawer(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
 
-                  {activeDrawer === "chat" && (
-                    <div className="flex-1 flex flex-col h-full overflow-hidden">
-                      <div className="flex-1 p-3 space-y-3 overflow-y-auto">
-                        {(session.chatMessages || []).map((msg) => {
-                          const isMe = String(msg.senderId) === String(currentUser.id);
-                          return (
-                            <div key={msg.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-                              <div className="flex items-center space-x-1.5 mb-0.5">
-                                <span className={`text-[11px] font-semibold ${msg.senderRole === "INSTRUCTOR" ? "text-emerald-400" : "text-blue-300"}`}>
-                                  {msg.senderName}
-                                </span>
-                                <span className="text-[9px] text-slate-500 font-mono">{msg.timestamp}</span>
-                              </div>
-                              <div className={`px-3 py-2 rounded-xl text-xs max-w-[90%] ${
-                                isMe
-                                  ? "bg-blue-600 text-white rounded-tr-none"
-                                  : msg.senderId === "system"
-                                  ? "bg-amber-950/40 text-amber-300 border border-amber-500/30"
-                                  : "bg-slate-800 text-slate-200 rounded-tl-none border border-slate-700/60"
-                              }`}>
-                                {msg.message}
-                              </div>
-                            </div>
-                          );
-                        })}
-                        <div ref={chatBottomRef} />
-                      </div>
-                      <form onSubmit={handleSendMessage} className="p-2.5 border-t border-slate-800 bg-slate-950 flex items-center space-x-2">
-                        <input
-                          type="text"
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Type a message..."
-                          className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-hidden focus:border-blue-500"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!chatInput.trim()}
-                          className="p-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg"
-                        >
-                          <Send className="w-3.5 h-3.5" />
-                        </button>
-                      </form>
-                    </div>
-                  )}
-
-                  {activeDrawer === "participants" && (
-                    <div className="flex-1 flex flex-col h-full overflow-hidden">
-                      {isInstructor && (
-                        <div className="p-3 border-b border-slate-800 bg-slate-950 flex items-center space-x-2">
-                          <button
-                            onClick={handleMuteAll}
-                            className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700"
-                          >
-                            Mute All
-                          </button>
-                          <button
-                            onClick={handleLowerAllHands}
-                            className="flex-1 py-1.5 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700"
-                          >
-                            Lower All Hands
-                          </button>
-                        </div>
-                      )}
-                      <div className="flex-1 p-3 space-y-2 overflow-y-auto">
-                        {(session.activeAttendees || []).map((att) => (
-                          <div
-                            key={att.id}
-                            className="flex items-center justify-between p-2 rounded-lg bg-slate-800/60 border border-slate-700/50 text-xs"
-                          >
-                            <div className="flex items-center space-x-2.5 truncate">
-                              <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center font-bold text-slate-200 text-xs shrink-0">
-                                {att.name.charAt(0)}
-                              </div>
-                              <div className="truncate">
-                                <span className="font-medium text-slate-200 block truncate">
-                                  {att.name} {String(att.id) === String(currentUser.id) ? "(You)" : ""}
-                                </span>
-                                <span className="text-[10px] text-slate-400">Joined {att.joinedAt}</span>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-1.5 shrink-0">
-                              {att.isHandRaised && <span className="text-xs">✋</span>}
-                              {att.isMuted ? <MicOff className="w-3.5 h-3.5 text-slate-500" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
-                            </div>
+                {activeDrawer === "chat" ? (
+                  <>
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2.5 text-xs">
+                      {(session.chatMessages || []).map((msg) => (
+                        <div key={msg.id} className="p-2.5 rounded-xl bg-slate-800/70 border border-slate-700/50">
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+                            <span className="font-semibold text-slate-200">{msg.senderName}</span>
+                            <span>{msg.timestamp}</span>
                           </div>
-                        ))}
-                      </div>
+                          <p className="text-slate-200 break-words">{msg.message}</p>
+                        </div>
+                      ))}
+                      <div ref={chatBottomRef} />
                     </div>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
+                    <form onSubmit={handleSendMessage} className="p-3 border-t border-slate-800 flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={(e) => setChatInput(e.target.value)}
+                        placeholder="Type a message..."
+                        className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-blue-500"
+                      />
+                      <button
+                        type="submit"
+                        className="p-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    </form>
+                  </>
+                ) : (
+                  <div className="flex-1 overflow-y-auto p-3 space-y-2 text-xs">
+                    {isInstructor && (
+                      <div className="flex items-center space-x-2 pb-2 border-b border-slate-800">
+                        <button
+                          type="button"
+                          onClick={handleMuteAll}
+                          className="flex-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                        >
+                          Mute All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleLowerAllHands}
+                          className="flex-1 py-1.5 px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+                        >
+                          Lower Hands
+                        </button>
+                      </div>
+                    )}
+{/* Live Jitsi participants */}
+<div className="pb-2 border-b border-slate-800">
+  <div className="flex items-center justify-between mb-2">
+    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+      Live Meeting
+    </span>
+    <span className="text-[10px] text-slate-400">
+      {jitsiParticipants.length} connected
+    </span>
+  </div>
+
+  {jitsiParticipants.length === 0 ? (
+    <p className="text-[11px] text-slate-500 py-2">
+      Waiting for live participants...
+    </p>
+  ) : (
+    jitsiParticipants.map((participant) => (
+      <div
+        key={participant.id}
+        className="flex items-center justify-between p-2 mb-1 rounded-xl bg-emerald-950/20 border border-emerald-800/30"
+      >
+        <div className="flex items-center space-x-2 truncate">
+          <div className="w-7 h-7 rounded-full bg-emerald-900/60 flex items-center justify-center font-bold text-[11px] shrink-0">
+            {participant.displayName.charAt(0).toUpperCase()}
+          </div>
+          <span className="truncate text-slate-200 font-medium">
+            {participant.displayName}
+          </span>
+          {participant.role === "moderator" && (
+            <span className="text-[9px] text-blue-300">Host</span>
+          )}
+        </div>
+
+<div className="flex items-center gap-2 shrink-0">
+  {participant.isMuted ? (
+    <MicOff
+      className="w-3.5 h-3.5 text-red-400"
+      title="Microphone muted"
+    />
+  ) : (
+    <Mic
+      className="w-3.5 h-3.5 text-emerald-400"
+      title="Microphone on"
+    />
+  )}
+
+  {participant.isVideoMuted ? (
+    <VideoOff
+      className="w-3.5 h-3.5 text-red-400"
+      title="Camera off"
+    />
+  ) : (
+    <Video
+      className="w-3.5 h-3.5 text-emerald-400"
+      title="Camera on"
+    />
+  )}
+</div>
+      </div>
+    ))
+  )}
+</div>
+
+{/* Existing database attendees */}
+<div className="pt-2">
+  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+    Registered Attendees
+  </p>
+
+  {(session.activeAttendees || []).map((att) => (
+    <div
+      key={att.id}
+      className="flex items-center justify-between p-2 mb-1 rounded-xl bg-slate-800/60 border border-slate-700/40"
+    >
+      <div className="flex items-center space-x-2 truncate">
+        <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center font-bold text-[11px] shrink-0">
+          {att.name.charAt(0)}
+        </div>
+        <span className="truncate text-slate-200 font-medium">{att.name}</span>
+        {att.isHandRaised && <span>✋</span>}
+      </div>
+      {att.isMuted ? (
+        <MicOff className="w-3.5 h-3.5 text-red-400 shrink-0" />
+      ) : (
+        <Mic className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+      )}
+    </div>
+  ))}
+</div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* Bottom Toolbar */}
-<div className="h-18 px-4 zoom-glass-deep border-t border-slate-800 flex items-center justify-between shrink-0">
-              <div className="flex items-center space-x-2 sm:space-x-3">
-              {/* View switcher */}
-              <div className="flex items-center bg-slate-800/80 border border-slate-700 rounded-xl p-0.5">
-                <button
-                  type="button"
-                  onClick={() => setViewMode("speaker")}
-                  title="Speaker view"
-                  className={`flex items-center justify-center px-2.5 py-1.5 rounded-lg transition ${
-                    viewMode === "speaker"
-                      ? "bg-red-600/30 text-red-300 border border-red-500/40"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <Presentation className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("gallery")}
-                  title="Gallery view"
-                  className={`flex items-center justify-center px-2.5 py-1.5 rounded-lg transition ${
-                    viewMode === "gallery"
-                      ? "bg-red-600/30 text-red-300 border border-red-500/40"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <LayoutGrid className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode("whiteboard")}
-                  title="Whiteboard"
-                  className={`flex items-center justify-center px-2.5 py-1.5 rounded-lg transition ${
-                    viewMode === "whiteboard"
-                      ? "bg-red-600/30 text-red-300 border border-red-500/40"
-                      : "text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  <PenTool className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="w-px h-8 bg-slate-700 hidden sm:block" />
-
+          {/* Bottom Control Bar */}
+          <div className="px-3 sm:px-5 py-2.5 zoom-glass-deep border-t border-slate-800 flex flex-wrap items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center space-x-1.5">
               <button
-                onClick={() => setIsMuted(!isMuted)}
-                className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl border transition ${
-                  isMuted ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-slate-800 border-slate-700 text-emerald-400"
+                type="button"
+                onClick={() => setViewMode("speaker")}
+                className={`p-2 rounded-xl border text-xs flex items-center space-x-1 ${
+                  viewMode === "speaker"
+                    ? "bg-blue-600/25 border-blue-500/50 text-blue-300"
+                    : "bg-slate-800/70 border-slate-700 text-slate-300 hover:bg-slate-800"
                 }`}
+                title="Speaker / Presentation View"
               >
-                {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                <span className="text-[10px] font-medium mt-0.5">{isMuted ? "Unmute" : "Mute"}</span>
+                <Presentation className="w-4 h-4" />
               </button>
               <button
-                onClick={() => setIsVideoOn(!isVideoOn)}
-                className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-xl border transition ${
-                  !isVideoOn ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-slate-800 border-slate-700 text-slate-200"
+                type="button"
+                onClick={() => setViewMode("gallery")}
+                className={`p-2 rounded-xl border text-xs flex items-center space-x-1 ${
+                  viewMode === "gallery"
+                    ? "bg-blue-600/25 border-blue-500/50 text-blue-300"
+                    : "bg-slate-800/70 border-slate-700 text-slate-300 hover:bg-slate-800"
                 }`}
+                title="Gallery View"
               >
-                {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                <span className="text-[10px] font-medium mt-0.5">{isVideoOn ? "Stop" : "Start"}</span>
+                <LayoutGrid className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("whiteboard")}
+                className={`p-2 rounded-xl border text-xs flex items-center space-x-1 ${
+                  viewMode === "whiteboard"
+                    ? "bg-blue-600/25 border-blue-500/50 text-blue-300"
+                    : "bg-slate-800/70 border-slate-700 text-slate-300 hover:bg-slate-800"
+                }`}
+                title="Whiteboard"
+              >
+                <PenTool className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex items-center space-x-1 sm:space-x-2">
-              {isInstructor && (
-                <button
-                  onClick={() => setIsScreenSharing(!isScreenSharing)}
-                  className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
-                    isScreenSharing ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400" : "bg-slate-800 border-slate-700 text-slate-300"
-                  }`}
-                >
-                  <MonitorUp className="w-5 h-5" />
-                  <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">{isScreenSharing ? "Sharing" : "Share"}</span>
-                </button>
-              )}
-                            {isInstructor && (
-                <>
-                  <input
-                    type="file"
-                    accept="application/pdf"
-                    ref={pdfInputRef}
-                    onChange={handlePdfUpload}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => pdfInputRef.current?.click()}
-                    className="flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white"
-                    title="Present a PDF"
-                  >
-                    <FileText className="w-5 h-5" />
-                    <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">PDF</span>
-                  </button>
-                </>
-              )}
-                            {isInstructor && (
-                <button
-                  onClick={() => setShowJitsi(!showJitsi)}
-                  className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
-                    showJitsi
-                      ? "bg-emerald-500/20 border-emerald-500/40 text-emerald-400 animate-pulse"
-                      : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-                  }`}
-                  title={showJitsi ? "Stop live video" : "Start live video (Jitsi)"}
-                >
-                  <Video className="w-5 h-5" />
-                  <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">
-                    {showJitsi ? "Live" : "Video"}
-                  </span>
-                </button>
-              )}
-              {!isInstructor && (
-                <button
-                  onClick={handleToggleHandRaise}
-                  className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
-                    isHandRaised ? "bg-amber-500/20 border-amber-500/40 text-amber-400 animate-pulse" : "bg-slate-800 border-slate-700 text-slate-300"
-                  }`}
-                >
-                  <Hand className="w-5 h-5" />
-                  <span className="text-[10px] font-medium mt-0.5">{isHandRaised ? "Lower" : "Raise"}</span>
-                </button>
-              )}
-                            {/* Emoji Reactions */}
-              <div className="hidden sm:flex items-center bg-slate-800/60 border border-slate-700 rounded-xl p-0.5 space-x-0.5">
-                {["👍", "❤️", "😂", "🎉", "🙋"].map((emoji) => (
+            <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
+              <button
+                type="button"
+                onClick={() => {
+  jitsiApiRef.current?.executeCommand("toggleAudio");
+}}
+                className={`px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[56px] ${
+                  isMuted
+                    ? "bg-red-950/60 border-red-500/40 text-red-300"
+                    : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                {isMuted ? <MicOff className="w-4 h-4 mb-0.5" /> : <Mic className="w-4 h-4 mb-0.5" />}
+                <span className="text-[10px]">{isMuted ? "Unmute" : "Mute"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+  jitsiApiRef.current?.executeCommand("toggleVideo");
+}}
+                className={`px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[56px] ${
+                  !isVideoOn
+                    ? "bg-red-950/60 border-red-500/40 text-red-300"
+                    : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                {isVideoOn ? <Video className="w-4 h-4 mb-0.5" /> : <VideoOff className="w-4 h-4 mb-0.5" />}
+                <span className="text-[10px]">{isVideoOn ? "Stop" : "Camera"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+  jitsiApiRef.current?.executeCommand("toggleShareScreen");
+}}
+                className={`px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[64px] ${
+                  isScreenSharing
+                    ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
+                    : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                <MonitorUp className="w-4 h-4 mb-0.5" />
+                <span className="text-[10px]">Sharing</span>
+              </button>
+
+              <input
+                ref={pdfInputRef}
+                type="file"
+                accept="application/pdf"
+                onChange={handlePdfUpload}
+                className="hidden"
+              />
+              <button
+                type="button"
+onClick={() => {
+  jitsiCleanupRef.current?.();
+  jitsiCleanupRef.current = null;
+  setJitsiParticipants([]);
+  setShowJitsi(false);
+  pdfInputRef.current?.click();
+}}
+                className="px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700 text-slate-200 text-xs font-medium flex flex-col items-center min-w-[54px]"
+              >
+                <FileText className="w-4 h-4 mb-0.5" />
+                <span className="text-[10px]">PDF</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowJitsi((prev) => {
+                    const next = !prev;
+                    if (next) setJitsiOpenCount((c) => c + 1);
+                    return next;
+                  });
+                }}
+                className={`px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[54px] ${
+                  showJitsi
+                    ? "bg-emerald-950/60 border-emerald-500/40 text-emerald-300"
+                    : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                <Video className="w-4 h-4 mb-0.5" />
+                <span className="text-[10px]">Live</span>
+              </button>
+
+              <div className="hidden md:flex items-center space-x-1 px-2 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800">
+                {["👍", "❤️", "😂", "🎉", "👏"].map((emoji) => (
                   <button
                     key={emoji}
                     type="button"
                     onClick={() => handleEmojiReaction(emoji)}
-                    className="px-2 py-1.5 hover:bg-slate-700/80 rounded-lg text-sm transition hover:scale-110 active:scale-95"
-                    title={`React with ${emoji}`}
+                    className="hover:scale-125 transition-transform text-sm px-1"
                   >
                     {emoji}
                   </button>
                 ))}
               </div>
+
               <button
-                onClick={() => setActiveDrawer(activeDrawer === "participants" ? null : "participants")}
-                className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition relative ${
-                  activeDrawer === "participants" ? "bg-blue-600/20 border-blue-500/40 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-300"
+                type="button"
+                onClick={handleToggleHandRaise}
+                className={`px-2.5 py-2 rounded-xl border text-xs font-medium flex flex-col items-center ${
+                  isHandRaised
+                    ? "bg-amber-950/60 border-amber-500/40 text-amber-300"
+                    : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+                }`}
+                title="Raise Hand"
+              >
+                <Hand className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveDrawer((d) => (d === "participants" ? null : "participants"))}
+                className={`relative px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[60px] ${
+                  activeDrawer === "participants"
+                    ? "bg-blue-600/25 border-blue-500/50 text-blue-300"
+                    : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
                 }`}
               >
-                <Users className="w-5 h-5" />
-                <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">People</span>
-                <span className="absolute -top-1 -right-1 bg-blue-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
-                  {(session.activeAttendees || []).length}
-                </span>
-              </button>
-              <button
-                onClick={() => setActiveDrawer(activeDrawer === "chat" ? null : "chat")}
-                className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition relative ${
-                  activeDrawer === "chat" ? "bg-blue-600/20 border-blue-500/40 text-blue-400" : "bg-slate-800 border-slate-700 text-slate-300"
-                }`}
-              >
-                <MessageSquare className="w-5 h-5" />
-                <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">Chat</span>
-                <span className="absolute -top-1 -right-1 bg-emerald-500 text-white text-[9px] font-bold px-1.5 py-0.2 rounded-full">
-                  {(session.chatMessages || []).length}
-                </span>
-              </button>
-{isInstructor && (
-  <button
-    type="button"
-    onClick={handleToggleRecording}
-    title={isRecording ? "Stop recording" : "Start recording your camera"}
-    className={`flex flex-col items-center justify-center px-2.5 sm:px-3 py-1.5 rounded-xl border transition ${
-      isRecording
-        ? "bg-red-600/30 border-red-500/60 text-red-300 animate-pulse"
-        : "bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700"
-    }`}
-  >
-    <CircleDot className={`w-5 h-5 ${isRecording ? "animate-pulse" : ""}`} />
-    <span className="text-[10px] font-medium mt-0.5 hidden sm:inline">
-      {isRecording ? `Stop · ${formatTimer(recordingDuration)}` : "REC"}
-    </span>
-  </button>
+                <Users className="w-4 h-4 mb-0.5" />
+                <span className="text-[10px]">People</span>
+                <span className="absolute -top-1.5 -right-1 px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                {Math.max(
+  (session.activeAttendees || []).length,
+  jitsiParticipants.length
 )}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveDrawer((d) => (d === "chat" ? null : "chat"))}
+                className={`relative px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[54px] ${
+                  activeDrawer === "chat"
+                    ? "bg-blue-600/25 border-blue-500/50 text-blue-300"
+                    : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+                }`}
+              >
+                <MessageSquare className="w-4 h-4 mb-0.5" />
+                <span className="text-[10px]">Chat</span>
+                {(session.chatMessages?.length || 0) > 0 && (
+                  <span className="absolute -top-1.5 -right-1 px-1.5 py-0.2 rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                    {session.chatMessages?.length}
+                  </span>
+                )}
+              </button>
+
+              {isInstructor && (
+                <button
+                  type="button"
+                  onClick={handleToggleRecording}
+                  className={`px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[54px] ${
+                    isRecording
+                      ? "bg-red-600 border-red-500 text-white"
+                      : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+                  }`}
+                >
+                  <CircleDot className="w-4 h-4 mb-0.5" />
+                  <span className="text-[10px]">{isRecording ? "Stop" : "REC"}</span>
+                </button>
+              )}
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div>
               {isInstructor ? (
                 <button
+                  type="button"
                   onClick={handleEndSessionForEveryone}
-                  className="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold"
+                  className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm"
                 >
                   <PhoneOff className="w-4 h-4" />
                   <span>End Class</span>
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="flex items-center space-x-1.5 px-3 sm:px-4 py-2 bg-red-600/90 hover:bg-red-500 text-white rounded-xl text-xs font-semibold"
+                  className="px-3.5 py-2 rounded-xl bg-red-600/90 hover:bg-red-500 text-white text-xs font-semibold flex items-center space-x-1.5"
                 >
                   <PhoneOff className="w-4 h-4" />
                   <span>Leave</span>
@@ -1123,5 +1331,3 @@ className="h-full zoom-glass-deep border-l border-slate-800 flex flex-col shrink
     </AnimatePresence>
   );
 }
-
-export default ZoomClassroomModal;

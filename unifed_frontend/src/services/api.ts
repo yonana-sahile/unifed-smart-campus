@@ -41,7 +41,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api
 // ✅ FIX: Export the axios instance so other files can use it
 export const api = axios.create({
   baseURL: API_BASE,
-  timeout: 60_000,
+  timeout: 180_000,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -705,16 +705,21 @@ const toZoomSnakeCase = (data: any): any => {
     activeAttendees: 'active_attendees', active_attendees: 'active_attendees',
     chatMessages: 'chat_messages', chat_messages: 'chat_messages',
   };
-  const result: any = {};
+const result: any = {};
   for (const [k, v] of Object.entries(data)) {
     const snake = keyMap[k];
-    if (snake) result[snake] = v;
+    if (!snake) continue;
+    if (snake === 'course' || snake === 'instructor') {
+      result[snake] = toPk(v) ?? v;
+    } else {
+      result[snake] = v;
+    }
   }
   return result;
 };
 const fromZoomSnakeCase = (raw: any) => ({
   id: String(raw?.id ?? ''),
-  courseId: raw?.course ?? raw?.courseId ?? null,
+  courseId: raw?.course != null ? String(raw.course) : String(raw?.courseId ?? ''),
   courseCode: raw?.course_code ?? raw?.courseCode ?? '',
   courseTitle: raw?.course_title ?? raw?.courseTitle ?? '',
   title: raw?.title ?? '',
