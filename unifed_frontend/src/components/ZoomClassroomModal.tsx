@@ -991,81 +991,117 @@ onClose();
               ))}
             </div>
 
-            <div className="flex-1 flex flex-col bg-slate-900/50 p-2 sm:p-4 overflow-y-auto">
+          <div
+  className={`flex-1 flex flex-col min-w-0 ${
+    viewMode === "gallery"
+      ? "bg-black p-1 sm:p-2 overflow-hidden"
+      : "bg-slate-900/50 p-2 sm:p-4 overflow-y-auto"
+  }`}
+>
               {/* Speaker View */}
              {(viewMode === "speaker" || viewMode === "gallery") && (
-                <div className="flex-1 flex flex-col h-full space-y-3">
-                  <div className="flex-1 relative rounded-xl bg-slate-950 border border-slate-800 flex flex-col overflow-hidden">
-                    <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800 text-xs">
-                      <div className="flex items-center space-x-2">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                        <span className="font-semibold text-slate-200">
-                          {isInstructor ? "You are sharing: Slides" : `${session.instructorName}'s Screen`}
-                        </span>
-{!showJitsi && !pdfUrl && (
-  <span className="text-[10px] text-slate-400 font-mono">
-    ({currentSlideIndex + 1}/{sampleSlides.length})
-  </span>
-)}
-                      </div>
-{!showJitsi && !pdfUrl && (
-  <div className="flex items-center space-x-1">
-    <button
-      onClick={() => setCurrentSlideIndex((p) => Math.max(0, p - 1))}
-      disabled={currentSlideIndex === 0}
-      className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
-    >
-      <ChevronLeft className="w-3.5 h-3.5" />
-    </button>
-    <button
-      onClick={() => setCurrentSlideIndex((p) => Math.min(sampleSlides.length - 1, p + 1))}
-      disabled={currentSlideIndex === sampleSlides.length - 1}
-      className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
-    >
-      <ChevronRight className="w-3.5 h-3.5" />
-    </button>
+               <div
+  className={`flex-1 flex flex-col min-h-0 ${
+    viewMode === "gallery" ? "h-full space-y-0" : "h-full space-y-3"
+  }`}
+>
+                <div
+  className={`flex-1 relative bg-slate-950 flex flex-col overflow-hidden min-h-0 ${
+    viewMode === "gallery"
+      ? "rounded-lg border border-slate-800"
+      : "rounded-xl border border-slate-800"
+  }`}
+>
+
+{viewMode !== "gallery" && (
+  <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800 text-xs">
+    <div className="flex items-center space-x-2">
+      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+      <span className="font-semibold text-slate-200">
+        {isInstructor
+          ? "You are sharing: Slides"
+          : `${session.instructorName}'s Screen`}
+      </span>
+
+      {!showJitsi && !pdfUrl && (
+        <span className="text-[10px] text-slate-400 font-mono">
+          ({currentSlideIndex + 1}/{sampleSlides.length})
+        </span>
+      )}
+    </div>
+
+    {!showJitsi && !pdfUrl && (
+      <div className="flex items-center space-x-1">
+        <button
+          onClick={() =>
+            setCurrentSlideIndex((p) => Math.max(0, p - 1))
+          }
+          disabled={currentSlideIndex === 0}
+          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+
+        <button
+          onClick={() =>
+            setCurrentSlideIndex((p) =>
+              Math.min(sampleSlides.length - 1, p + 1)
+            )
+          }
+          disabled={currentSlideIndex === sampleSlides.length - 1}
+          className="p-1 rounded bg-slate-800 hover:bg-slate-700 disabled:opacity-30"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    )}
   </div>
 )}
-                    </div>
+
+
 
                     <div className="flex-1 relative flex flex-col justify-center items-center bg-slate-950 overflow-hidden">
                       {showJitsi ? (
                         <div className="w-full h-full flex flex-col bg-black">
-                          <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 text-[11px] shrink-0">
-                            <span className="text-slate-400">
-                              Live Room:{" "}
-                              <span className="font-mono text-slate-200">
-                               MAU-Classroom-{session.id}
-                              </span>
-                            </span>
-                            <div className="flex items-center space-x-2">
-                              <button
-                                type="button"
-                              onClick={() => {
-  jitsiCleanupRef.current?.();
-  jitsiCleanupRef.current = null;
-  jitsiApiRef.current = null;
-  setJitsiParticipants([]);
-  setJitsiOpenCount((c) => c + 1);
-}}
-                                className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
-                              >
-                                Reload Video
-                              </button>
-                              <button
-                                type="button"
-onClick={() => {
-  jitsiCleanupRef.current?.();
-  jitsiCleanupRef.current = null;
-  setJitsiParticipants([]);
-  setShowJitsi(false);
-}}
-                                className="px-2 py-0.5 rounded bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40"
-                              >
-                                Slides / PDF
-                              </button>
-                            </div>
-                          </div>
+{viewMode !== "gallery" && (
+  <div className="flex items-center justify-between px-3 py-1.5 bg-slate-900/95 border-b border-slate-800 text-[11px] shrink-0">
+    <span className="text-slate-400">
+      Live Room:{" "}
+      <span className="font-mono text-slate-200">
+        MAU-Classroom-{session.id}
+      </span>
+    </span>
+
+    <div className="flex items-center space-x-2">
+      <button
+        type="button"
+        onClick={() => {
+          jitsiCleanupRef.current?.();
+          jitsiCleanupRef.current = null;
+          jitsiApiRef.current = null;
+          setJitsiParticipants([]);
+          setJitsiOpenCount((c) => c + 1);
+        }}
+        className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
+      >
+        Reload Video
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          jitsiCleanupRef.current?.();
+          jitsiCleanupRef.current = null;
+          setJitsiParticipants([]);
+          setShowJitsi(false);
+        }}
+        className="px-2 py-0.5 rounded bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/40"
+      >
+        Slides / PDF
+      </button>
+    </div>
+  </div>
+)}
                           <div className="flex-1 w-full min-h-0">
                             <JitsiMeeting
                               key={`jitsi-${session.id}-${jitsiOpenCount}`}
@@ -1166,9 +1202,9 @@ onReadyToClose={() => {
                       </div>
                     )}
                   </div>
-
                   {/* Horizontal attendees */}
-                  <div className="h-28 flex items-center space-x-2.5 overflow-x-auto pb-1 shrink-0">
+                  {viewMode !== "gallery" && (
+                    <div className="h-28 flex items-center space-x-2.5 overflow-x-auto pb-1 shrink-0">
                     {!showJitsi && (
                       <div className="w-36 h-24 rounded-xl zoom-glass zoom-video-tile border border-slate-700/50 p-1 flex flex-col justify-between shrink-0 overflow-hidden">
                         <div className="flex-1 flex items-center justify-center relative overflow-hidden rounded">
@@ -1207,6 +1243,7 @@ onReadyToClose={() => {
                         </div>
                       ))}
                   </div>
+                )}
                 </div>
               )}
 
