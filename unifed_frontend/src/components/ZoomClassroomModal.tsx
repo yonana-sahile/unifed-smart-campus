@@ -88,7 +88,7 @@ jitsiLocalParticipantIdRef.current = null;
 }, [isOpen]);
 
 useEffect(() => {
-  if (viewMode !== "speaker" || !showJitsi) {
+  if ((viewMode !== "speaker" && viewMode !== "gallery") || !showJitsi) {
     jitsiCleanupRef.current?.();
     jitsiCleanupRef.current = null;
     jitsiApiRef.current = null;
@@ -97,12 +97,29 @@ useEffect(() => {
 jitsiLocalParticipantIdRef.current = null;
   }
 }, [viewMode, showJitsi]);
+// Automatically switch Jitsi between speaker and gallery layouts.
+useEffect(() => {
+  const api = jitsiApiRef.current;
 
+  if (!api || !showJitsi) return;
+
+  try {
+    api.executeCommand("setTileView", viewMode === "gallery");
+  } catch (error) {
+    console.error("[JITSI] Failed to change tile view:", error);
+  }
+}, [viewMode, showJitsi]);
 
 const handleJitsiApiReady = (api: any) => {
   jitsiCleanupRef.current?.();
 
   jitsiApiRef.current = api;
+  // Keep Jitsi's native video tiles in gallery mode.
+if (viewMode === "gallery") {
+  api.executeCommand("setTileView", true);
+} else {
+  api.executeCommand("setTileView", false);
+}
   jitsiLocalParticipantIdRef.current = null;
   setIsJitsiModerator(false);
 
@@ -760,7 +777,7 @@ if (!isJitsiModerator) {
   try {
     // Mute audio for everyone in the Jitsi meeting.
     // Requires the current Jitsi participant to be a moderator.
-    api.executeCommand("muteEveryone", "audio");
+    api.executeCommand("muteEveryone");
 
     console.info("[JITSI] Mute All command sent.");
   } catch (error) {
@@ -976,7 +993,7 @@ onClose();
 
             <div className="flex-1 flex flex-col bg-slate-900/50 p-2 sm:p-4 overflow-y-auto">
               {/* Speaker View */}
-              {viewMode === "speaker" && (
+             {(viewMode === "speaker" || viewMode === "gallery") && (
                 <div className="flex-1 flex flex-col h-full space-y-3">
                   <div className="flex-1 relative rounded-xl bg-slate-950 border border-slate-800 flex flex-col overflow-hidden">
                     <div className="flex items-center justify-between px-3 py-2 bg-slate-900 border-b border-slate-800 text-xs">
@@ -1193,30 +1210,6 @@ onReadyToClose={() => {
                 </div>
               )}
 
-              {/* Gallery View */}
-              {viewMode === "gallery" && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 auto-rows-fr h-full">
-                  {(session.activeAttendees || []).map((att) => (
-                    <div
-                      key={att.id}
-                      className="rounded-xl zoom-glass zoom-video-tile border border-slate-800 p-3 flex flex-col justify-between min-h-[160px]"
-                    >
-                      <div className="flex-1 flex items-center justify-center">
-                        <div className="relative">
-                          <div className="w-14 h-14 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-base text-slate-200">
-                            {att.name.charAt(0)}
-                          </div>
-                          {att.isHandRaised && <span className="absolute -top-1 -right-2 text-base">✋</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-between px-2 py-1 bg-slate-900/90 rounded-lg text-xs">
-                        <span className="truncate text-slate-200 font-medium">{att.name}</span>
-                        {att.isMuted ? <MicOff className="w-3.5 h-3.5 text-red-400" /> : <Mic className="w-3.5 h-3.5 text-emerald-400" />}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
 
               {/* Whiteboard View */}
               {viewMode === "whiteboard" && (
