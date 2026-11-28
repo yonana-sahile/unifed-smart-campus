@@ -770,33 +770,75 @@ if (!isJitsiModerator) {
 };
 
 
-  const handleEndSessionForEveryone = async () => {
-    if (!isInstructor) {
-      console.warn("[SECURITY] Non-instructor attempted to end session. Blocked.");
-      return;
-    }
-    if (!confirm("End this Zoom lecture for all students and save attendance & recording?")) return;
-    const updated = {
-      ...session,
-      status: "COMPLETED" as const,
-      ...(recordingUrl ? { recordingUrl, recordingDuration: formatTimer(recordingDuration || elapsedSeconds) } : {}),
-      lectureNotes: session.lectureNotes || "Official lecture concluded with recorded presentation and student Q&A."
-    };
-    setSession(updated);
-    try {
-      const res = await CampusDatabase.updateZoomSession(String(session.id), {
-        status: "COMPLETED",
-        recordingUrl: updated.recordingUrl,
-        recordingDuration: updated.recordingDuration,
-        lectureNotes: updated.lectureNotes
-      });
-      if (onSessionUpdated) onSessionUpdated(res);
-    } catch (err) {
-      console.error(err);
-    }
-    onClose();
-  };
+const handleEndSessionForEveryone = async () => {
+  if (!isInstructor) {
+    console.warn("[SECURITY] Non-instructor attempted to end session. Blocked.");
+    return;
+  }
 
+  if (isRecording) {
+    setRecordingError("Stop the recording before ending the class.");
+    return;
+  }
+
+  if (isUploadingRecording) return;
+
+  if (!confirm("End this classroom for everyone?")) return;
+
+  let recordingUploaded = false;
+
+  try {
+    setRecordingError(null);
+    setIsUploadingRecording(true);
+
+    // 1. Upload the stopped browser recording first.
+    if (recordingBlob) {
+      await CampusDatabase.uploadZoomSessionRecording(
+        String(session.id),
+        recordingBlob,
+        formatTimer(recordingDuration || elapsedSeconds)
+      );
+
+      recordingUploaded = true;
+
+      // Prevent duplicate uploads if ending the class needs a retry.
+      setRecordingBlob(null);
+    }
+
+    // 2. End the classroom using the dedicated backend endpoint.
+    const res = await CampusDatabase.endZoomSession(
+      String(session.id)
+    );
+
+    // 3. Update local state and notify the parent.
+    setSession(res);
+onSessionUpdated?.(res);
+
+// Release the temporary browser recording URL.
+if (recordingUrl?.startsWith("blob:")) {
+  URL.revokeObjectURL(recordingUrl);
+}
+
+setRecordingUrl(null);
+setRecordingBlob(null);
+setRecordingError(null);
+
+onClose();
+  } catch (err: any) {
+    console.error("[CLASSROOM] Failed to end session:", err);
+
+    setRecordingError(
+      recordingUploaded
+        ? "Recording saved successfully, but the classroom could not be ended. Please try End Class again."
+        : err?.response?.data?.error ||
+          err?.response?.data?.detail ||
+          err?.message ||
+          "Could not save the recording or end the classroom. The session is still live."
+    );
+  } finally {
+    setIsUploadingRecording(false);
+  }
+};
   const handleCopyMeetingDetails = () => {
     const text = `Mekdela Amba University - Zoom Live Lecture\nCourse: ${session.courseCode} - ${session.courseTitle}\nTopic: ${session.title}\nMeeting ID: ${session.meetingId}\nPasscode: ${session.passcode}\nJoin Link: ${session.joinUrl}`;
     navigator.clipboard.writeText(text);
@@ -1555,15 +1597,18 @@ onReadyToClose={() => {
               </button>
 
               {isInstructor && (
-                <button
-                  type="button"
-                  onClick={handleToggleRecording}
-                  className={`px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[54px] ${
-                    isRecording
-                      ? "bg-red-600 border-red-500 text-white"
-                      : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
-                  }`}
-                >
+<button
+  type="button"
+  onClick={handleToggleRecording}
+  disabled={isUploadingRecording}
+  className={`px-3 py-2 rounded-xl border text-xs font-medium flex flex-col items-center min-w-[54px] ${
+    isUploadingRecording
+      ? "bg-slate-800 border-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+      : isRecording
+        ? "bg-red-600 border-red-500 text-white"
+        : "bg-slate-800/80 border-slate-700 text-slate-200 hover:bg-slate-800"
+  }`}
+>
                   <CircleDot className="w-4 h-4 mb-0.5" />
                   <span className="text-[10px]">{isRecording ? "Stop" : "REC"}</span>
                 </button>
@@ -1572,14 +1617,19 @@ onReadyToClose={() => {
 
             <div>
               {isInstructor ? (
-                <button
-                  type="button"
-                  onClick={handleEndSessionForEveryone}
-                  className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm"
-                >
-                  <PhoneOff className="w-4 h-4" />
-                  <span>End Class</span>
-                </button>
+<button
+  type="button"
+  onClick={handleEndSessionForEveryone}
+  disabled={isUploadingRecording}
+  className={`px-3.5 py-2 rounded-xl text-white text-xs font-semibold flex items-center space-x-1.5 shadow-sm ${
+    isUploadingRecording
+      ? "bg-slate-700 cursor-not-allowed opacity-70"
+      : "bg-red-600 hover:bg-red-500"
+  }`}
+>
+  <PhoneOff className="w-4 h-4" />
+  <span>{isUploadingRecording ? "Saving..." : "End Class"}</span>
+</button>
               ) : (
                 <button
                   type="button"

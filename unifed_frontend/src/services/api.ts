@@ -760,6 +760,34 @@ export const uploadZoomSessionPresentation = async (
   return fromZoomSnakeCase(data);
 };
 
+export const uploadZoomSessionRecording = async (
+  id: string,
+  file: Blob,
+  duration: string
+): Promise<any> => {
+  const formData = new FormData();
+
+  formData.append(
+    'file',
+    file,
+    `classroom-recording-${Date.now()}.webm`
+  );
+  formData.append('recording_duration', duration);
+
+  const { data } = await api.post(
+    `/zoom-sessions/${numericId(id)}/upload-recording/`,
+    formData
+  );
+
+  return fromZoomSnakeCase(data);
+};
+export const endZoomSession = async (id: string): Promise<any> => {
+  const { data } = await api.post(
+    `/zoom-sessions/${numericId(id)}/end/`
+  );
+
+  return fromZoomSnakeCase(data);
+};
 export const clearZoomSessionPresentation = async (
   id: string
 ): Promise<any> => {
@@ -1115,15 +1143,15 @@ export const CampusDatabase = {
   // Media Posts
   getMediaPosts, saveMediaPosts, addMediaPost, updateMediaPost, uploadMediaPost, deleteMediaPost, incrementMediaViews, toggleMediaLike,
 
-  // Zoom
 // Zoom
 getZoomSessions,
 addZoomSession,
 updateZoomSession,
 deleteZoomSession,
 uploadZoomSessionPresentation,
+uploadZoomSessionRecording,
+endZoomSession,
 clearZoomSessionPresentation,
-
   // 👇 MMS (Now using real Django API) 👇
   getInventoryItems, addInventoryItem, adjustStock, getMaterialRequisitions, addMaterialRequisition, updateMaterialRequisitionStatus, getGoodsReceivingRecords, addGoodsReceivingRecord, getFixedAssets, addFixedAsset, getInterStoreTransfers, addInterStoreTransfer, updateInterStoreTransferStatus, getPropertyReturns, addPropertyReturn, getCampusGatePasses, addCampusGatePass, updateGatePassStatus, getMaintenanceOrders, addMaintenanceOrder, updateMaintenanceOrderStatus, getPhysicalAudits, updatePhysicalAuditEntry, getPurchaseOrders, addPurchaseOrder, updatePurchaseOrderStatus, getVendors, addVendor, getAssetDisposals, addAssetDisposal, updateDisposalStatus, getHazardousMaterials, addHazardousMaterial, getStockBinCards, getDepartmentBudgets, updateDepartmentBudget, getDonationGrantAssets, addDonationGrantAsset,
 

@@ -1098,6 +1098,7 @@ class ZoomClassSessionViewSet(BaseViewSet):
     serializer_class = ZoomClassSessionSerializer
 
     MAX_PDF_SIZE = 20 * 1024 * 1024  # 20 MB
+    MAX_RECORDING_SIZE = 250 * 1024 * 1024  # 250 MB
 
     def _can_manage_presentation(self, user, session):
         role = getattr(user, 'role', None)
@@ -1268,7 +1269,127 @@ class ZoomClassSessionViewSet(BaseViewSet):
             'presentation_pdf_name': session.presentation_pdf_name,
             'session': self.get_serializer(session).data,
         }, status=status.HTTP_200_OK)
+    @action(
+        detail=True,
+        methods=['post'],
+        parser_classes=[MultiPartParser, FormParser],
+        permission_classes=[permissions.IsAuthenticated],
+        url_path='upload-recording',
+    )
+    def upload_recording(self, request, pk=None):
+        session = self.get_object()
 
+        if not self._can_manage_presentation(request.user, session):
+            return Response(
+                {'error': 'You are not allowed to upload a recording for this class.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        recording_file = request.FILES.get('file')
+
+        if not recording_file:
+            return Response(
+                {'error': 'Please select a classroom recording.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if recording_file.size <= 0:
+            return Response(
+                {'error': 'The recording file is empty.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if recording_file.size > self.MAX_RECORDING_SIZE:
+            return Response(
+                {'error': 'Recording is too large. Maximum size is 250 MB.'},
+                status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            )
+
+        original_name = os.path.basename(
+            (recording_file.name or 'classroom-recording.webm').replace('\\', '/')
+        )[:255]
+
+        if not original_name.lower().endswith('.webm'):
+            return Response(
+                {'error': 'Only WebM classroom recordings are supported.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            signature = recording_file.read(4)
+            recording_file.seek(0)
+        except Exception:
+            return Response(
+                {'error': 'Could not read the recording file.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if signature != b'\x1a\x45\xdf\xa3':
+            return Response(
+                {'error': 'The uploaded file is not a valid WebM recording.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        recording_duration = (
+            request.data.get('recording_duration') or ''
+        ).strip()[:20]
+
+        uploaded_public_id = None
+
+        try:
+            upload_result = cloudinary.uploader.upload(
+                recording_file,
+                resource_type='video',
+                folder='smart-campus/classroom-recordings',
+                public_id=uuid.uuid4().hex,
+                overwrite=False,
+            )
+
+            recording_url = upload_result.get('secure_url')
+            uploaded_public_id = upload_result.get('public_id')
+
+            if not recording_url or not uploaded_public_id:
+                raise RuntimeError(
+                    'Cloudinary did not return the recording URL.'
+                )
+
+            with transaction.atomic():
+                session.recording_url = recording_url
+                session.recording_duration = recording_duration
+
+                session.save(update_fields=[
+                    'recording_url',
+                    'recording_duration',
+                    'updated_at',
+                ])
+
+        except Exception as e:
+            print(
+                f'[CLASSROOM RECORDING] Upload failed: '
+                f'{type(e).__name__}: {e}'
+            )
+
+            if uploaded_public_id:
+                try:
+                    cloudinary.uploader.destroy(
+                        uploaded_public_id,
+                        resource_type='video',
+                        invalidate=True,
+                    )
+                except Exception:
+                    pass
+
+            return Response(
+                {'error': 'Recording upload failed. Please try again.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response({
+            'message': 'Classroom recording uploaded successfully.',
+            'recording_url': session.recording_url,
+            'recording_duration': session.recording_duration,
+            'session': self.get_serializer(session).data,
+        }, status=status.HTTP_200_OK)
     @action(
         detail=True,
         methods=['post'],
@@ -1311,31 +1432,61 @@ class ZoomClassSessionViewSet(BaseViewSet):
             'message': 'Class presentation removed successfully.',
             'session': self.get_serializer(session).data,
         })
-
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    @action(
+        detail=True,
+        methods=['post'],
+        permission_classes=[permissions.IsAuthenticated],
+    )
     def start(self, request, pk=None):
         session = self.get_object()
+
+        if not self._can_manage_presentation(request.user, session):
+            return Response(
+                {'error': 'You are not allowed to start this classroom session.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if session.status == 'COMPLETED':
+            return Response(
+                {'error': 'This classroom session has already been completed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if session.status == 'LIVE':
+            return Response(self.get_serializer(session).data)
+
         session.status = 'LIVE'
-        session.save()
+        session.save(update_fields=['status', 'updated_at'])
+
         return Response(self.get_serializer(session).data)
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
+    @action(
+        detail=True,
+        methods=['post'],
+        permission_classes=[permissions.IsAuthenticated],
+    )
     def end(self, request, pk=None):
         session = self.get_object()
+
+        if not self._can_manage_presentation(request.user, session):
+            return Response(
+                {'error': 'You are not allowed to end this classroom session.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if session.status == 'COMPLETED':
+            return Response(self.get_serializer(session).data)
+
+        if session.status != 'LIVE':
+            return Response(
+                {'error': 'Only a live classroom session can be ended.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         session.status = 'COMPLETED'
+        session.save(update_fields=['status', 'updated_at'])
 
-        recording_url = request.data.get('recording_url', '')
-        recording_duration = request.data.get('recording_duration', '')
-
-        if recording_url:
-            session.recording_url = recording_url
-
-        if recording_duration:
-            session.recording_duration = recording_duration
-
-        session.save()
         return Response(self.get_serializer(session).data)
-
 
 # ---------- AI ----------
 class AIViewSet(viewsets.GenericViewSet):
