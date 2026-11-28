@@ -29,6 +29,11 @@ const [isVideoOn, setIsVideoOn] = useState(true);
 const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [isUploadingRecording, setIsUploadingRecording] = useState(false);
+const [recordingError, setRecordingError] = useState<string | null>(null);
+const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
+
+const recordingStreamRef = useRef<MediaStream | null>(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
@@ -186,22 +191,11 @@ const handleJitsiApiReady = (api: any) => {
     );
   };
 
-  const handleParticipantMuted = (event: any) => {
-    setJitsiParticipants((previous) =>
-      previous.map((participant) =>
-        participant.id === String(event.participantId)
-          ? {
-              ...participant,
-              ...(event.mediaType === "audio"
-                ? { isMuted: event.isMuted }
-                : event.mediaType === "video"
-                ? { isVideoMuted: event.isMuted }
-                : {}),
-            }
-          : participant
-      )
-    );
-  };
+const handleParticipantMuted = () => {
+  // Refresh participant audio and video states
+  // directly from the Jitsi meeting API.
+  void refreshParticipants();
+};
 
   const handleAudioMuteChanged = (event: any) => {
     setIsMuted(event.muted);
@@ -476,94 +470,177 @@ const handlePdfUpload = async (
     );
   }
 };
-  const handleToggleRecording = () => {
-    if (!isInstructor) {
-      console.warn("[SECURITY] Non-instructor attempted to record. Blocked.");
-      return;
+
+const handleToggleRecording = async () => {
+  if (!isInstructor) {
+    console.warn("[SECURITY] Non-instructor attempted to record. Blocked.");
+    return;
+  }
+
+  // STOP RECORDING
+  if (isRecording) {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.stop();
     }
 
-    if (isRecording) {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
+    if (recordingTimerRef.current !== null) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    setIsRecording(false);
+    return;
+  }
+
+  // START RECORDING
+  try {
+    setRecordingError(null);
+    setRecordingBlob(null);
+    setRecordingUrl(null);
+
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      throw new Error("Your browser does not support screen recording.");
+    }
+
+    // Ask instructor to select the Jitsi meeting tab.
+    // Enable tab audio in the browser sharing prompt when available.
+    const displayStream =
+      await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          frameRate: 30,
+        },
+        audio: true,
+      });
+
+    recordingStreamRef.current = displayStream;
+
+    if (!displayStream.getVideoTracks().length) {
+      throw new Error("No video track was selected.");
+    }
+
+    recordedChunksRef.current = [];
+
+    const supportedMimeTypes = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+    ];
+
+    const mimeType = supportedMimeTypes.find((type) =>
+      MediaRecorder.isTypeSupported(type)
+    );
+
+    const recorder = mimeType
+      ? new MediaRecorder(displayStream, { mimeType })
+      : new MediaRecorder(displayStream);
+
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
       }
-      if (recordingTimerRef.current) {
+    };
+
+    recorder.onerror = (event) => {
+      console.error("[RECORDING] Recorder error:", event);
+      setRecordingError("A recording error occurred.");
+    };
+
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, {
+        type: recorder.mimeType || "video/webm",
+      });
+
+      if (blob.size > 0) {
+        setRecordingBlob(blob);
+
+        const previewUrl = URL.createObjectURL(blob);
+        setRecordingUrl(previewUrl);
+      } else {
+        setRecordingError("The recording is empty.");
+      }
+
+      displayStream.getTracks().forEach((track) => track.stop());
+      recordingStreamRef.current = null;
+
+      if (recordingTimerRef.current !== null) {
         clearInterval(recordingTimerRef.current);
         recordingTimerRef.current = null;
       }
+
       setIsRecording(false);
-      return;
-    }
+    };
 
-    let sourceStream: MediaStream | null = streamRef.current;
-    let fallbackCanvas: HTMLCanvasElement | null = null;
-    if (!sourceStream || sourceStream.getVideoTracks().length === 0) {
-      fallbackCanvas = document.createElement("canvas");
-      fallbackCanvas.width = 1280;
-      fallbackCanvas.height = 720;
-      const ctx = fallbackCanvas.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "#090d16";
-        ctx.fillRect(0, 0, fallbackCanvas.width, fallbackCanvas.height);
-        ctx.fillStyle = "#e2e8f0";
-        ctx.font = "28px sans-serif";
-        ctx.fillText(`${session.courseCode}: ${session.title}`, 60, 120);
-        ctx.font = "20px sans-serif";
-        ctx.fillStyle = "#94a3b8";
-        ctx.fillText(`Instructor: ${session.instructorName}`, 60, 165);
-      }
-      sourceStream = fallbackCanvas.captureStream(15);
-    }
-
-    try {
-      recordedChunksRef.current = [];
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-        ? "video/webm;codecs=vp9"
-        : MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
-        ? "video/webm;codecs=vp8"
-        : "video/webm";
-
-      const recorder = new MediaRecorder(sourceStream, { mimeType });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          recordedChunksRef.current.push(event.data);
+    // Stop automatically if the instructor ends browser sharing.
+    displayStream.getVideoTracks()[0].addEventListener(
+      "ended",
+      () => {
+        if (recorder.state !== "inactive") {
+          recorder.stop();
         }
-      };
+      }
+    );
 
-      recorder.onstop = () => {
-        const blob = new Blob(recordedChunksRef.current, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        setRecordingUrl(url);
-        setIsRecording(false);
-      };
+    recorder.start(1000);
 
-      recorder.start(1000);
-      setIsRecording(true);
-      setRecordingDuration(0);
-      setRecordingUrl(null);
+    setIsRecording(true);
+    setRecordingDuration(0);
 
-      recordingTimerRef.current = window.setInterval(() => {
-        setRecordingDuration((prev) => prev + 1);
-      }, 1000);
-    } catch (err) {
-      console.error("[recording] Failed to start:", err);
-      alert("Could not start recording. Your browser may not support MediaRecorder.");
+    recordingTimerRef.current = window.setInterval(() => {
+      setRecordingDuration((previous) => previous + 1);
+    }, 1000);
+
+  } catch (error: any) {
+    console.error("[RECORDING] Failed to start:", error);
+
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+
+    setIsRecording(false);
+
+    setRecordingError(
+      error?.message || "Could not start recording."
+    );
+  }
+};
+
+
+// Stop recording resources when the classroom component unmounts.
+useEffect(() => {
+  return () => {
+    if (recordingTimerRef.current !== null) {
+      window.clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+
+    recordingStreamRef.current?.getTracks().forEach((track) => {
+      track.stop();
+    });
+
+    recordingStreamRef.current = null;
+  };
+}, []);
+
+// Release temporary browser recording URLs when they are replaced.
+useEffect(() => {
+  return () => {
+    if (recordingUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(recordingUrl);
     }
   };
-
-  useEffect(() => {
-    return () => {
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-        recordingTimerRef.current = null;
-      }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-        mediaRecorderRef.current.stop();
-      }
-      if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-    };
-  }, [recordingUrl]);
+}, [recordingUrl]);
 
   const handleEmojiReaction = async (emoji: string) => {
     const id = Date.now();
@@ -800,8 +877,20 @@ if (!isJitsiModerator) {
                 Recording in progress — {formatTimer(recordingDuration)}
               </span>
               <span className="text-red-400 text-[10px]">
-                (Your camera/mic is being recorded)
+               (Selected tab/screen and available shared audio are being recorded)
               </span>
+            </div>
+          )}
+                    {recordingError && (
+            <div className="bg-red-950/80 border-b border-red-600/50 px-4 py-2 text-center text-xs text-red-300 shrink-0">
+              Recording error: {recordingError}
+              <button
+                type="button"
+                onClick={() => setRecordingError(null)}
+                className="ml-3 underline hover:text-white"
+              >
+                Dismiss
+              </button>
             </div>
           )}
           {recordingUrl && !isRecording && (
@@ -869,7 +958,6 @@ if (!isJitsiModerator) {
     >
       <ChevronLeft className="w-3.5 h-3.5" />
     </button>
-
     <button
       onClick={() => setCurrentSlideIndex((p) => Math.min(sampleSlides.length - 1, p + 1))}
       disabled={currentSlideIndex === sampleSlides.length - 1}
