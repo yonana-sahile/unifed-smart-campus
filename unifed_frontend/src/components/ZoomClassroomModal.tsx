@@ -114,12 +114,12 @@ const handleJitsiApiReady = (api: any) => {
   jitsiCleanupRef.current?.();
 
   jitsiApiRef.current = api;
-  // Keep Jitsi's native video tiles in gallery mode.
-if (viewMode === "gallery") {
-  api.executeCommand("setTileView", true);
-} else {
-  api.executeCommand("setTileView", false);
-}
+  // Keep Jitsi's native video tiles in the selected layout.
+  try {
+    api.executeCommand("setTileView", viewMode === "gallery");
+  } catch (error) {
+    console.error("[JITSI] Failed to initialize tile view:", error);
+  }
   jitsiLocalParticipantIdRef.current = null;
   setIsJitsiModerator(false);
 
@@ -159,72 +159,87 @@ if (viewMode === "gallery") {
     }
   };
 
-  const handleVideoConferenceJoined = (event: any) => {
-    jitsiLocalParticipantIdRef.current = String(event.id);
-    void refreshParticipants();
-  };
+const handleVideoConferenceJoined = (event: any) => {
+  if (jitsiApiRef.current !== api) return;
 
-  const handleVideoConferenceLeft = () => {
-    jitsiLocalParticipantIdRef.current = null;
-    setIsJitsiModerator(false);
-    setJitsiParticipants([]);
-  };
+  jitsiLocalParticipantIdRef.current = String(event.id);
+  void refreshParticipants();
+};
 
-  const handleParticipantRoleChanged = (event: any) => {
-    const localId = jitsiLocalParticipantIdRef.current;
+const handleVideoConferenceLeft = () => {
+  if (jitsiApiRef.current !== api) return;
 
-    if (!localId || String(event.id) !== localId) return;
+  jitsiLocalParticipantIdRef.current = null;
+  setIsJitsiModerator(false);
+  setJitsiParticipants([]);
+};
 
-    const moderator = event.role === "moderator";
+const handleParticipantRoleChanged = (event: any) => {
+  if (jitsiApiRef.current !== api) return;
 
-    setIsJitsiModerator(moderator);
+  const localId = jitsiLocalParticipantIdRef.current;
+  if (!localId || String(event.id) !== localId) return;
 
-    console.info("[JITSI] Local participant role:", event.role);
-  };
+  const moderator = event.role === "moderator";
+  setIsJitsiModerator(moderator);
+  console.info("[JITSI] Local participant role:", event.role);
+};
+const handleParticipantJoined = () => {
+  if (jitsiApiRef.current !== api) return;
 
-  const handleParticipantJoined = () => {
-    void refreshParticipants();
-  };
+  void refreshParticipants();
+};
 
-  const handleParticipantLeft = (participant: any) => {
-    setJitsiParticipants((previous) =>
-      previous.filter((item) => item.id !== String(participant.id))
-    );
-  };
+const handleParticipantLeft = (participant: any) => {
+  if (jitsiApiRef.current !== api) return;
 
-  const handleDisplayNameChange = (participant: any) => {
-    setJitsiParticipants((previous) =>
-      previous.map((item) =>
-        item.id === String(participant.id)
-          ? {
-              ...item,
-              displayName:
-                participant.displayname ||
-                participant.displayName ||
-                item.displayName,
-            }
-          : item
-      )
-    );
-  };
+  setJitsiParticipants((previous) =>
+    previous.filter((item) => item.id !== String(participant.id))
+  );
+};
+
+const handleDisplayNameChange = (participant: any) => {
+  if (jitsiApiRef.current !== api) return;
+
+  setJitsiParticipants((previous) =>
+    previous.map((item) =>
+      item.id === String(participant.id)
+        ? {
+            ...item,
+            displayName:
+              participant.displayname ||
+              participant.displayName ||
+              item.displayName,
+          }
+        : item
+    )
+  );
+};
 
 const handleParticipantMuted = () => {
+  if (jitsiApiRef.current !== api) return;
+
   // Refresh participant audio and video states
   // directly from the Jitsi meeting API.
   void refreshParticipants();
 };
+const handleAudioMuteChanged = (event: any) => {
+  if (jitsiApiRef.current !== api) return;
 
-  const handleAudioMuteChanged = (event: any) => {
-    setIsMuted(event.muted);
-  };
+  setIsMuted(event.muted);
+};
 
-  const handleVideoMuteChanged = (event: any) => {
-    setIsVideoOn(!event.muted);
-  };
+const handleVideoMuteChanged = (event: any) => {
+  if (jitsiApiRef.current !== api) return;
 
-  const handleScreenSharingChanged = (event: any) => {
-    setIsScreenSharing(event.on);
-  };
+  setIsVideoOn(!event.muted);
+};
+
+const handleScreenSharingChanged = (event: any) => {
+  if (jitsiApiRef.current !== api) return;
+
+  setIsScreenSharing(event.on);
+};
 
   const listeners: [string, (...args: any[]) => void][] = [
     ["videoConferenceJoined", handleVideoConferenceJoined],
@@ -251,7 +266,7 @@ const handleParticipantMuted = () => {
     if (jitsiApiRef.current === api) {
       jitsiApiRef.current = null;
       jitsiLocalParticipantIdRef.current = null;
-      setIsJitsiModerator(false);
+    
     }
   };
 
@@ -625,7 +640,15 @@ const handleToggleRecording = async () => {
   }
 };
 
-
+// Ensure Jitsi listeners are removed when the entire component unmounts.
+useEffect(() => {
+  return () => {
+    jitsiCleanupRef.current?.();
+    jitsiCleanupRef.current = null;
+    jitsiApiRef.current = null;
+    jitsiLocalParticipantIdRef.current = null;
+  };
+}, []);
 // Stop recording resources when the classroom component unmounts.
 useEffect(() => {
   return () => {
@@ -1076,11 +1099,13 @@ onClose();
       <button
         type="button"
         onClick={() => {
-          jitsiCleanupRef.current?.();
-          jitsiCleanupRef.current = null;
-          jitsiApiRef.current = null;
-          setJitsiParticipants([]);
-          setJitsiOpenCount((c) => c + 1);
+jitsiCleanupRef.current?.();
+jitsiCleanupRef.current = null;
+jitsiApiRef.current = null;
+jitsiLocalParticipantIdRef.current = null;
+setJitsiParticipants([]);
+setIsJitsiModerator(false);
+setJitsiOpenCount((c) => c + 1);
         }}
         className="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700"
       >
